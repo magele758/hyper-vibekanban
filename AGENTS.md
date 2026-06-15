@@ -42,6 +42,26 @@ Do not manually edit shared/remote-types.ts, instead edit crates/remote/src/bin/
 ## Before Completing a Task
 - Run `pnpm run format` to format all Rust workspaces and web code.
 
+## Local Dev Stack (`vk-*`) — Agent 自行重启
+
+修改会影响运行中服务时，**不要等用户说「重启」**，在任务完成前自行执行并确认健康：
+
+| 改了什么 | 怎么做 |
+|----------|--------|
+| `packages/web-core` / `packages/remote-web` / `packages/local-web`（Remote Docker 前端） | `VK_REBUILD=1 vk-stop && vk-start`（或至少重建 Remote 镜像） |
+| `crates/server` / `crates/relay-*` / relay 代理逻辑 | `vk-stop && vk-start`（Rust backend 由 dev 热重载；Docker Remote/Relay 重建后需重连隧道） |
+| `scripts/vk-*.sh` / `docker-compose` / `.env.remote` | `vk-stop && vk-start` |
+| 仅本地 Vite（`local-web` dev，不走 Docker） | 通常 `pnpm run dev` 热更新；若端口/代理/env 变了仍要 `vk-start` |
+
+默认一键命令（仓库根目录）：
+
+```bash
+bash scripts/vk-stop.sh && VK_REBUILD=1 bash scripts/vk-start.sh
+bash scripts/vk-status.sh   # 必须全 OK 再收工
+```
+
+默认端口见 `scripts/vk-ports.sh`（Desktop **13001**、Remote **13000**、Relay **18082**、API **13002**）。手机经 Tailscale 访问 Remote 时用 **当前页面的 Tailscale IP/主机名** 配 Relay，不要用局域网 IP。
+
 ## Coding Style & Naming Conventions
 - Rust: `rustfmt` enforced (`rustfmt.toml`); group imports by crate; snake_case modules, PascalCase types.
 - TypeScript/React: ESLint + Prettier (2 spaces, single quotes, 80 cols). PascalCase components, camelCase vars/functions, kebab-case file names where practical.

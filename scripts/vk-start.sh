@@ -40,9 +40,11 @@ unset PORT
 node scripts/setup-dev-environment.js get >/dev/null 2>&1 || true
 
 TS_HOSTNAME=""
+TS_IP=""
 MOBILE=0
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
-  TS_HOSTNAME="$(tailscale status --json | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null || true)"
+  TS_HOSTNAME="$(vk_detect_tailscale_hostname)"
+  TS_IP="$(vk_detect_tailscale_ip)"
   [[ -n "${TS_HOSTNAME}" ]] && MOBILE=1
 fi
 
@@ -125,6 +127,9 @@ if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
   export VITE_RELAY_API_BASE_URL="https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
   export VK_SHARED_RELAY_API_BASE="https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
   export VK_ALLOWED_ORIGINS="http://localhost:${FRONTEND_PORT},https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
+  if [[ -n "${TS_IP}" ]]; then
+    export VK_ALLOWED_ORIGINS="${VK_ALLOWED_ORIGINS},http://${TS_IP}:${FRONTEND_PORT},http://${TS_IP}:${VK_REMOTE_PORT},http://${TS_IP}:${VK_RELAY_PORT}"
+  fi
 fi
 
 # Docker --force-recreate drops in-memory relay tunnels; backend must reconnect.
@@ -201,9 +206,15 @@ echo "Remote Web:    http://localhost:${VK_REMOTE_PORT}"
 echo "Relay:         http://localhost:${VK_RELAY_PORT}"
 echo "登录:          admin@local.dev / devpass123"
 if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
-  echo "手机/CardComputer (Tailscale + HTTPS):"
+  echo "手机/CardComputer (Tailscale + HTTPS，推荐):"
   echo "  https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
   echo "  (Relay: https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT})"
+fi
+if [[ -n "${TS_IP}" ]]; then
+  echo "手机 (Tailscale IP，Remote Web 直连):"
+  echo "  Remote:  http://${TS_IP}:${VK_REMOTE_PORT}"
+  echo "  Relay:   http://${TS_IP}:${VK_RELAY_PORT}"
+  echo "  Desktop: http://${TS_IP}:${FRONTEND_PORT}"
 elif [[ -n "${LAN_IP}" ]]; then
   echo "手机 (同一 WiFi):"
   echo "  Kanban:  http://${LAN_IP}:${FRONTEND_PORT}"

@@ -60,27 +60,57 @@ vk_read_runtime_backend_port() {
   fi
 }
 
+vk_detect_tailscale_ip() {
+  if ! command -v tailscale >/dev/null 2>&1; then
+    return 0
+  fi
+  tailscale ip -4 2>/dev/null | head -1
+}
+
+vk_detect_tailscale_hostname() {
+  if ! command -v tailscale >/dev/null 2>&1; then
+    return 0
+  fi
+  tailscale status --json 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null \
+    || true
+}
+
 vk_configure_public_urls() {
   local frontend_port="${1:?frontend port required}"
   local lan_ip
   lan_ip="$(vk_detect_lan_ip)"
+  local ts_ip
+  ts_ip="$(vk_detect_tailscale_ip)"
+  local ts_hostname
+  ts_hostname="$(vk_detect_tailscale_hostname)"
 
   export VK_DEV_HOST="${VK_BIND_ADDR}"
   export VITE_RELAY_PORT="${VK_RELAY_PORT}"
+
+  local allowed_origins="http://localhost:${frontend_port}"
 
   if [[ -n "${lan_ip}" ]]; then
     export PUBLIC_BASE_URL="http://${lan_ip}:${VK_REMOTE_PORT}"
     export VK_SHARED_API_BASE="http://${lan_ip}:${VK_REMOTE_PORT}"
     export VITE_VK_SHARED_API_BASE="http://${lan_ip}:${VK_REMOTE_PORT}"
     export VITE_RELAY_API_BASE_URL="http://${lan_ip}:${VK_RELAY_PORT}"
-    export VK_ALLOWED_ORIGINS="http://localhost:${frontend_port},http://${lan_ip}:${frontend_port},http://${lan_ip}:${VK_REMOTE_PORT}"
+    allowed_origins="${allowed_origins},http://${lan_ip}:${frontend_port},http://${lan_ip}:${VK_REMOTE_PORT}"
   else
     export PUBLIC_BASE_URL="http://localhost:${VK_REMOTE_PORT}"
     export VK_SHARED_API_BASE="http://localhost:${VK_REMOTE_PORT}"
     export VITE_VK_SHARED_API_BASE="http://localhost:${VK_REMOTE_PORT}"
     export VITE_RELAY_API_BASE_URL="http://localhost:${VK_RELAY_PORT}"
-    export VK_ALLOWED_ORIGINS="http://localhost:${frontend_port}"
   fi
+
+  if [[ -n "${ts_ip}" ]]; then
+    allowed_origins="${allowed_origins},http://${ts_ip}:${frontend_port},http://${ts_ip}:${VK_REMOTE_PORT},http://${ts_ip}:${VK_RELAY_PORT}"
+  fi
+  if [[ -n "${ts_hostname}" ]]; then
+    allowed_origins="${allowed_origins},https://${ts_hostname}:${VK_MOBILE_HTTPS_PORT},https://${ts_hostname}:${VK_MOBILE_RELAY_HTTPS_PORT}"
+  fi
+
+  export VK_ALLOWED_ORIGINS="${allowed_origins}"
 
   # Local Rust server connects to relay on the same machine.
   export VK_SHARED_RELAY_API_BASE="http://127.0.0.1:${VK_RELAY_PORT}"

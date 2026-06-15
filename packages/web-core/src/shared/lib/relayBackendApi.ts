@@ -21,6 +21,27 @@ const USE_REMOTE_API_BASE_FALLBACK = !BUILD_TIME_RELAY_API_BASE;
 
 let _relayApiBase: string = BUILD_TIME_RELAY_API_BASE || BUILD_TIME_API_BASE;
 
+/** Dev/self-host: baked relay URL may use LAN IP while the page is opened via Tailscale IP/DNS. */
+function isSelfHostedDevHostname(hostname: string): boolean {
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]'
+  ) {
+    return true;
+  }
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) {
+    return true;
+  }
+  if (hostname.endsWith('.ts.net')) {
+    return true;
+  }
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
+    return true;
+  }
+  return false;
+}
+
 export function setRelayApiBase(base: string | null | undefined) {
   if (base) {
     _relayApiBase = base;
@@ -44,8 +65,11 @@ export function resolveDefaultRelayApiBase(
     if (BUILD_TIME_RELAY_API_BASE) {
       try {
         const baked = new URL(BUILD_TIME_RELAY_API_BASE);
-        // Self-host: same machine, port may drift (e.g. 8082 → 18082) — follow the page.
-        if (baked.hostname === hostname || baked.hostname === 'localhost') {
+        if (
+          baked.hostname === hostname ||
+          baked.hostname === 'localhost' ||
+          isSelfHostedDevHostname(baked.hostname)
+        ) {
           return liveRelayOrigin;
         }
         return BUILD_TIME_RELAY_API_BASE;
