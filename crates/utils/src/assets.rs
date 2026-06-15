@@ -4,7 +4,13 @@ use rust_embed::RustEmbed;
 const PROJECT_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
 pub fn asset_dir() -> std::path::PathBuf {
-    let path = if cfg!(debug_assertions) {
+    // An explicit override takes precedence over both dev and prod defaults.
+    // This makes the asset directory (and therefore the SQLite DB, config,
+    // signing keys, etc.) relocatable for tests and isolated/self-hosted
+    // deployments without touching the shared dev or OS data directory.
+    let path = if let Some(override_dir) = std::env::var_os("VK_ASSET_DIR") {
+        std::path::PathBuf::from(override_dir)
+    } else if cfg!(debug_assertions) {
         std::path::PathBuf::from(PROJECT_ROOT).join("../../dev_assets")
     } else {
         prod_asset_dir_path()

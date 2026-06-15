@@ -579,3 +579,93 @@ async fn create_worktree_when_repo_path_is_a_worktree() {
     .await
     .unwrap();
 }
+
+/// Data-loss guard: `cleanup_worktree` must delete ONLY the worktree directory,
+/// never the main repository (its working tree, `.git`, or committed files).
+///
+/// `comprehensive_worktree_cleanup` calls `std::fs::remove_dir_all(worktree_path)`
+/// with no guard that the path differs from the repo root, so this asserts the
+/// end-to-end behavior: after cleanup the worktree is gone and the repo — plus a
+/// sentinel file inside it — survives intact.
+#[tokio::test]
+async fn cleanup_deletes_only_worktree_not_repo() {
+    use tempfile::TempDir;
+    let td = TempDir::new().unwrap();
+
+    let repo_path = td.path().join("repo");
+    let git_service = GitService::new();
+    git_service
+        .initialize_repo_with_main_branch(&repo_path)
+        .unwrap();
+
+    // A sentinel file in the repo working tree that must survive cleanup.
+    let sentinel = repo_path.join("KEEP_ME.txt");
+    std::fs::write(&sentinel, b"do not delete the main repo").unwrap();
+
+    let worktree_path = td.path().join("wt");
+    WorktreeManager::create_worktree(&repo_path, "wt-branch", &worktree_path, "main", true)
+        .await
+        .unwrap();
+    assert!(
+        worktree_path.join(".git").is_file(),
+        "worktree should exist before cleanup"
+    );
+
+    WorktreeManager::cleanup_worktree(&WorktreeCleanup::new(
+        worktree_path.clone(),
+        Some(repo_path.clone()),
+    ))
+    .await
+    .unwrap();
+
+    // The worktree directory is gone...
+    assert!(
+        !worktree_path.exists(),
+        "worktree directory should be removed by cleanup"
+    );
+    // ...but the repo, its .git, and the sentinel file are untouched.
+    assert!(repo_path.exists(), "repo root must survive cleanup");
+    assert!(
+        repo_path.join(".git").exists(),
+        "repo .git must survive cleanup"
+    );
+    assert!(
+        sentinel.exists(),
+        "sentinel file in repo working tree must survive cleanup"
+    );
+    assert_eq!(
+        std::fs::read(&sentinel).unwrap(),
+        b"do not delete the main repo",
+        "sentinel contents must be unchanged"
+    );
+}
+
+/// Cleanup must be idempotent: cleaning an already-removed worktree must not
+/// error and must not touch the repo. Guards the periodic/orphan cleanup paths
+/// that may run twice over the same stale entry.
+#[tokio::test]
+async fn cleanup_is_idempotent_on_missing_worktree() {
+    use tempfile::TempDir;
+    let td = TempDir::new().unwrap();
+
+    let repo_path = td.path().join("repo");
+    GitService::new()
+        .initialize_repo_with_main_branch(&repo_path)
+        .unwrap();
+
+    let worktree_path = td.path().join("wt");
+    WorktreeManager::create_worktree(&repo_path, "wt-branch", &worktree_path, "main", true)
+        .await
+        .unwrap();
+
+    let cleanup = WorktreeCleanup::new(worktree_path.clone(), Some(repo_path.clone()));
+
+    WorktreeManager::cleanup_worktree(&cleanup).await.unwrap();
+    assert!(!worktree_path.exists());
+
+    // Second cleanup over the now-missing worktree must succeed quietly.
+    WorktreeManager::cleanup_worktree(&cleanup)
+        .await
+        .expect("cleanup of an already-removed worktree must not error");
+    assert!(repo_path.exists(), "repo must still be intact");
+}
