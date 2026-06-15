@@ -18,16 +18,12 @@ export function useCreateWorkspace() {
     mutationFn: async ({ data, linkToIssue }: CreateWorkspaceParams) => {
       const { workspace } = await workspacesApi.createAndStart(data);
 
-      if (linkToIssue && workspace) {
-        try {
-          await workspacesApi.linkToIssue(
-            workspace.id,
-            linkToIssue.remoteProjectId,
-            linkToIssue.issueId
-          );
-        } catch (linkError) {
-          console.error('Failed to link workspace to issue:', linkError);
-        }
+      if (linkToIssue && workspace && !data.linked_issue) {
+        await workspacesApi.linkToIssue(
+          workspace.id,
+          linkToIssue.remoteProjectId,
+          linkToIssue.issueId
+        );
       }
 
       return { workspace };

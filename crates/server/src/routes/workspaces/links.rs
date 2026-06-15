@@ -1,4 +1,4 @@
-use api_types::{CreateWorkspaceRequest, PullRequestStatus, UpsertPullRequestRequest};
+use api_types::{PullRequestStatus, UpsertPullRequestRequest};
 use axum::{
     Extension, Json, Router,
     extract::{Path as AxumPath, State},
@@ -31,18 +31,14 @@ pub async fn link_workspace(
     let stats =
         diff_stream::compute_diff_stats(&deployment.db().pool, deployment.git(), &workspace).await;
 
-    client
-        .create_workspace(CreateWorkspaceRequest {
-            project_id: payload.project_id,
-            local_workspace_id: workspace.id,
-            issue_id: payload.issue_id,
-            name: workspace.name.clone(),
-            archived: Some(workspace.archived),
-            files_changed: stats.as_ref().map(|s| s.files_changed as i32),
-            lines_added: stats.as_ref().map(|s| s.lines_added as i32),
-            lines_removed: stats.as_ref().map(|s| s.lines_removed as i32),
-        })
-        .await?;
+    remote_sync::register_local_workspace_on_remote(
+        &client,
+        &workspace,
+        payload.project_id,
+        payload.issue_id,
+        stats.as_ref(),
+    )
+    .await?;
 
     {
         let pool = deployment.db().pool.clone();

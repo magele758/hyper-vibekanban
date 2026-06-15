@@ -666,6 +666,22 @@ async fn handle_executor_discovered_options_ws(
         }
         Err(e) => {
             tracing::warn!("Failed to start discovered options stream: {}", e);
+            let error_options = executors::executor_discovery::ExecutorDiscoveredOptions {
+                error: Some(e.to_string()),
+                loading_models: false,
+                loading_agents: false,
+                loading_slash_commands: false,
+                ..Default::default()
+            };
+            let _ = socket
+                .send(
+                    LogMsg::JsonPatch(executors::logs::utils::patch::executor_discovered_options(
+                        error_options,
+                    ))
+                    .to_ws_message_unchecked(),
+                )
+                .await;
+            let _ = socket.send(LogMsg::Ready.to_ws_message_unchecked()).await;
         }
     }
 

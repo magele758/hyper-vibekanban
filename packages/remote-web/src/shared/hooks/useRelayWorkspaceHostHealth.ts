@@ -21,11 +21,14 @@ export function useRelayWorkspaceHostHealth(
   const hostHealthQuery = useQuery({
     queryKey: ["remote-workspaces-host-health", hostId],
     enabled: !!hostId,
-    retry: false,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
     staleTime: 5_000,
     refetchInterval: 15_000,
     queryFn: async (): Promise<true> => {
       const response = await makeLocalApiRequest("/api/info", {
+        hostScope: "explicit",
+        hostId: hostId ?? undefined,
         cache: "no-store",
       });
 

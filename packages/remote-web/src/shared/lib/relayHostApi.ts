@@ -21,10 +21,6 @@ import {
   buildRelaySignature,
   normalizeRequestBody,
 } from "@remote/shared/lib/relay/signing";
-import {
-  createRelaySignedWebSocket,
-  createRelayWsSigningContext,
-} from "@remote/shared/lib/relay/ws";
 import { buildRemoteSessionBaseUrl } from "@/shared/lib/relayBackendApi";
 import { getRelayHostFallback } from "@/shared/lib/relayHostFallback";
 import type {
@@ -161,9 +157,7 @@ export async function openRelayHostWebSocket(
   const signedPath = appendSignatureToPath(normalizedPath, signature);
   const wsUrl = `${base_url}${signedPath}`.replace(/^http/i, "ws");
 
-  const signingContext = await createRelayWsSigningContext(
-    context.pairedHost,
-    signature,
-  );
-  return createRelaySignedWebSocket(new WebSocket(wsUrl), signingContext);
+  // Auth is in the signed upgrade URL. Relay tunnels plain WebSocket frames to
+  // the local server loopback handler (JsonPatch / Ready), not signed envelopes.
+  return openBrowserWebSocket(wsUrl);
 }

@@ -8,7 +8,7 @@ use db::models::{
     workspace::{CreateWorkspace, Workspace},
 };
 use deployment::Deployment;
-use services::services::container::ContainerService;
+use services::services::{container::ContainerService, diff_stream, remote_sync};
 use utils::response::ApiResponse;
 use uuid::Uuid;
 
@@ -294,6 +294,24 @@ pub async fn create_and_start_workspace(
 
     let workspace = managed_workspace.workspace.clone();
     tracing::info!("Created workspace {}", workspace.id);
+
+    if let Some(linked_issue) = &linked_issue {
+        let client = deployment.remote_client()?;
+        let stats = diff_stream::compute_diff_stats(
+            &deployment.db().pool,
+            deployment.git(),
+            &workspace,
+        )
+        .await;
+        remote_sync::register_local_workspace_on_remote(
+            &client,
+            &workspace,
+            linked_issue.remote_project_id,
+            linked_issue.issue_id,
+            stats.as_ref(),
+        )
+        .await?;
+    }
 
     let execution_process = deployment
         .container()

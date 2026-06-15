@@ -133,7 +133,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.BACKEND_PORT || '3001'}`,
-        changeOrigin: true,
+        // Keep the browser Host/Origin (e.g. Tailscale IP:13001) so backend same-origin checks pass.
+        changeOrigin: false,
         ws: true,
       },
     },

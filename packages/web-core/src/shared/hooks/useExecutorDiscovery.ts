@@ -67,7 +67,7 @@ function useExecutorDiscovery(
   }, [combinedError]);
 
   return {
-    options: data?.options ?? null,
+    options: data?.options ?? (endpoint ? { ...defaultOptions } : null),
     error: combinedError,
     isConnected,
     isInitialized,

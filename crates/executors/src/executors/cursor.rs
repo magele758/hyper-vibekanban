@@ -646,30 +646,65 @@ impl StandardCodingAgentExecutor for CursorAgent {
         _workdir: Option<&std::path::Path>,
         _repo_path: Option<&std::path::Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
-        let models =
-            match crate::model_discovery::discover_cursor_models(Self::base_command(), &self.cmd)
-                .await
+        use crate::{
+            executor_discovery::ExecutorConfigCacheKey, executors::utils::executor_options_cache,
+        };
+
+        let cache = executor_options_cache();
+        let cmd_key = serde_json::to_string(&self.cmd).unwrap_or_default();
+        let cache_key = ExecutorConfigCacheKey::new(None, cmd_key, BaseCodingAgent::CursorAgent);
+
+        if let Some(cached) = cache.get(&cache_key) {
+            return Ok(Box::pin(futures::stream::once(async move {
+                patch::executor_discovered_options(cached.as_ref().clone().with_loading(false))
+            })));
+        }
+
+        let initial_options = ExecutorDiscoveredOptions {
+            model_selector: ModelSelectorConfig {
+                models: Self::fallback_models(),
+                ..Default::default()
+            },
+            loading_models: false,
+            ..Default::default()
+        };
+        let initial_patch = patch::executor_discovered_options(initial_options);
+
+        let this = self.clone();
+        let discovery_stream = async_stream::stream! {
+            let models = match crate::model_discovery::discover_cursor_models(
+                Self::base_command(),
+                &this.cmd,
+            )
+            .await
             {
                 Ok(models) => models,
                 Err(error) => {
                     tracing::warn!(
                         ?error,
-                        "Cursor model discovery failed; using built-in fallback list"
+                        "Cursor model discovery failed; keeping fallback list"
                     );
-                    Self::fallback_models()
+                    return;
                 }
             };
 
-        let options = ExecutorDiscoveredOptions {
-            model_selector: ModelSelectorConfig {
-                models,
+            yield patch::update_models(models.clone());
+            yield patch::models_loaded();
+
+            let options = ExecutorDiscoveredOptions {
+                model_selector: ModelSelectorConfig {
+                    models,
+                    ..Default::default()
+                },
+                loading_models: false,
                 ..Default::default()
-            },
-            ..Default::default()
+            };
+            cache.put(cache_key, options);
         };
-        Ok(Box::pin(futures::stream::once(async move {
-            patch::executor_discovered_options(options)
-        })))
+
+        Ok(Box::pin(
+            futures::stream::once(async move { initial_patch }).chain(discovery_stream),
+        ))
     }
 }
 

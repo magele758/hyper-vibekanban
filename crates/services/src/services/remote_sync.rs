@@ -1,4 +1,4 @@
-use api_types::UpsertPullRequestRequest;
+use api_types::{CreateWorkspaceRequest, UpsertPullRequestRequest};
 use db::models::workspace::Workspace;
 use git::GitService;
 use sqlx::SqlitePool;
@@ -9,6 +9,33 @@ use super::{
     diff_stream::{self, DiffStats},
     remote_client::{RemoteClient, RemoteClientError},
 };
+
+/// Registers a local workspace on the remote server when linked to an issue.
+/// Idempotent: skips create when the remote record already exists.
+pub async fn register_local_workspace_on_remote(
+    client: &RemoteClient,
+    workspace: &Workspace,
+    project_id: Uuid,
+    issue_id: Uuid,
+    stats: Option<&DiffStats>,
+) -> Result<(), RemoteClientError> {
+    if client.workspace_exists(workspace.id).await? {
+        return Ok(());
+    }
+
+    client
+        .create_workspace(CreateWorkspaceRequest {
+            project_id,
+            local_workspace_id: workspace.id,
+            issue_id,
+            name: workspace.name.clone(),
+            archived: Some(workspace.archived),
+            files_changed: stats.map(|s| s.files_changed as i32),
+            lines_added: stats.map(|s| s.lines_added as i32),
+            lines_removed: stats.map(|s| s.lines_removed as i32),
+        })
+        .await
+}
 
 async fn update_workspace_on_remote(
     client: &RemoteClient,

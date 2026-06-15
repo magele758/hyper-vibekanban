@@ -16,7 +16,6 @@ import type {
   LocalApiWebSocketOptions,
 } from "@/shared/lib/localApiTransport";
 import { getWebRtcConnection } from "./connectionManager";
-import { createDataChannelWebSocket } from "./dataChannelWebSocket";
 
 function resolveHostId(
   options: { relayHostId?: string | null } = {},
@@ -124,20 +123,8 @@ export async function openLocalApiWebSocketViaWebRtc(
     return new WebSocket(normalizeWebSocketUrl(pathOrUrl));
   }
 
-  const hostId = resolveHostId(options);
-  if (!hostId) {
-    return openLocalApiWebSocketViaRelay(pathOrUrl, options);
-  }
-
-  const conn = getWebRtcConnection(hostId);
-  if (!conn) {
-    return openLocalApiWebSocketViaRelay(pathOrUrl, options);
-  }
-
-  return createDataChannelWebSocket(
-    conn,
-    toDirectWebRtcApiPath(pathAndQuery, hostId),
-  );
+  // Signed relay WS is more stable than WebRTC data-channel WS on mobile networks.
+  return openLocalApiWebSocketViaRelay(pathOrUrl, options);
 }
 
 function dataChannelResponseToResponse(dcResp: DataChannelResponse): Response {
