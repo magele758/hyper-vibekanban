@@ -62,6 +62,8 @@ export interface UseShapeOptions<
    * insert/update/remove functions for optimistic mutations.
    */
   mutation?: M;
+  /** Time to wait for Electric before falling back to REST */
+  readyTimeoutMs?: number;
 }
 
 /**
@@ -95,7 +97,7 @@ export function useShape<
 ): M extends MutationDefinition<unknown, unknown, unknown>
   ? UseShapeMutationResult<T, MutationCreateType<M>, MutationUpdateType<M>>
   : UseShapeResult<T> {
-  const { enabled = true, mutation } = options;
+  const { enabled = true, mutation, readyTimeoutMs } = options;
 
   const [error, setError] = useState<SyncError | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -136,10 +138,18 @@ export function useShape<
 
   const collection = useMemo(() => {
     if (!enabled) return null;
-    const config = { onError: handleError };
+    const config = { onError: handleError, readyTimeoutMs };
     void retryKey;
     return createShapeCollection(shape, stableParams, config, mutation);
-  }, [enabled, shape, mutation, handleError, retryKey, stableParams]);
+  }, [
+    enabled,
+    shape,
+    mutation,
+    handleError,
+    retryKey,
+    stableParams,
+    readyTimeoutMs,
+  ]);
 
   const { data, isLoading: queryLoading } = useLiveQuery(
     (query) => (collection ? query.from({ item: collection }) : undefined),

@@ -60,6 +60,18 @@ export function resolveDefaultRelayApiBase(
 
   if (typeof window !== 'undefined') {
     const { protocol, hostname } = window.location;
+
+    // Front-door HTTPS pages (desktop localhost h2 / mobile Tailscale): the
+    // relay is only reachable via its dedicated HTTPS front door, never the raw
+    // http relay port. Trust the build-time relay base (set by vk-start to that
+    // front door) instead of deriving a raw-port origin → avoids mixed-content.
+    if (
+      protocol === 'https:' &&
+      BUILD_TIME_RELAY_API_BASE.startsWith('https:')
+    ) {
+      return BUILD_TIME_RELAY_API_BASE;
+    }
+
     const liveRelayOrigin = `${protocol}//${hostname}:${relayPort}`;
 
     if (BUILD_TIME_RELAY_API_BASE) {

@@ -35,8 +35,28 @@ check "Relay" "http://127.0.0.1:${VK_RELAY_PORT}/health"
 check "Local web" "$(vk_local_url "${FE}")"
 check "Local API" "http://127.0.0.1:${BE}/health"
 
-if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
-  TS="$(tailscale status --json | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null || true)"
+if [[ "${VK_DESKTOP_H2:-1}" == "1" ]]; then
+  h2_url="https://localhost:${VK_DESKTOP_HTTPS_PORT}/"
+  h2_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "${h2_url}" 2>/dev/null || echo 000)"
+  h2_proto="$(curl -sk -o /dev/null -w '%{http_version}' --max-time 3 "${h2_url}" 2>/dev/null || echo '?')"
+  if [[ "${h2_code}" =~ ^[23][0-9]{2}$ ]]; then
+    echo "  OK  Desktop h2  ${h2_url} (HTTP/${h2_proto})"
+  else
+    echo "  --  Desktop h2  ${h2_url} (${h2_code})"
+  fi
+
+  relay_url="https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}/health"
+  relay_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "${relay_url}" 2>/dev/null || echo 000)"
+  relay_proto="$(curl -sk -o /dev/null -w '%{http_version}' --max-time 3 "${relay_url}" 2>/dev/null || echo '?')"
+  if [[ "${relay_code}" =~ ^[23][0-9]{2}$ ]]; then
+    echo "  OK  Desktop relay h2  ${relay_url} (HTTP/${relay_proto})"
+  else
+    echo "  --  Desktop relay h2  ${relay_url} (${relay_code})"
+  fi
+fi
+
+if [[ "${VK_MOBILE:-0}" == "1" ]] && vk_tailscale_ok; then
+  TS="$(vk_detect_tailscale_hostname)"
   if [[ -n "${TS}" ]]; then
     check "Mobile HTTPS" "https://${TS}:${VK_MOBILE_HTTPS_PORT}/"
   fi

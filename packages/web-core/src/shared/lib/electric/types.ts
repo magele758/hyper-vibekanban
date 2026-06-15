@@ -15,6 +15,8 @@ export interface SyncError {
 export interface CollectionConfig {
   /** Callback for sync errors */
   onError?: (error: SyncError) => void;
+  /** Time to wait for Electric before falling back to REST */
+  readyTimeoutMs?: number;
 }
 
 /**

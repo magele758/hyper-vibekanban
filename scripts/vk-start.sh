@@ -42,10 +42,21 @@ node scripts/setup-dev-environment.js get >/dev/null 2>&1 || true
 TS_HOSTNAME=""
 TS_IP=""
 MOBILE=0
-if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
-  TS_HOSTNAME="$(vk_detect_tailscale_hostname)"
+# Tailscale IP is still detected (used to widen CORS / print phone URLs) even
+# when the mobile HTTPS front door is off.
+if vk_tailscale_ok; then
   TS_IP="$(vk_detect_tailscale_ip)"
-  [[ -n "${TS_HOSTNAME}" ]] && MOBILE=1
+  if [[ "${VK_MOBILE}" == "1" ]]; then
+    TS_HOSTNAME="$(vk_detect_tailscale_hostname)"
+    if [[ -n "${TS_HOSTNAME}" ]]; then
+      if [[ "${VK_MOBILE_HTTPS_PORT}" == "${FRONTEND_PORT}" ]]; then
+        echo "WARN: VK_MOBILE_HTTPS_PORT(${VK_MOBILE_HTTPS_PORT}) 与前端口相同会冲突，已跳过手机前门 (设不同端口再开)"
+        TS_HOSTNAME=""
+      else
+        MOBILE=1
+      fi
+    fi
+  fi
 fi
 
 echo "==> Starting Remote stack (Docker)..."
@@ -98,38 +109,103 @@ fi
 cd "${ROOT}"
 
 CADDY_STARTED=0
-if [[ "${MOBILE}" -eq 1 ]]; then
+DESKTOP_H2_UP=0
+WANT_DESKTOP_H2=0
+[[ "${VK_DESKTOP_H2:-1}" == "1" ]] && WANT_DESKTOP_H2=1
+
+if [[ "${MOBILE}" -eq 1 || "${WANT_DESKTOP_H2}" -eq 1 ]]; then
   if ! command -v caddy >/dev/null 2>&1; then
-    echo "WARN: Tailscale 已连接但未安装 Caddy — 手机 HTTPS 不可用。运行: brew install caddy"
+    echo "WARN: 需要 Caddy 但未安装 — h2 前门不可用 (运行: brew install caddy)"
   else
-    if [[ ! -f "${CERT_DIR}/${TS_HOSTNAME}.crt" ]]; then
-      echo "==> 生成 Tailscale 证书 (${TS_HOSTNAME})..."
-      (cd "${CERT_DIR}" && tailscale cert "${TS_HOSTNAME}")
+    TS_ARGS_HOSTNAME=""
+    if [[ "${MOBILE}" -eq 1 ]]; then
+      if [[ ! -f "${CERT_DIR}/${TS_HOSTNAME}.crt" ]]; then
+        echo "==> 生成 Tailscale 证书 (${TS_HOSTNAME})..."
+        (cd "${CERT_DIR}" && vk_tailscale cert "${TS_HOSTNAME}") \
+          || echo "WARN: tailscale cert 生成失败，手机 HTTPS 跳过"
+      fi
+      TS_ARGS_HOSTNAME="${TS_HOSTNAME}"
     fi
-    bash scripts/vk-render-caddyfile.sh "${TS_HOSTNAME}" "${FRONTEND_PORT}" "${BACKEND_PORT}" "${VK_REMOTE_PORT}" "${VK_RELAY_PORT}" "${VK_MOBILE_HTTPS_PORT}" "${VK_MOBILE_RELAY_HTTPS_PORT}" "${CADDYFILE}" "${CERT_DIR}"
+
+    # args: DESKTOP_HTTPS_PORT REMOTE_PORT OUT [TS_HOSTNAME FE BE RELAY \
+    #        MOBILE_HTTPS MOBILE_RELAY_HTTPS CERT_DIR DESKTOP_RELAY_HTTPS]
+    bash scripts/vk-render-caddyfile.sh \
+      "${VK_DESKTOP_HTTPS_PORT}" "${VK_REMOTE_PORT}" "${CADDYFILE}" \
+      "${TS_ARGS_HOSTNAME}" "${FRONTEND_PORT}" "${BACKEND_PORT}" "${VK_RELAY_PORT}" \
+      "${VK_MOBILE_HTTPS_PORT}" "${VK_MOBILE_RELAY_HTTPS_PORT}" "${CERT_DIR}" \
+      "${VK_DESKTOP_RELAY_HTTPS_PORT}"
 
     if [[ -f "${PID_DIR}/caddy.pid" ]] && kill -0 "$(cat "${PID_DIR}/caddy.pid")" 2>/dev/null; then
       caddy reload --config "${CADDYFILE}" 2>/dev/null || true
     else
-      caddy start --config "${CADDYFILE}" --pidfile "${PID_DIR}/caddy.pid" \
-        >> "${LOG_DIR}/caddy.log" 2>&1 || echo "WARN: Caddy 启动失败，见 ${LOG_DIR}/caddy.log"
+      # Launch detached in its own session so caddy survives vk-start exiting
+      # (and is not reaped by the caller's process group).
+      if command -v setsid >/dev/null 2>&1; then
+        setsid caddy run --config "${CADDYFILE}" --pidfile "${PID_DIR}/caddy.pid" \
+          >> "${LOG_DIR}/caddy.log" 2>&1 &
+      else
+        nohup python3 -c "import os; os.setsid(); os.execvp('caddy', ['caddy','run','--config','${CADDYFILE}','--pidfile','${PID_DIR}/caddy.pid'])" \
+          >> "${LOG_DIR}/caddy.log" 2>&1 &
+      fi
+      for _ in $(seq 1 10); do
+        [[ -f "${PID_DIR}/caddy.pid" ]] && kill -0 "$(cat "${PID_DIR}/caddy.pid")" 2>/dev/null && break
+        sleep 1
+      done
     fi
     if [[ -f "${PID_DIR}/caddy.pid" ]] && kill -0 "$(cat "${PID_DIR}/caddy.pid")" 2>/dev/null; then
       CADDY_STARTED=1
     fi
+
+    if [[ "${CADDY_STARTED}" -eq 1 && "${WANT_DESKTOP_H2}" -eq 1 ]]; then
+      # System curl uses the macOS system trust store, just like the browser.
+      SYS_CURL="/usr/bin/curl"; [[ -x "${SYS_CURL}" ]] || SYS_CURL="curl"
+      # Probe /v1/health (proxied to the already-healthy Remote) rather than /
+      # (now proxied to Vite, which has not started yet at this point).
+      H2_PROBE="https://localhost:${VK_DESKTOP_HTTPS_PORT}/v1/health"
+      h2_running=0
+      for _ in $(seq 1 10); do
+        if curl -skf "${H2_PROBE}" >/dev/null 2>&1; then
+          h2_running=1
+          break
+        fi
+        sleep 1
+      done
+      if [[ "${h2_running}" -ne 1 ]]; then
+        echo "WARN: 桌面 h2 前门未就绪 (https://localhost:${VK_DESKTOP_HTTPS_PORT})，见 ${LOG_DIR}/caddy.log"
+      elif "${SYS_CURL}" -sf "${H2_PROBE}" >/dev/null 2>&1; then
+        # CA is browser-trusted → safe to route browser traffic over h2.
+        DESKTOP_H2_UP=1
+      else
+        echo "==> 桌面 h2 已运行但本地 CA 未受信任，浏览器暂时仍走 HTTP/1.1。"
+        echo "    一次性信任 (需管理员密码): caddy trust"
+        echo "    然后: vk-stop && vk-start  即可启用 HTTP/2 丝滑切换。"
+      fi
+    fi
   fi
 fi
 
-# Always use local Docker Remote unless mobile HTTPS front door is up.
+# Mobile (Tailscale) HTTPS front door: phone + desktop-via-tailscale already h2.
+# IMPORTANT: only the BROWSER-facing VITE_* bases point at the Tailscale HTTPS
+# front door. Server-side VK_SHARED_API_BASE / VK_SHARED_RELAY_API_BASE stay on
+# local http (set by vk_configure_public_urls) so the Rust reqwest client talks
+# to the remote/relay directly. Routing the server through Caddy made it loop
+# back over the tailscale hostname and fail /v1/tokens/refresh → 502 on
+# /api/auth/token, breaking auth + relay registration + project loading.
+# Allowed origins already include the tailscale https origins (see vk-dev-lib).
 if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
   export VITE_VK_SHARED_API_BASE="https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
-  export VK_SHARED_API_BASE="https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
   export VITE_RELAY_API_BASE_URL="https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
-  export VK_SHARED_RELAY_API_BASE="https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
-  export VK_ALLOWED_ORIGINS="http://localhost:${FRONTEND_PORT},https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
-  if [[ -n "${TS_IP}" ]]; then
-    export VK_ALLOWED_ORIGINS="${VK_ALLOWED_ORIGINS},http://${TS_IP}:${FRONTEND_PORT},http://${TS_IP}:${VK_REMOTE_PORT},http://${TS_IP}:${VK_RELAY_PORT}"
-  fi
+elif [[ "${DESKTOP_H2_UP}" -eq 1 ]]; then
+  # Non-mobile: the browser opens the full app via the localhost h2 front door
+  # (https://localhost:${VK_DESKTOP_HTTPS_PORT}) and talks same-origin, so all
+  # REST + Electric shapes multiplex on one h2 connection. The frontend resolver
+  # rewrites the reported http base to the page origin on https pages, so the
+  # build-time base only acts as a fallback. Point the BROWSER relay base at the
+  # desktop relay front door to avoid mixed-content (https page → http relay).
+  # Server-side VK_SHARED_API_BASE / VK_SHARED_RELAY_API_BASE stay http so the
+  # Rust reqwest client never needs to trust Caddy's local CA.
+  export VITE_VK_SHARED_API_BASE="https://localhost:${VK_DESKTOP_HTTPS_PORT}"
+  export VITE_RELAY_API_BASE_URL="https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}"
 fi
 
 # Docker --force-recreate drops in-memory relay tunnels; backend must reconnect.
@@ -201,7 +277,13 @@ fi
 
 echo ""
 echo "━━━━━━━━ Vibe Kanban 已启动 ━━━━━━━━"
-echo "本地 desktop:  http://localhost:${FRONTEND_PORT}"
+if [[ "${DESKTOP_H2_UP}" -eq 1 ]]; then
+  echo "本机 h2（推荐，丝滑）: https://localhost:${VK_DESKTOP_HTTPS_PORT} (整个 app 走 HTTP/2 同源)"
+  echo "  Relay 前门:         https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}"
+  echo "本机退路（不走 h2）:   http://localhost:${FRONTEND_PORT} (Vite 直连, HTTP/1.1)"
+else
+  echo "本地 desktop:  http://localhost:${FRONTEND_PORT}"
+fi
 echo "Remote Web:    http://localhost:${VK_REMOTE_PORT}"
 echo "Relay:         http://localhost:${VK_RELAY_PORT}"
 echo "登录:          admin@local.dev / devpass123"

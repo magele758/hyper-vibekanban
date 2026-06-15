@@ -39,6 +39,8 @@ interface ProjectProviderProps {
   children: ReactNode;
 }
 
+const CORE_SHAPE_READY_TIMEOUT_MS = 5_000;
+
 export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
   const params = useMemo(() => ({ project_id: projectId }), [projectId]);
   const enabled = Boolean(projectId);
@@ -47,13 +49,16 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
   const issuesResult = useShape(PROJECT_ISSUES_SHAPE, params, {
     enabled,
     mutation: ISSUE_MUTATION,
+    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
   });
   const statusesResult = useShape(PROJECT_PROJECT_STATUSES_SHAPE, params, {
     enabled,
     mutation: PROJECT_STATUS_MUTATION,
+    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
   });
   const workspacesResult = useShape(PROJECT_WORKSPACES_SHAPE, params, {
     enabled,
+    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
   });
 
   const coreReady =

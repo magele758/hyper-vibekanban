@@ -60,7 +60,48 @@ bash scripts/vk-stop.sh && VK_REBUILD=1 bash scripts/vk-start.sh
 bash scripts/vk-status.sh   # 必须全 OK 再收工
 ```
 
-默认端口见 `scripts/vk-ports.sh`（Desktop **13001**、Remote **13000**、Relay **18082**、API **13002**）。手机经 Tailscale 访问 Remote 时用 **当前页面的 Tailscale IP/主机名** 配 Relay，不要用局域网 IP。
+默认端口见 `scripts/vk-ports.sh`（Desktop **13001**、Remote **13000**、Relay **18082**、API **13002**、桌面 h2 前门 **13443**）。手机经 Tailscale 访问 Remote 时用 **当前页面的 Tailscale IP/主机名** 配 Relay，不要用局域网 IP。
+
+### HTTP/2 桌面前门（切换丝滑的关键）
+
+Remote API 是 HTTP/1.1，浏览器同源并发连接上限约 6 条；而一个看板需要约 9 条 Electric live 长连接，导致切换 project 时新请求被 `stalled/blocked`。解决办法是让浏览器经 **HTTP/2** 多路复用访问，所有 shape 共用一条连接。
+
+- `vk-start` 会用 Caddy + 本地 CA 起一个桌面 h2 前门 `https://localhost:13443`，反代 `/v1`、`/shape` → Remote(13000)。
+- **只把浏览器**的 `VITE_VK_SHARED_API_BASE` 指向它；服务端 `VK_SHARED_API_BASE` 保持 http（Rust reqwest 不需要信任本地 CA）。
+- 脚本**安全自适应**：仅当本地 CA 已被系统信任时才把浏览器切到 h2，否则自动回退 http（应用照常工作）。
+- 一次性信任本地 CA（需管理员密码，Caddy 必须在运行）：
+  ```bash
+  caddy trust            # 安装 Caddy 本地 CA 到系统信任库
+  vk-stop && vk-start    # 重启后浏览器自动启用 HTTP/2
+  ```
+  完成后 `vk-status` 的 `Desktop h2` 显示 `(HTTP/2)`。临时关闭：`VK_DESKTOP_H2=0 vk-start`。
+- h2 前门只服务**本机浏览器**；手机/局域网走 Tailscale h2 或 http。
+
+### 各端访问方式（localhost vs Tailscale IP）
+
+| 场景 | 打开的地址 | 说明 |
+|------|-----------|------|
+| 本机桌面 | `http://localhost:13001` | UI 仍从 13001 加载；CA 信任后 Electric 自动经 `https://localhost:13443` 走 h2。**不要**手动开 13443（它只是 API 前门，根路径返回占位文本） |
+| 本机 Remote Web | `http://localhost:13000` | 同源，HTTP/1.1（如需 h2 同理需走 Caddy） |
+| 手机（Tailscale IP 直连，默认可用） | `http://<tailscale-ip>:13001`（Desktop）/ `:13000`（Remote）/ `:18082`（Relay） | 走 HTTP/1.1，无需证书；配 Relay 用**当前页面的 Tailscale IP/主机名**，不要用局域网 IP |
+| 手机（Tailscale + HTTPS，需 opt-in） | `https://<tailscale-hostname>:<VK_MOBILE_HTTPS_PORT>`，Relay `:18443` | 见下方「手机 HTTPS 前门」 |
+| 手机（同一 WiFi 局域网） | `http://<lan-ip>:13001` / `:13000` / `:18082` | 仅同网段可达；跨网段用 Tailscale |
+
+> Tailscale 主机名/IP 由脚本自动探测，启动横幅会打印当前可用地址。**注意**：脚本优先用 `/Applications/Tailscale.app/Contents/MacOS/Tailscale`（App Store 版 GUI 二进制经 PATH 软链接调用会 SIGTRAP 崩溃，必须用完整路径），需要时可用 `VK_TAILSCALE_BIN` 覆盖。
+
+#### 手机 HTTPS 前门（opt-in）
+
+默认**关闭**（`VK_MOBILE=0`）。开启就一条命令：
+
+```bash
+VK_MOBILE=1 vk-start
+```
+
+`VK_MOBILE_HTTPS_PORT` 默认 `13444`（已避开 Vite 的 13001，不再冲突）。开启后 `vk-start` 会用 `tailscale cert` 签发证书并起 `https://<tailscale-hostname>:13444` 前门（证书 Tailscale 原生签发，手机直接信任，顺带 h2）。开启时只把**浏览器**的 `VITE_VK_SHARED_API_BASE` / `VITE_RELAY_API_BASE_URL` 指向该 HTTPS，桌面 `localhost:13001` 也随之走该地址（公网受信证书，无需 `caddy trust`）。Relay 走 `:18443`。
+
+> **关键**：mobile 模式下**服务端** `VK_SHARED_API_BASE` / `VK_SHARED_RELAY_API_BASE` 必须保持 `http://localhost:13000` / `http://127.0.0.1:18082`，**不要**改成 tailscale https。否则本地 Rust reqwest 会绕回 Caddy 经 `https://<tailscale>:13444/v1/tokens/refresh` 取 token 失败，导致 `Failed to get access token for relay`、`/api/auth/token` 502、project 拉不回来。原则：**只有浏览器走 HTTPS 前门，服务端始终直连本地 http。**
+
+> 注意：`pnpm run dev` 脚本会保留外部已设置的 `VITE_VK_SHARED_API_BASE`（`${VITE_VK_SHARED_API_BASE:-${VK_SHARED_API_BASE:-}}`），否则浏览器会被强制改回 http LAN，h2 前门形同虚设。
 
 ## Coding Style & Naming Conventions
 - Rust: `rustfmt` enforced (`rustfmt.toml`); group imports by crate; snake_case modules, PascalCase types.

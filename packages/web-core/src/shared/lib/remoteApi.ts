@@ -23,8 +23,14 @@ const BUILD_TIME_API_BASE = import.meta.env.VITE_VK_SHARED_API_BASE || '';
 let _remoteApiBase: string = BUILD_TIME_API_BASE;
 
 /**
- * Prefer a same-origin HTTPS build-time API base when the backend still
- * reports a LAN HTTP URL (Tailscale + Caddy mobile front door).
+ * Prefer the page's own origin when it is served over HTTPS (Caddy h2 front
+ * door — desktop localhost or mobile Tailscale) but the backend still reports a
+ * plaintext http base (LAN dev). Routing REST + Electric shapes same-origin
+ * lets them multiplex over a single h2 connection instead of stalling on the
+ * ~6-per-origin HTTP/1.1 limit.
+ *
+ * Production safety: there apiBase is https, so the condition never matches and
+ * the reported base is returned unchanged (never rewritten to window.origin).
  */
 export function resolveSharedRemoteApiBase(
   apiBase: string | null | undefined
@@ -38,13 +44,8 @@ export function resolveSharedRemoteApiBase(
     return apiBase;
   }
 
-  if (
-    buildTimeBase &&
-    window.location.protocol === 'https:' &&
-    buildTimeBase.startsWith('https:') &&
-    apiBase.startsWith('http:')
-  ) {
-    return buildTimeBase;
+  if (window.location.protocol === 'https:' && apiBase.startsWith('http:')) {
+    return window.location.origin;
   }
 
   return apiBase;
