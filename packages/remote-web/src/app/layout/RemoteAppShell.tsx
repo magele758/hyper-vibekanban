@@ -14,6 +14,10 @@ import { MobileDrawer } from "@vibe/ui/components/MobileDrawer";
 import type { Project } from "shared/remote-types";
 import { useIsMobile } from "@/shared/hooks/useIsMobile";
 import { cn } from "@/shared/lib/utils";
+import {
+  prefetchProjectKanbanShapes,
+  prefetchProjectKanbanShapesOnHover,
+} from "@/shared/lib/electric/prefetchProjectShapes";
 import { useUserOrganizations } from "@/shared/hooks/useUserOrganizations";
 import { useAuth } from "@/shared/hooks/auth/useAuth";
 import { useOrganizationStore } from "@/shared/stores/useOrganizationStore";
@@ -35,8 +39,6 @@ import {
   CreateRemoteProjectDialog,
   type CreateRemoteProjectResult,
 } from "@/shared/dialogs/org/CreateRemoteProjectDialog";
-import { CloudShutdownExportBanner } from "@/shared/components/CloudShutdownExportBanner";
-
 interface RemoteAppShellProps {
   children: ReactNode;
 }
@@ -58,10 +60,6 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
   const { isSignedIn } = useAuth();
   const isWorkspaceContextRoute = location.pathname.includes("/workspaces");
   const isProjectRoute = /^\/projects\/[^/]+/.test(location.pathname);
-  const isExportRoute = location.pathname === "/export";
-  const showCloudShutdownBanner =
-    isExportRoute || (isSignedIn && isProjectRoute);
-
   useCommandBarShortcut(
     () => CommandBarDialog.show(),
     isWorkspaceContextRoute || isProjectRoute,
@@ -171,17 +169,25 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
 
   const handleProjectClick = useCallback(
     (projectId: string) => {
+      if (projectId !== activeProjectId) {
+        prefetchProjectKanbanShapes(projectId);
+      }
       navigate({
         to: "/projects/$projectId",
         params: { projectId },
       });
     },
-    [navigate],
+    [activeProjectId, navigate],
   );
 
-  const handleExportClick = useCallback(() => {
-    navigate({ to: "/export" });
-  }, [navigate]);
+  const handleProjectHover = useCallback(
+    (projectId: string) => {
+      if (projectId !== activeProjectId) {
+        prefetchProjectKanbanShapesOnHover(projectId);
+      }
+    },
+    [activeProjectId],
+  );
 
   const handleCreateProject = useCallback(async () => {
     if (!activeOrganizationId) {
@@ -250,10 +256,6 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
           : "h-screen",
       )}
     >
-      {showCloudShutdownBanner && (
-        <CloudShutdownExportBanner onClick={handleExportClick} />
-      )}
-
       <div className="flex min-h-0 flex-1">
         {!isMobile && (
           <AppBar
@@ -266,6 +268,7 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
             onHostClick={handleHostClick}
             showWorkspacesButton={false}
             onProjectClick={handleProjectClick}
+            onProjectHover={handleProjectHover}
             onProjectsDragEnd={() => {}}
             isSavingProjectOrder={true}
             isWorkspacesActive={isWorkspacesActive}

@@ -1,10 +1,12 @@
 import type { PairedRelayHost } from "@/shared/lib/relayPairingStorage";
 import { subscribeRelayPairingChanges } from "@/shared/lib/relayPairingStorage";
+import {
+  base64ToBytes,
+  parseEd25519PrivateKeyFromJwk,
+} from "@/shared/lib/relayCrypto";
 
-import { base64ToBytes, toArrayBuffer } from "@remote/shared/lib/relay/bytes";
-
-const signingKeyCache = new Map<string, CryptoKey>();
-const serverVerifyKeyCache = new Map<string, CryptoKey>();
+const signingKeyCache = new Map<string, Uint8Array>();
+const serverVerifyKeyCache = new Map<string, Uint8Array>();
 
 subscribeRelayPairingChanges(({ hostId }) => {
   clearRelayHostCryptoCaches(hostId);
@@ -12,7 +14,7 @@ subscribeRelayPairingChanges(({ hostId }) => {
 
 export async function getSigningKey(
   pairedHost: PairedRelayHost,
-): Promise<CryptoKey> {
+): Promise<Uint8Array> {
   const signingSessionId = pairedHost.signing_session_id;
   if (!signingSessionId) {
     throw new Error("Missing signing session for paired host.");
@@ -24,21 +26,14 @@ export async function getSigningKey(
     return cachedKey;
   }
 
-  const importedKey = await crypto.subtle.importKey(
-    "jwk",
-    pairedHost.private_key_jwk,
-    { name: "Ed25519" },
-    false,
-    ["sign"],
-  );
-
-  signingKeyCache.set(cacheKey, importedKey);
-  return importedKey;
+  const privateKey = parseEd25519PrivateKeyFromJwk(pairedHost.private_key_jwk);
+  signingKeyCache.set(cacheKey, privateKey);
+  return privateKey;
 }
 
 export async function getServerVerifyKey(
   pairedHost: PairedRelayHost,
-): Promise<CryptoKey> {
+): Promise<Uint8Array> {
   const signingSessionId = pairedHost.signing_session_id;
   if (!signingSessionId) {
     throw new Error("Missing signing session for paired host.");
@@ -55,16 +50,9 @@ export async function getServerVerifyKey(
     throw new Error("Missing server signing key for paired host.");
   }
 
-  const importedKey = await crypto.subtle.importKey(
-    "raw",
-    toArrayBuffer(base64ToBytes(serverPublicKeyB64)),
-    { name: "Ed25519" },
-    false,
-    ["verify"],
-  );
-
-  serverVerifyKeyCache.set(cacheKey, importedKey);
-  return importedKey;
+  const publicKey = base64ToBytes(serverPublicKeyB64);
+  serverVerifyKeyCache.set(cacheKey, publicKey);
+  return publicKey;
 }
 
 export function clearRelayHostCryptoCaches(hostId: string): void {

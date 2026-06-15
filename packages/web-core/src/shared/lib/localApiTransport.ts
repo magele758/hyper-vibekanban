@@ -104,6 +104,10 @@ const defaultTransport: LocalApiTransport = {
 
 let transport: LocalApiTransport = defaultTransport;
 
+export function isRelayLocalApiTransport(): boolean {
+  return transport !== defaultTransport;
+}
+
 export function setLocalApiTransport(nextTransport: LocalApiTransport | null) {
   transport = nextTransport ?? defaultTransport;
 }

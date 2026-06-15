@@ -386,6 +386,31 @@ impl RelayHosts {
         }
         Ok(removed)
     }
+
+    /// Persist credentials after a remote browser completes SPAKE2 pairing with
+    /// this machine. Required for `/api/host/{host_id}/…` relay proxy routes.
+    pub async fn register_browser_pairing(
+        &self,
+        host_id: Uuid,
+        host_name: Option<String>,
+        client_id: Uuid,
+        server_public_key_b64: String,
+        signing_session_id: Uuid,
+    ) -> Result<(), RelayPairingClientError> {
+        self.repository
+            .upsert_credentials(
+                host_id,
+                host_name,
+                Some(Utc::now().to_rfc3339()),
+                Some(client_id.to_string()),
+                Some(server_public_key_b64),
+            )
+            .await?;
+        self.sessions
+            .cache_signing_session_id(host_id, signing_session_id)
+            .await;
+        Ok(())
+    }
 }
 
 impl RelayHost {

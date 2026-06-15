@@ -69,7 +69,7 @@ type SyncConfigLike = {
 };
 
 const DEFAULT_GC_TIME_MS = 5 * 60 * 1000;
-const ELECTRIC_READY_TIMEOUT_MS = 3000;
+const ELECTRIC_READY_TIMEOUT_MS = 12_000;
 const FALLBACK_REFRESH_INTERVAL_MS = 30 * 1000;
 
 const collectionCache = new Map<string, ReturnType<typeof createCollection>>();
@@ -573,9 +573,11 @@ function createHybridSync(args: {
           return;
         }
 
-        args.reportError({
-          message: `Electric sync timed out after ${ELECTRIC_READY_TIMEOUT_MS}ms, switching to fallback`,
-        });
+        if (import.meta.env.DEV) {
+          console.warn(
+            `[electric] ${args.shape.table} sync slow; using REST fallback`
+          );
+        }
         lockSourceToFallback(args.sourceKey);
       }, ELECTRIC_READY_TIMEOUT_MS);
     };

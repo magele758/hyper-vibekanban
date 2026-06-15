@@ -887,7 +887,9 @@ export function KanbanContainer() {
     [insertTag, projectId]
   );
 
-  const isLoading = projectLoading || orgLoading;
+  const isLoading =
+    (projectLoading && issues.length === 0 && statuses.length === 0) ||
+    (orgLoading && projects.length === 0);
 
   if (isLoading) {
     return <LoadingState />;

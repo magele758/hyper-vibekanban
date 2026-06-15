@@ -84,6 +84,9 @@ import {
   saveProjectRepoDefaults,
 } from '@/shared/hooks/useProjectRepoDefaults';
 
+// Default repos are registered on this machine, not the active route host.
+const LOCAL_MACHINE_HOST_ID = null;
+
 interface FormState {
   name: string;
   color: string;
@@ -509,7 +512,7 @@ export function RemoteProjectsSettingsSection({
 
     Promise.all([
       getProjectRepoDefaults(selectedProjectId),
-      repoApi.list().catch(() => {
+      repoApi.list(LOCAL_MACHINE_HOST_ID).catch(() => {
         setDefaultReposError(
           t('settings:settings.remoteProjects.form.defaultRepos.fetchError')
         );
@@ -535,7 +538,7 @@ export function RemoteProjectsSettingsSection({
   );
 
   const pickBranchForRepo = useCallback(async (repo: Repo) => {
-    const branches = await repoApi.getBranches(repo.id);
+    const branches = await repoApi.getBranches(repo.id, LOCAL_MACHINE_HOST_ID);
     const branchItems = branches.map((b) => ({
       name: b.name,
       isCurrent: b.is_current,
@@ -559,7 +562,10 @@ export function RemoteProjectsSettingsSection({
       try {
         const branch = await pickBranchForRepo(repo);
         if (!branch) {
-          const branches = await repoApi.getBranches(repo.id);
+          const branches = await repoApi.getBranches(
+            repo.id,
+            LOCAL_MACHINE_HOST_ID
+          );
           if (branches.length === 0) {
             setDefaultReposError(
               t('settings:settings.remoteProjects.form.defaultRepos.noBranches')
@@ -590,7 +596,10 @@ export function RemoteProjectsSettingsSection({
     try {
       const result = await FolderPickerDialog.show({});
       if (!result) return;
-      const newRepo = await repoApi.register({ path: result });
+      const newRepo = await repoApi.register(
+        { path: result },
+        LOCAL_MACHINE_HOST_ID
+      );
       setAllRepos((prev) => [...prev, newRepo]);
       await handleAddDefaultRepo(newRepo);
     } catch (error) {
@@ -626,7 +635,10 @@ export function RemoteProjectsSettingsSection({
       if (branchCache.has(repoId)) return;
       setLoadingBranches((prev) => new Set(prev).add(repoId));
       try {
-        const branches = await repoApi.getBranches(repoId);
+        const branches = await repoApi.getBranches(
+          repoId,
+          LOCAL_MACHINE_HOST_ID
+        );
         setBranchCache((prev) => new Map(prev).set(repoId, branches));
       } catch {
         setDefaultReposError(

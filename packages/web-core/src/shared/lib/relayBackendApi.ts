@@ -31,9 +31,52 @@ export function getRelayApiUrl(): string {
   return _relayApiBase;
 }
 
+/** Relay runs on a separate port from Remote; derive it for LAN / self-host. */
+export function resolveDefaultRelayApiBase(
+  remoteApiBase?: string | null
+): string {
+  const relayPort = import.meta.env.VITE_RELAY_PORT || '18082';
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    const liveRelayOrigin = `${protocol}//${hostname}:${relayPort}`;
+
+    if (BUILD_TIME_RELAY_API_BASE) {
+      try {
+        const baked = new URL(BUILD_TIME_RELAY_API_BASE);
+        // Self-host: same machine, port may drift (e.g. 8082 → 18082) — follow the page.
+        if (baked.hostname === hostname || baked.hostname === 'localhost') {
+          return liveRelayOrigin;
+        }
+        return BUILD_TIME_RELAY_API_BASE;
+      } catch {
+        return liveRelayOrigin;
+      }
+    }
+
+    return liveRelayOrigin;
+  }
+
+  if (BUILD_TIME_RELAY_API_BASE) {
+    return BUILD_TIME_RELAY_API_BASE;
+  }
+
+  if (remoteApiBase) {
+    try {
+      const url = new URL(remoteApiBase);
+      url.port = String(relayPort);
+      return url.origin;
+    } catch {
+      // fall through
+    }
+  }
+
+  return BUILD_TIME_API_BASE;
+}
+
 export function syncRelayApiBaseWithRemote(base: string | null | undefined) {
   if (USE_REMOTE_API_BASE_FALLBACK) {
-    setRelayApiBase(base);
+    setRelayApiBase(resolveDefaultRelayApiBase(base));
   }
 }
 
@@ -211,16 +254,32 @@ async function extractErrorMessage(
   response: Response,
   fallbackMessage: string
 ): Promise<string> {
-  try {
-    const body = await response.json();
-    if (body && typeof body.message === 'string') {
-      return body.message;
+  const rawBody = await response.text().catch(() => '');
+
+  if (rawBody.includes('No active relay')) {
+    return (
+      '本机 Relay 未连接。请在本机运行 vk-start（或 pnpm run dev），' +
+      '用 13001 登录 Remote 并保持运行后，再在 Remote/手机端配对或打开 workspace。'
+    );
+  }
+
+  if (rawBody) {
+    try {
+      const body = JSON.parse(rawBody) as {
+        message?: string;
+        error?: string;
+      };
+      if (typeof body.message === 'string') {
+        return body.message;
+      }
+      if (typeof body.error === 'string') {
+        return body.error;
+      }
+    } catch {
+      if (rawBody.length < 200) {
+        return rawBody;
+      }
     }
-    if (body && typeof body.error === 'string') {
-      return body.error;
-    }
-  } catch {
-    // Ignore parse failures and use fallback.
   }
 
   return `${fallbackMessage} (${response.status})`;

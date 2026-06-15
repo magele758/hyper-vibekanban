@@ -1,4 +1,5 @@
 import type { PairedRelayHost } from "@/shared/lib/relayPairingStorage";
+import { ed25519Sign, ed25519Verify } from "@/shared/lib/relayCrypto";
 
 import {
   base64ToBytes,
@@ -285,11 +286,10 @@ async function decodeRelayWsEnvelope(
     payload,
   );
 
-  const isValid = await crypto.subtle.verify(
-    "Ed25519",
+  const isValid = ed25519Verify(
+    signatureBytes,
+    TEXT_ENCODER.encode(signingInput),
     signingContext.serverVerifyKey,
-    toArrayBuffer(signatureBytes),
-    toArrayBuffer(TEXT_ENCODER.encode(signingInput)),
   );
 
   if (!isValid) {
@@ -314,10 +314,9 @@ async function buildRelayWsEnvelope(
     payload,
   );
 
-  const signature = await crypto.subtle.sign(
-    "Ed25519",
+  const signature = ed25519Sign(
+    TEXT_ENCODER.encode(signingInput),
     signingContext.signingKey,
-    toArrayBuffer(TEXT_ENCODER.encode(signingInput)),
   );
 
   signingContext.outboundSeq = nextSeq;
@@ -327,7 +326,7 @@ async function buildRelayWsEnvelope(
     seq: nextSeq,
     msg_type: msgType,
     payload_b64: bytesToBase64(payload),
-    signature_b64: bytesToBase64(new Uint8Array(signature)),
+    signature_b64: bytesToBase64(signature),
   };
 }
 

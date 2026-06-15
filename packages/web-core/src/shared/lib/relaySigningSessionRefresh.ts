@@ -1,4 +1,10 @@
 import type { RelaySigningSessionRefreshPayload } from '@/shared/lib/relayBackendApi';
+import {
+  bytesToBase64,
+  ed25519Sign,
+  parseEd25519PrivateKeyFromJwk,
+  secureRandomUuid,
+} from '@/shared/lib/relayCrypto';
 
 const TEXT_ENCODER = new TextEncoder();
 
@@ -15,44 +21,19 @@ export async function buildRelaySigningSessionRefreshPayload(
   privateKeyJwk: JsonWebKey
 ): Promise<RelaySigningSessionRefreshPayload> {
   const timestamp = Math.floor(Date.now() / 1000);
-  const nonce = crypto.randomUUID();
+  const nonce = secureRandomUuid();
   const message = buildRelaySigningSessionRefreshMessage(
     timestamp,
     nonce,
     clientId
   );
-  const key = await crypto.subtle.importKey(
-    'jwk',
-    privateKeyJwk,
-    { name: 'Ed25519' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign(
-    'Ed25519',
-    key,
-    toArrayBuffer(TEXT_ENCODER.encode(message))
-  );
+  const privateKey = parseEd25519PrivateKeyFromJwk(privateKeyJwk);
+  const signature = ed25519Sign(TEXT_ENCODER.encode(message), privateKey);
 
   return {
     client_id: clientId,
     timestamp,
     nonce,
-    signature_b64: bytesToBase64(new Uint8Array(signature)),
+    signature_b64: bytesToBase64(signature),
   };
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (const value of bytes) {
-    binary += String.fromCharCode(value);
-  }
-  return btoa(binary);
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength
-  ) as ArrayBuffer;
 }

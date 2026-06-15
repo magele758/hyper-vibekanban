@@ -122,8 +122,41 @@ pub async fn proxy_request_over_control(
 
 fn normalized_relay_path(uri: &axum::http::Uri, strip_prefix: &str) -> String {
     let raw_path = uri.path();
-    let path = raw_path.strip_prefix(strip_prefix).unwrap_or(raw_path);
+    let path = raw_path
+        .strip_prefix(strip_prefix)
+        .or_else(|| {
+            strip_prefix
+                .strip_prefix("/v1")
+                .and_then(|legacy_prefix| raw_path.strip_prefix(legacy_prefix))
+        })
+        .unwrap_or(raw_path);
     let path = if path.is_empty() { "/" } else { path };
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
     format!("{path}{query}")
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::http::Uri;
+
+    use super::normalized_relay_path;
+
+    #[test]
+    fn strips_v1_relay_session_prefix() {
+        let uri: Uri = "/v1/relay/h/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/s/bbbbbbbb-cccc-dddd-eeee-ffffffffffff/api/relay-auth/server/spake2/start"
+            .parse()
+            .unwrap();
+        let strip = "/v1/relay/h/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/s/bbbbbbbb-cccc-dddd-eeee-ffffffffffff";
+        assert_eq!(
+            normalized_relay_path(&uri, strip),
+            "/api/relay-auth/server/spake2/start"
+        );
+    }
+
+    #[test]
+    fn keeps_legacy_prefix_support() {
+        let uri: Uri = "/relay/h/host/s/session/api/workspaces".parse().unwrap();
+        let strip = "/v1/relay/h/host/s/session";
+        assert_eq!(normalized_relay_path(&uri, strip), "/api/workspaces");
+    }
 }

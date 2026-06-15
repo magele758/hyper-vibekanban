@@ -74,7 +74,8 @@ function IssueCommentsSectionContent() {
 
   // UI state for comment input
   const [commentInput, setCommentInput] = useState('');
-  const commentDraftId = `issue-comment:${issueContext.issueId}`;
+  // Scratch table keys id as UUID; scratch_type DRAFT_TASK scopes the draft.
+  const commentDraftId = issueContext.issueId;
   const {
     scratch: commentDraftScratch,
     updateScratch: updateCommentDraft,

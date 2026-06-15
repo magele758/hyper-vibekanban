@@ -54,6 +54,7 @@ interface AppBarProps {
   onHostClick?: (hostId: string, status: AppBarHostStatus) => void;
   showWorkspacesButton?: boolean;
   onProjectClick: (projectId: string) => void;
+  onProjectHover?: (projectId: string) => void;
   onProjectsDragEnd: (result: DropResult) => void;
   isSavingProjectOrder?: boolean;
   isWorkspacesActive: boolean;
@@ -154,6 +155,7 @@ type AppBarSectionItem =
       activeProjectId: string | null;
       isSavingProjectOrder?: boolean;
       onProjectClick: (projectId: string) => void;
+      onProjectHover?: (projectId: string) => void;
       onProjectsDragEnd: (result: DropResult) => void;
     };
 
@@ -206,6 +208,7 @@ export function AppBar({
   onHostClick,
   showWorkspacesButton = true,
   onProjectClick,
+  onProjectHover,
   onProjectsDragEnd,
   isSavingProjectOrder,
   isWorkspacesActive,
@@ -304,6 +307,7 @@ export function AppBar({
       activeProjectId,
       isSavingProjectOrder,
       onProjectClick,
+      onProjectHover,
       onProjectsDragEnd,
     });
   }
@@ -474,6 +478,10 @@ export function AppBar({
                             <button
                               type="button"
                               onClick={() => item.onProjectClick(project.id)}
+                              onMouseEnter={() =>
+                                item.onProjectHover?.(project.id)
+                              }
+                              onFocus={() => item.onProjectHover?.(project.id)}
                               className={cn(
                                 appBarItemBaseClassName,
                                 'cursor-grab',

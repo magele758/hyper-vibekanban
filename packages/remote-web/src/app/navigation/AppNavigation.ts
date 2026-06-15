@@ -5,6 +5,7 @@ import {
   type AppNavigation,
   type NavigationTransition,
 } from "@/shared/lib/routes/appNavigation";
+import { getRelayHostFallback } from "@/shared/lib/relayHostFallback";
 
 type RemoteRouteId = FileRouteTypes["id"];
 
@@ -181,31 +182,40 @@ function destinationToRemoteTarget(
         },
       } as const;
     case "project-issue-workspace":
+      if (!effectiveHostId) {
+        return { to: "/" } as const;
+      }
       return {
         to: "/projects/$projectId/issues/$issueId/hosts/$hostId/workspaces/$workspaceId",
         params: {
           projectId: destination.projectId,
           issueId: destination.issueId,
-          hostId: destination.hostId,
+          hostId: effectiveHostId,
           workspaceId: destination.workspaceId,
         },
       } as const;
     case "project-issue-workspace-create":
+      if (!effectiveHostId) {
+        return { to: "/" } as const;
+      }
       return {
         to: "/projects/$projectId/issues/$issueId/hosts/$hostId/workspaces/create/$draftId",
         params: {
           projectId: destination.projectId,
           issueId: destination.issueId,
-          hostId: destination.hostId,
+          hostId: effectiveHostId,
           draftId: destination.draftId,
         },
       } as const;
     case "project-workspace-create":
+      if (!effectiveHostId) {
+        return { to: "/" } as const;
+      }
       return {
         to: "/projects/$projectId/hosts/$hostId/workspaces/create/$draftId",
         params: {
           projectId: destination.projectId,
-          hostId: destination.hostId,
+          hostId: effectiveHostId,
           draftId: destination.draftId,
         },
       } as const;
@@ -291,7 +301,7 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
   ) => {
     void router.navigate({
       ...destinationToRemoteTarget(destination, {
-        currentHostId: null,
+        currentHostId: getRelayHostFallback(),
       }),
       ...(transition?.replace !== undefined
         ? { replace: transition.replace }

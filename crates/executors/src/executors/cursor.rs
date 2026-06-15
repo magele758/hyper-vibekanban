@@ -109,7 +109,7 @@ fn resolve_cursor_model_name<'a>(base_model: &'a str, reasoning: Option<&'a str>
     }
 }
 
-fn cursor_reasoning_options(base_model: &str) -> Vec<ReasoningOption> {
+pub(crate) fn cursor_reasoning_options(base_model: &str) -> Vec<ReasoningOption> {
     match base_model {
         "gpt-5.4" | "gpt-5.4-fast" => {
             ReasoningOption::from_names(["medium", "high", "xhigh"].map(String::from))
@@ -646,7 +646,36 @@ impl StandardCodingAgentExecutor for CursorAgent {
         _workdir: Option<&std::path::Path>,
         _repo_path: Option<&std::path::Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
-        let models: Vec<ModelInfo> = [
+        let models =
+            match crate::model_discovery::discover_cursor_models(Self::base_command(), &self.cmd)
+                .await
+            {
+                Ok(models) => models,
+                Err(error) => {
+                    tracing::warn!(
+                        ?error,
+                        "Cursor model discovery failed; using built-in fallback list"
+                    );
+                    Self::fallback_models()
+                }
+            };
+
+        let options = ExecutorDiscoveredOptions {
+            model_selector: ModelSelectorConfig {
+                models,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        Ok(Box::pin(futures::stream::once(async move {
+            patch::executor_discovered_options(options)
+        })))
+    }
+}
+
+impl CursorAgent {
+    fn fallback_models() -> Vec<ModelInfo> {
+        [
             ("auto", "Auto"),
             ("gpt-5.4", "GPT-5.4"),
             ("gpt-5.4-fast", "GPT-5.4 Fast"),
@@ -680,18 +709,7 @@ impl StandardCodingAgentExecutor for CursorAgent {
             provider_id: None,
             reasoning_options: cursor_reasoning_options(id),
         })
-        .collect();
-
-        let options = ExecutorDiscoveredOptions {
-            model_selector: ModelSelectorConfig {
-                models,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        Ok(Box::pin(futures::stream::once(async move {
-            patch::executor_discovered_options(options)
-        })))
+        .collect()
     }
 }
 /* ===========================

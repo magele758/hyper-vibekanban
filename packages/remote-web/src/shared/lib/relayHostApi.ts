@@ -26,6 +26,7 @@ import {
   createRelayWsSigningContext,
 } from "@remote/shared/lib/relay/ws";
 import { buildRemoteSessionBaseUrl } from "@/shared/lib/relayBackendApi";
+import { getRelayHostFallback } from "@/shared/lib/relayHostFallback";
 import type {
   LocalApiRequestOptions,
   LocalApiWebSocketOptions,
@@ -52,7 +53,10 @@ export async function requestLocalApiViaRelay(
   }
 
   const hostId =
-    relayHostId ?? resolveRelayHostIdForCurrentPage() ?? getActiveRelayHostId();
+    relayHostId ??
+    resolveRelayHostIdForCurrentPage() ??
+    getActiveRelayHostId() ??
+    getRelayHostFallback();
   if (!hostId) {
     throw new Error(
       "Host context is required for local API requests. Navigate under /hosts/{hostId}/...",
@@ -75,7 +79,8 @@ export async function openLocalApiWebSocketViaRelay(
   const hostId =
     options.relayHostId ??
     resolveRelayHostIdForCurrentPage() ??
-    getActiveRelayHostId();
+    getActiveRelayHostId() ??
+    getRelayHostFallback();
   if (!hostId) {
     throw new Error(
       "Host context is required for local API WebSocket requests. Navigate under /hosts/{hostId}/...",

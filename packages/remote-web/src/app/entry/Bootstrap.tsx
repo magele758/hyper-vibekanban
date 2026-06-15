@@ -11,7 +11,10 @@ import "@remote/app/styles/index.css";
 import "@/i18n";
 import { configureAuthRuntime } from "@/shared/lib/auth/runtime";
 import { setRemoteApiBase } from "@/shared/lib/remoteApi";
-import { setRelayApiBase } from "@/shared/lib/relayBackendApi";
+import {
+  resolveDefaultRelayApiBase,
+  setRelayApiBase,
+} from "@/shared/lib/relayBackendApi";
 import { setLocalApiTransport } from "@/shared/lib/localApiTransport";
 import "@/shared/types/modals";
 import { queryClient } from "@/shared/lib/queryClient";
@@ -26,12 +29,10 @@ if (import.meta.env.VITE_PUBLIC_POSTHOG_KEY) {
   });
 }
 
-setRemoteApiBase(import.meta.env.VITE_API_BASE_URL || window.location.origin);
-setRelayApiBase(
-  import.meta.env.VITE_RELAY_API_BASE_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    window.location.origin,
-);
+const remoteApiBase =
+  import.meta.env.VITE_API_BASE_URL || window.location.origin;
+setRemoteApiBase(remoteApiBase);
+setRelayApiBase(resolveDefaultRelayApiBase(remoteApiBase));
 setLocalApiTransport({
   request: requestLocalApiViaWebRtc,
   openWebSocket: openLocalApiWebSocketViaWebRtc,

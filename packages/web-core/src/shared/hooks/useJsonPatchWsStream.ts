@@ -3,6 +3,12 @@ import { produce } from 'immer';
 import type { Operation } from 'rfc6902';
 import { applyUpsertPatch } from '@/shared/lib/jsonPatch';
 import { openLocalApiWebSocket } from '@/shared/lib/localApiTransport';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { useHostId } from '@/shared/providers/HostIdProvider';
+import {
+  isRelayLocalStreamEnabled,
+  resolveRelayLocalStreamHostId,
+} from '@/shared/lib/relayLocalStreams';
 
 type WsJsonPatchMsg = { JsonPatch: Operation[] };
 type WsReadyMsg = { Ready: true };
@@ -25,6 +31,19 @@ interface UseJsonPatchStreamResult<T> {
   isConnected: boolean;
   isInitialized: boolean;
   error: string | null;
+}
+
+function isPermanentRelayConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message;
+  return (
+    message.includes('Host context is required') ||
+    message.includes('not paired with your browser') ||
+    message.includes('pairing is outdated')
+  );
 }
 
 /**
@@ -50,6 +69,17 @@ export const useJsonPatchWsStream = <T extends object>(
 
   const injectInitialEntry = options?.injectInitialEntry;
   const deduplicatePatches = options?.deduplicatePatches;
+  const destination = useCurrentAppDestination();
+  const fallbackHostId = useHostId();
+  const streamHostId = resolveRelayLocalStreamHostId(
+    destination,
+    fallbackHostId
+  );
+  const streamEnabled = isRelayLocalStreamEnabled(
+    destination,
+    fallbackHostId,
+    enabled
+  );
 
   function scheduleReconnect() {
     if (retryTimerRef.current) return; // already scheduled
@@ -63,7 +93,7 @@ export const useJsonPatchWsStream = <T extends object>(
   }
 
   useEffect(() => {
-    if (!enabled || !endpoint) {
+    if (!streamEnabled || !endpoint) {
       // Close connection and reset state
       if (wsRef.current) {
         wsRef.current.close();
@@ -102,7 +132,9 @@ export const useJsonPatchWsStream = <T extends object>(
 
       void (async () => {
         try {
-          const ws = await openLocalApiWebSocket(endpoint);
+          const ws = await openLocalApiWebSocket(endpoint, {
+            relayHostId: streamHostId,
+          });
 
           if (cancelled) {
             ws.close();
@@ -198,6 +230,13 @@ export const useJsonPatchWsStream = <T extends object>(
             return;
           }
 
+          if (isPermanentRelayConnectionError(error)) {
+            setError(
+              error instanceof Error ? error.message : 'Connection failed'
+            );
+            return;
+          }
+
           console.error('Failed to open WebSocket stream:', error);
           retryAttemptsRef.current += 1;
           scheduleReconnect();
@@ -231,7 +270,8 @@ export const useJsonPatchWsStream = <T extends object>(
     };
   }, [
     endpoint,
-    enabled,
+    streamEnabled,
+    streamHostId,
     initialData,
     injectInitialEntry,
     deduplicatePatches,

@@ -6,7 +6,7 @@ import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 
 export function RootRedirectPage() {
-  const { config, loading, loginStatus } = useUserSystem();
+  const { config, loading, loginStatus, remoteApiBase } = useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
   const appNavigation = useAppNavigation();
 
@@ -18,11 +18,20 @@ export function RootRedirectPage() {
     let isActive = true;
     void (async () => {
       if (!config.remote_onboarding_acknowledged) {
+        if (!remoteApiBase) {
+          if (!config.onboarding_acknowledged) {
+            appNavigation.goToOnboarding({ replace: true });
+          } else {
+            appNavigation.goToWorkspacesCreate({ replace: true });
+          }
+          return;
+        }
+
         appNavigation.goToOnboarding({ replace: true });
         return;
       }
 
-      if (loginStatus?.status !== 'loggedin') {
+      if (remoteApiBase && loginStatus?.status !== 'loggedin') {
         appNavigation.goToWorkspacesCreate({ replace: true });
         return;
       }
@@ -52,7 +61,14 @@ export function RootRedirectPage() {
     return () => {
       isActive = false;
     };
-  }, [appNavigation, config, loading, loginStatus?.status, setSelectedOrgId]);
+  }, [
+    appNavigation,
+    config,
+    loading,
+    loginStatus?.status,
+    remoteApiBase,
+    setSelectedOrgId,
+  ]);
 
   return (
     <div className="h-screen bg-primary flex items-center justify-center">

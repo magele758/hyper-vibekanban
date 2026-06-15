@@ -146,12 +146,35 @@ export function useShape<
     [collection]
   );
 
-  const items = useMemo(() => {
-    if (!enabled || !collection || !data || queryLoading) return [];
-    return data as unknown as T[];
-  }, [enabled, collection, data, queryLoading]);
+  const collectionReady = Boolean(
+    collection &&
+      typeof collection === 'object' &&
+      'isReady' in collection &&
+      typeof (collection as { isReady: () => boolean }).isReady ===
+        'function' &&
+      (collection as { isReady: () => boolean }).isReady()
+  );
 
-  const isLoading = enabled ? queryLoading : false;
+  const items = useMemo(() => {
+    if (!enabled || !collection) return [];
+    // Prefer collection.toArray once synced — live query can return [] before
+    // Electric has populated rows, which hid issue-linked workspaces.
+    if (collectionReady && 'toArray' in collection) {
+      return (collection as unknown as { toArray: T[] }).toArray;
+    }
+    if (!queryLoading && data) {
+      return data as unknown as T[];
+    }
+    return [];
+  }, [enabled, collection, data, queryLoading, collectionReady]);
+
+  const isLoading = enabled ? !collectionReady && queryLoading : false;
+
+  useEffect(() => {
+    if (collectionReady && error) {
+      setError(null);
+    }
+  }, [collectionReady, error]);
 
   // --- Mutation support (only used when mutation is provided) ---
 

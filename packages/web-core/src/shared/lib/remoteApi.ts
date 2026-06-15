@@ -13,6 +13,7 @@ import type {
   UpdateProjectStatusRequest,
 } from 'shared/remote-types';
 import { getAuthRuntime } from '@/shared/lib/auth/runtime';
+import { sha256Bytes } from '@/shared/lib/relayCrypto';
 import { syncRelayApiBaseWithRemote } from '@/shared/lib/relayBackendApi';
 
 const BUILD_TIME_API_BASE = import.meta.env.VITE_VK_SHARED_API_BASE || '';
@@ -22,12 +23,41 @@ const BUILD_TIME_API_BASE = import.meta.env.VITE_VK_SHARED_API_BASE || '';
 let _remoteApiBase: string = BUILD_TIME_API_BASE;
 
 /**
+ * Prefer a same-origin HTTPS build-time API base when the backend still
+ * reports a LAN HTTP URL (Tailscale + Caddy mobile front door).
+ */
+export function resolveSharedRemoteApiBase(
+  apiBase: string | null | undefined
+): string | null {
+  const buildTimeBase = BUILD_TIME_API_BASE || null;
+  if (!apiBase) {
+    return buildTimeBase;
+  }
+
+  if (typeof window === 'undefined') {
+    return apiBase;
+  }
+
+  if (
+    buildTimeBase &&
+    window.location.protocol === 'https:' &&
+    buildTimeBase.startsWith('https:') &&
+    apiBase.startsWith('http:')
+  ) {
+    return buildTimeBase;
+  }
+
+  return apiBase;
+}
+
+/**
  * Set the remote API base URL at runtime.
  * Called by ConfigProvider when /api/info returns a shared_api_base value.
  * No-op if base is null/undefined/empty (preserves build-time fallback).
  */
 export function setRemoteApiBase(base: string | null | undefined) {
-  _remoteApiBase = base || BUILD_TIME_API_BASE;
+  const resolved = resolveSharedRemoteApiBase(base);
+  _remoteApiBase = resolved || BUILD_TIME_API_BASE;
   if (_remoteApiBase) {
     syncRelayApiBaseWithRemote(_remoteApiBase);
   }
@@ -190,8 +220,8 @@ const sasUrlCache = new Map<string, CachedSasUrl>();
 
 export async function computeFileHash(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(hash))
+  const hash = sha256Bytes(new Uint8Array(buffer));
+  return Array.from(hash)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }

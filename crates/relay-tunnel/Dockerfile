@@ -1,18 +1,46 @@
 # syntax=docker/dockerfile:1.6
 
+ARG APT_MIRROR=""
+ARG CARGO_RS_PROXY=""
+ARG HTTP_PROXY=""
+ARG HTTPS_PROXY=""
+ARG NO_PROXY=""
+
 FROM rust:1.93-slim-bookworm AS builder
+ARG APT_MIRROR
+ARG CARGO_RS_PROXY
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 ENV CARGO_TARGET_DIR=/app/target
+ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} NO_PROXY=${NO_PROXY}
 
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}" ]; then \
+    find /etc/apt -type f \( -name '*.sources' -o -name 'sources.list' \) -exec \
+      sed -i "s|http://deb.debian.org|http://${APT_MIRROR}|g; s|http://security.debian.org|http://${APT_MIRROR}|g" {} +; \
+  fi \
+  && if [ -n "${CARGO_RS_PROXY}" ]; then \
+    mkdir -p /usr/local/cargo && printf '%s\n' \
+      '[source.crates-io]' \
+      'replace-with = "rsproxy-sparse"' \
+      '' \
+      '[source.rsproxy-sparse]' \
+      'registry = "sparse+https://rsproxy.cn/index/"' \
+      > /usr/local/cargo/config.toml; \
+  fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY rust-toolchain.toml ./
-RUN cargo --version >/dev/null
+RUN channel="$(sed -n 's/channel = "\(.*\)"/\1/p' rust-toolchain.toml)" \
+  && rustup toolchain install "${channel}" \
+  && rustup default "${channel}" \
+  && cargo --version >/dev/null
 COPY Cargo.toml Cargo.lock ./
 # Copy workspace member manifests so Cargo can resolve workspace-shared deps
 # without invalidating the build on every unrelated source change.
@@ -54,8 +82,13 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
  && cp /app/target/release/relay-server /app/bin/relay-server
 
 FROM debian:bookworm-slim
+ARG APT_MIRROR
 
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}" ]; then \
+    find /etc/apt -type f \( -name '*.sources' -o -name 'sources.list' \) -exec \
+      sed -i "s|http://deb.debian.org|http://${APT_MIRROR}|g; s|http://security.debian.org|http://${APT_MIRROR}|g" {} +; \
+  fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates libssl3 wget \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --system --create-home --uid 10001 appuser

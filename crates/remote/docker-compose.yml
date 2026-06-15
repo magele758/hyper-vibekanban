@@ -17,7 +17,7 @@ services:
       retries: 5
       start_period: 5s
     ports:
-      - "5433:5432"
+      - "${REMOTE_DB_PORTS:-127.0.0.1:15433:5432}"
 
   azurite:
     profiles: ["attachments"]
@@ -80,8 +80,14 @@ services:
         POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
         POSTHOG_API_ENDPOINT: ${POSTHOG_API_ENDPOINT:-}
         SENTRY_DSN_REMOTE: ${SENTRY_DSN_REMOTE:-}
-        VITE_RELAY_API_BASE_URL: ${VITE_RELAY_API_BASE_URL:-http://localhost:8082}
+        VITE_RELAY_API_BASE_URL: ${VITE_RELAY_API_BASE_URL:-http://localhost:18082}
         VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY: ${VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        APT_MIRROR: ${APT_MIRROR:-}
+        CARGO_RS_PROXY: ${CARGO_RS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
       ssh:
         - default
     depends_on:
@@ -98,7 +104,7 @@ services:
       SERVER_LISTEN_ADDR: 0.0.0.0:8081
       ELECTRIC_URL: http://electric:3000
       ELECTRIC_ROLE_PASSWORD: ${ELECTRIC_ROLE_PASSWORD:-remote}
-      SERVER_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      SERVER_PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:13000}
       VIBEKANBAN_REMOTE_JWT_SECRET: ${VIBEKANBAN_REMOTE_JWT_SECRET:?set in .env.remote}
 
       # Auth 
@@ -147,7 +153,7 @@ services:
       AZURE_STORAGE_PUBLIC_ENDPOINT_URL:
 
     ports:
-      - "${REMOTE_SERVER_PORTS:-127.0.0.1:3000:8081}"
+      - "${REMOTE_SERVER_PORTS:-0.0.0.0:13000:8081}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8081/v1/health"]
@@ -161,6 +167,12 @@ services:
     build:
       context: ../..
       dockerfile: crates/relay-tunnel/Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-}
+        CARGO_RS_PROXY: ${CARGO_RS_PROXY:-}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
     depends_on:
       remote-db:
         condition: service_healthy
@@ -170,7 +182,7 @@ services:
       RELAY_LISTEN_ADDR: 0.0.0.0:8082
       VIBEKANBAN_REMOTE_JWT_SECRET: ${VIBEKANBAN_REMOTE_JWT_SECRET:?set in .env.remote}
     ports:
-      - "127.0.0.1:8082:8082"
+      - "${REMOTE_RELAY_PORTS:-0.0.0.0:18082:8082}"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8082/health"]

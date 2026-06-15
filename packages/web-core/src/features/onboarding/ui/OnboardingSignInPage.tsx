@@ -76,7 +76,8 @@ export function OnboardingSignInPage() {
   const { t } = useTranslation('common');
   const { theme } = useTheme();
   const posthog = usePostHog();
-  const { config, loginStatus, loading, updateAndSaveConfig } = useUserSystem();
+  const { config, loginStatus, loading, updateAndSaveConfig, remoteApiBase } =
+    useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
 
   const [showComparison, setShowComparison] = useState(false);
@@ -205,6 +206,32 @@ export function OnboardingSignInPage() {
         return;
     }
   };
+
+  useEffect(() => {
+    if (
+      loading ||
+      !config ||
+      remoteApiBase ||
+      config.remote_onboarding_acknowledged ||
+      isCompletingOnboardingRef.current
+    ) {
+      return;
+    }
+
+    isCompletingOnboardingRef.current = true;
+    void (async () => {
+      const success = await updateAndSaveConfig({
+        remote_onboarding_acknowledged: true,
+        onboarding_acknowledged: true,
+        disclaimer_acknowledged: true,
+      });
+      if (success) {
+        appNavigation.goToWorkspacesCreate({ replace: true });
+        return;
+      }
+      isCompletingOnboardingRef.current = false;
+    })();
+  }, [appNavigation, config, loading, remoteApiBase, updateAndSaveConfig]);
 
   const handleProviderSignIn = async (provider: OAuthProvider) => {
     if (saving || pendingProvider) return;

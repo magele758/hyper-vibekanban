@@ -1,0 +1,9 @@
+# Infra-only overlay: Postgres + Electric for native (host) remote/relay binaries.
+# Electric normally waits for remote-server migrations; we start it after remote is up.
+services:
+  electric:
+    depends_on:
+      remote-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3010:3000"

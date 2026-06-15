@@ -1,3 +1,5 @@
+import { sha256Bytes } from "@/shared/lib/relayCrypto";
+
 function base64UrlEncode(array: Uint8Array): string {
   const base64 = btoa(String.fromCharCode(...array));
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
@@ -19,8 +21,7 @@ export function generateVerifier(): string {
 
 export async function generateChallenge(verifier: string): Promise<string> {
   const data = new TextEncoder().encode(verifier);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return bytesToHex(new Uint8Array(hash));
+  return bytesToHex(sha256Bytes(data));
 }
 
 const VERIFIER_KEY = "oauth_verifier";

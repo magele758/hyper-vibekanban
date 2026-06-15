@@ -1,4 +1,12 @@
 import { ed25519 } from '@noble/curves/ed25519';
+import {
+  bytesToBase64,
+  base64ToBytes,
+  generateEd25519RelayKeyPair,
+  hkdfSha256Bytes,
+  hmacSha256Bytes,
+  sha256Bytes,
+} from '@/shared/lib/relayCrypto';
 
 const ENCODER = new TextEncoder();
 
@@ -106,22 +114,7 @@ export async function generateRelaySigningKeyPair(): Promise<{
   publicKeyBytes: Uint8Array;
   publicKeyB64: string;
 }> {
-  const keyPair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
-    'sign',
-    'verify',
-  ])) as CryptoKeyPair;
-
-  const [privateKeyJwk, publicKeyRaw] = await Promise.all([
-    crypto.subtle.exportKey('jwk', keyPair.privateKey),
-    crypto.subtle.exportKey('raw', keyPair.publicKey),
-  ]);
-
-  const publicKeyBytes = new Uint8Array(publicKeyRaw);
-  return {
-    privateKeyJwk,
-    publicKeyBytes,
-    publicKeyB64: bytesToBase64(publicKeyBytes),
-  };
+  return generateEd25519RelayKeyPair();
 }
 
 export async function buildClientProofB64(
@@ -217,48 +210,18 @@ async function hkdfSha256(
   info: Uint8Array,
   length: number
 ): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    toArrayBuffer(ikm),
-    'HKDF',
-    false,
-    ['deriveBits']
-  );
-  const derivedBits = await crypto.subtle.deriveBits(
-    {
-      name: 'HKDF',
-      hash: 'SHA-256',
-      salt: toArrayBuffer(salt),
-      info: toArrayBuffer(info),
-    },
-    key,
-    length * 8
-  );
-  return new Uint8Array(derivedBits);
+  return hkdfSha256Bytes(ikm, salt, info, length);
 }
 
 async function hmacSha256(
   keyBytes: Uint8Array,
   data: Uint8Array
 ): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    toArrayBuffer(keyBytes),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const signature = await crypto.subtle.sign('HMAC', key, toArrayBuffer(data));
-  return new Uint8Array(signature);
+  return hmacSha256Bytes(keyBytes, data);
 }
 
 async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  const digest = await crypto.subtle.digest('SHA-256', toArrayBuffer(data));
-  return new Uint8Array(digest);
-}
-
-function toArrayBuffer(data: Uint8Array): ArrayBuffer {
-  return new Uint8Array(data).buffer;
+  return sha256Bytes(data);
 }
 
 function uuidToBytes(rawUuid: string): Uint8Array {
@@ -307,18 +270,4 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
     mismatch |= a[i] ^ b[i];
   }
   return mismatch === 0;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const binary = String.fromCharCode(...bytes);
-  return btoa(binary);
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }

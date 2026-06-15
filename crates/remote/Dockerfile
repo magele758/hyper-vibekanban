@@ -4,15 +4,30 @@ ARG APP_NAME=remote
 ARG FEATURES=""
 ARG VITE_RELAY_API_BASE_URL=""
 ARG VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY=""
+ARG NPM_REGISTRY=""
+ARG APT_MIRROR=""
+ARG CARGO_RS_PROXY=""
+ARG HTTP_PROXY=""
+ARG HTTPS_PROXY=""
+ARG NO_PROXY=""
 
-FROM node:20-alpine AS fe-builder
+FROM node:22-bookworm-slim AS fe-builder
+ARG NPM_REGISTRY
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 ARG VITE_RELAY_API_BASE_URL
 ARG VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY
 WORKDIR /repo
 ENV VITE_RELAY_API_BASE_URL=${VITE_RELAY_API_BASE_URL}
 ENV VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY=${VITE_PUBLIC_REACT_VIRTUOSO_LICENSE_KEY}
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
+ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} NO_PROXY=${NO_PROXY}
 
-RUN corepack enable
+RUN if [ -n "${NPM_REGISTRY}" ]; then echo "registry=${NPM_REGISTRY}" > /root/.npmrc; fi \
+  && corepack enable \
+  && corepack prepare pnpm@10.13.1 --activate \
+  && if [ -n "${NPM_REGISTRY}" ]; then pnpm config set registry "${NPM_REGISTRY}"; fi
 
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/local-web/package.json packages/local-web/package.json
@@ -39,26 +54,52 @@ ARG FEATURES
 ARG POSTHOG_API_KEY=""
 ARG POSTHOG_API_ENDPOINT=""
 ARG SENTRY_DSN_REMOTE=""
+ARG APT_MIRROR
+ARG CARGO_RS_PROXY
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 ENV CARGO_TARGET_DIR=/app/target
+ENV HTTP_PROXY=${HTTP_PROXY} HTTPS_PROXY=${HTTPS_PROXY} NO_PROXY=${NO_PROXY}
 ENV POSTHOG_API_KEY=${POSTHOG_API_KEY}
 ENV POSTHOG_API_ENDPOINT=${POSTHOG_API_ENDPOINT}
 ENV SENTRY_DSN_REMOTE=${SENTRY_DSN_REMOTE}
 
 # Install build dependencies, plus git and openssh-client for private repo access
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}" ]; then \
+    find /etc/apt -type f \( -name '*.sources' -o -name 'sources.list' \) -exec \
+      sed -i "s|http://deb.debian.org|http://${APT_MIRROR}|g; s|http://security.debian.org|http://${APT_MIRROR}|g" {} +; \
+  fi \
+  && if [ -n "${CARGO_RS_PROXY}" ]; then \
+    mkdir -p /usr/local/cargo && printf '%s\n' \
+      '[source.crates-io]' \
+      'replace-with = "rsproxy-sparse"' \
+      '' \
+      '[source.rsproxy-sparse]' \
+      'registry = "sparse+https://rsproxy.cn/index/"' \
+      > /usr/local/cargo/config.toml; \
+  fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates git openssh-client \
   && mkdir -p -m 0700 /root/.ssh \
-  && ssh-keyscan github.com >> /root/.ssh/known_hosts \
+  && (ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null || printf '%s\n' \
+    'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5arkCK58UgpUAlkN4' \
+    'github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzZTAyNTYwY2FnaHQuZ2l0aHViLmNvbQ==' \
+    'github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj2vahDK+R40+0F2vJ/wPjEz9MZL868VZ9/WnLi2j4Rwaf5WK/At/EEf6FK0aMTuu2fLkqH5YaxWG+1T2id4lwr9H/YV5s0b8lChYw3K2VXmQc/l0q40DblNYC4pXaxW3Adx4OqaDTra5oC8ik0uFY2FR1Ni3K/BnN5' \
+    >> /root/.ssh/known_hosts) \
   && chmod 600 /root/.ssh/known_hosts \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY rust-toolchain.toml ./
-RUN cargo --version >/dev/null
+RUN channel="$(sed -n 's/channel = "\(.*\)"/\1/p' rust-toolchain.toml)" \
+  && rustup toolchain install "${channel}" \
+  && rustup default "${channel}" \
+  && cargo --version >/dev/null
 COPY Cargo.toml Cargo.lock ./
 # Copy workspace member manifests so Cargo can resolve workspace-shared deps
 # without invalidating the build on every unrelated source change.
@@ -85,27 +126,30 @@ COPY assets assets
 
 RUN mkdir -p /app/bin
 
-# When building without FEATURES (self-hosted), strip the private billing dependency
-# and its feature flag from Cargo.toml so cargo doesn't try to fetch the private git repo.
-# Also remove the Cargo.lock which references the private repo.
+# When building without FEATURES (self-hosted), strip billing so cargo won't fetch the private repo.
 RUN if [ -z "${FEATURES}" ]; then \
       sed -i '/^billing = {.*vibe-kanban-private.*/d' crates/remote/Cargo.toml; \
       sed -i '/^# private crate for billing/d' crates/remote/Cargo.toml; \
       sed -i 's/^vk-billing = \["dep:billing"\]/vk-billing = []/' crates/remote/Cargo.toml; \
-      rm -f crates/remote/Cargo.lock; \
+      sed -i '/^[[:space:]]*"billing",$/d' crates/remote/Cargo.lock; \
+      perl -i -0pe 's/\n\[\[package\]\]\nname = "billing"\n.*?(?=\n\[\[package\]\]|\z)//s' crates/remote/Cargo.lock; \
     fi
 
 RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=remote-target,target=/app/target \
-    --mount=type=ssh \
-    cargo build ${FEATURES:+--locked} --release --manifest-path crates/remote/Cargo.toml ${FEATURES:+--features ${FEATURES}} \
+    cargo build --locked --release --manifest-path crates/remote/Cargo.toml ${FEATURES:+--features ${FEATURES}} \
  && cp /app/target/release/${APP_NAME} /app/bin/${APP_NAME}
 
 FROM debian:bookworm-slim AS runtime
 ARG APP_NAME
+ARG APT_MIRROR
 
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}" ]; then \
+    find /etc/apt -type f \( -name '*.sources' -o -name 'sources.list' \) -exec \
+      sed -i "s|http://deb.debian.org|http://${APT_MIRROR}|g; s|http://security.debian.org|http://${APT_MIRROR}|g" {} +; \
+  fi \
+  && apt-get update \
   && apt-get install -y --no-install-recommends ca-certificates libssl3 wget git \
   && rm -rf /var/lib/apt/lists/* \
   && useradd --system --create-home --uid 10001 appuser

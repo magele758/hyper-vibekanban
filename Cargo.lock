@@ -8886,6 +8886,8 @@ dependencies = [
  "git",
  "git-host",
  "http",
+ "hyper",
+ "hyper-util",
  "local-deployment",
  "mime_guess",
  "os_info",

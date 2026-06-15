@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo } from "react";
+import { type ReactNode, useMemo, useRef } from "react";
 import {
   createRootRoute,
   Outlet,
@@ -40,6 +40,8 @@ import {
   useRelayAppBarHosts,
 } from "@remote/shared/hooks/useRelayAppBarHosts";
 import { setActiveRelayHostId } from "@remote/shared/lib/relay/activeHostContext";
+import { setRelayHostFallback } from "@/shared/lib/relayHostFallback";
+import { HostIdProvider } from "@/shared/providers/HostIdProvider";
 import {
   isProjectDestination,
   isWorkspacesDestination,
@@ -108,21 +110,31 @@ function WorkspaceRouteProviders({ children }: { children: ReactNode }) {
 
 function RootLayout() {
   useSystemTheme();
-  useUiPreferencesScratch();
-  useKanbanIssueComposerScratch();
   const { isSignedIn } = useAuth();
-  const location = useLocation();
   const { hostId } = useParams({ strict: false });
   const routeHostId = hostId ?? null;
-  const { hosts: relayHosts } = useRelayAppBarHosts(isSignedIn);
-  const navigationHostId = useMemo(
-    () => resolveRelayNavigationHostId(relayHosts, { routeHostId }),
-    [relayHosts, routeHostId],
-  );
+  const { hosts: relayHosts, isLoading: relayHostsLoading } =
+    useRelayAppBarHosts(isSignedIn);
+  const lastNavigationHostIdRef = useRef<string | null>(null);
+  const navigationHostId = useMemo(() => {
+    const resolved = resolveRelayNavigationHostId(relayHosts, {
+      routeHostId,
+    });
+    if (resolved) {
+      lastNavigationHostIdRef.current = resolved;
+      return resolved;
+    }
 
-  useEffect(() => {
-    setActiveRelayHostId(navigationHostId);
-  }, [navigationHostId]);
+    if (relayHostsLoading && lastNavigationHostIdRef.current) {
+      return lastNavigationHostIdRef.current;
+    }
+
+    return null;
+  }, [relayHosts, routeHostId, relayHostsLoading]);
+
+  // Sync before child effects so relay/local API transport can resolve hostId.
+  setActiveRelayHostId(navigationHostId);
+  setRelayHostFallback(navigationHostId);
 
   const appNavigation = useMemo(
     () =>
@@ -131,6 +143,22 @@ function RootLayout() {
         : remoteFallbackAppNavigation,
     [navigationHostId],
   );
+
+  return (
+    <AppNavigationProvider value={appNavigation}>
+      <HostIdProvider>
+        <RootLayoutContent
+          key={routeHostId ?? navigationHostId ?? "remote-default"}
+        />
+      </HostIdProvider>
+    </AppNavigationProvider>
+  );
+}
+
+function RootLayoutContent() {
+  useUiPreferencesScratch();
+  useKanbanIssueComposerScratch();
+  const location = useLocation();
   const isStandaloneRoute =
     location.pathname.startsWith("/account") ||
     location.pathname.startsWith("/login") ||
@@ -160,12 +188,10 @@ function RootLayout() {
   );
 
   return (
-    <AppNavigationProvider value={appNavigation}>
-      <UserProvider>
-        <RemoteActionsProvider>
-          <RemoteUserSystemProvider>{content}</RemoteUserSystemProvider>
-        </RemoteActionsProvider>
-      </UserProvider>
-    </AppNavigationProvider>
+    <UserProvider>
+      <RemoteActionsProvider>
+        <RemoteUserSystemProvider>{content}</RemoteUserSystemProvider>
+      </RemoteActionsProvider>
+    </UserProvider>
   );
 }

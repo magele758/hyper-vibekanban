@@ -1,11 +1,11 @@
-import type { PairedRelayHost } from "@/shared/lib/relayPairingStorage";
-
 import {
   bytesToBase64,
-  sha256Base64,
-  TEXT_ENCODER,
-  toArrayBuffer,
-} from "@remote/shared/lib/relay/bytes";
+  ed25519Sign,
+  secureRandomUuid,
+} from "@/shared/lib/relayCrypto";
+import type { PairedRelayHost } from "@/shared/lib/relayPairingStorage";
+
+import { sha256Base64, TEXT_ENCODER } from "@remote/shared/lib/relay/bytes";
 import { getSigningKey } from "@remote/shared/lib/relay/keyCache";
 import type {
   NormalizedRelayRequestBody,
@@ -59,7 +59,7 @@ export async function buildRelaySignature(
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const nonce = crypto.randomUUID();
+  const nonce = secureRandomUuid();
   const bodyHashB64 = await sha256Base64(bodyBytes);
 
   const message = [
@@ -73,17 +73,13 @@ export async function buildRelaySignature(
   ].join("|");
 
   const signingKey = await getSigningKey(pairedHost);
-  const signature = await crypto.subtle.sign(
-    "Ed25519",
-    signingKey,
-    toArrayBuffer(TEXT_ENCODER.encode(message)),
-  );
+  const signature = ed25519Sign(TEXT_ENCODER.encode(message), signingKey);
 
   return {
     signingSessionId,
     timestamp,
     nonce,
-    signature: bytesToBase64(new Uint8Array(signature)),
+    signature: bytesToBase64(signature),
   };
 }
 

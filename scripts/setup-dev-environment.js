@@ -104,6 +104,30 @@ async function allocatePorts() {
       console.log(`Preview Proxy: ${ports.preview_proxy}`);
     }
 
+    savePorts(ports);
+    return ports;
+  }
+
+  if (
+    process.env.FRONTEND_PORT &&
+    process.env.BACKEND_PORT &&
+    process.env.PREVIEW_PROXY_PORT
+  ) {
+    const ports = {
+      frontend: parseInt(process.env.FRONTEND_PORT, 10),
+      backend: parseInt(process.env.BACKEND_PORT, 10),
+      preview_proxy: parseInt(process.env.PREVIEW_PROXY_PORT, 10),
+      timestamp: new Date().toISOString(),
+    };
+
+    if (process.argv[2] === "get") {
+      console.log("Using explicit FRONTEND/BACKEND/PREVIEW_PROXY ports:");
+      console.log(`Frontend: ${ports.frontend}`);
+      console.log(`Backend: ${ports.backend}`);
+      console.log(`Preview Proxy: ${ports.preview_proxy}`);
+    }
+
+    savePorts(ports);
     return ports;
   }
 
@@ -111,6 +135,17 @@ async function allocatePorts() {
   const existingPorts = loadPorts();
 
   if (existingPorts) {
+    const envMatchesExisting =
+      process.env.FRONTEND_PORT &&
+      process.env.BACKEND_PORT &&
+      process.env.PREVIEW_PROXY_PORT &&
+      parseInt(process.env.FRONTEND_PORT, 10) === existingPorts.frontend &&
+      parseInt(process.env.BACKEND_PORT, 10) === existingPorts.backend &&
+      parseInt(process.env.PREVIEW_PROXY_PORT, 10) === existingPorts.preview_proxy;
+    if (envMatchesExisting) {
+      savePorts(existingPorts);
+      return existingPorts;
+    }
     // Verify existing ports are still available
     if (await verifyPorts(existingPorts)) {
       if (process.argv[2] === "get") {

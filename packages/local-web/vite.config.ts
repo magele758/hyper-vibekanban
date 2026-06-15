@@ -129,6 +129,7 @@ export default defineConfig({
   },
   server: {
     port: parseInt(process.env.FRONTEND_PORT || '3000'),
+    host: process.env.VK_DEV_HOST || '0.0.0.0',
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.BACKEND_PORT || '3001'}`,
@@ -140,9 +141,7 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '.'), path.resolve(__dirname, '../..')],
     },
     open: process.env.VITE_OPEN === 'true',
-    allowedHosts: [
-      '.trycloudflare.com', // allow all cloudflared tunnels
-    ],
+    allowedHosts: true,
   },
   optimizeDeps: {
     exclude: ['wa-sqlite'],

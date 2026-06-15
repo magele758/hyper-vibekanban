@@ -3,7 +3,12 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import { useHostId } from '@/shared/providers/HostIdProvider';
+import {
+  isRelayLocalStreamEnabled,
+  resolveRelayLocalStreamHostId,
+} from '@/shared/lib/relayLocalStreams';
 import type {
   WorkspaceWithStatus,
   WorkspaceSummary,
@@ -128,11 +133,21 @@ async function fetchWorkspaceSummariesByArchived(
 }
 
 export function useWorkspaces(): UseWorkspacesResult {
-  const hostId = useHostId();
+  const destination = useCurrentAppDestination();
+  const fallbackHostId = useHostId();
+  const streamHostId = resolveRelayLocalStreamHostId(
+    destination,
+    fallbackHostId
+  );
+  const workspaceStreamsEnabled = isRelayLocalStreamEnabled(
+    destination,
+    fallbackHostId,
+    true
+  );
 
   // Two separate WebSocket connections: one for active, one for archived
   // No limit param - we fetch all and slice on frontend so backfill works when archiving
-  const apiBasePath = hostId ? `/api/host/${hostId}` : '/api';
+  const apiBasePath = streamHostId ? `/api/host/${streamHostId}` : '/api';
   const activeEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=false`;
   const archivedEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=true`;
 
@@ -146,7 +161,11 @@ export function useWorkspaces(): UseWorkspacesResult {
     isConnected: activeIsConnected,
     isInitialized: activeIsInitialized,
     error: activeError,
-  } = useJsonPatchWsStream<WorkspacesState>(activeEndpoint, true, initialData);
+  } = useJsonPatchWsStream<WorkspacesState>(
+    activeEndpoint,
+    workspaceStreamsEnabled,
+    initialData
+  );
 
   const {
     data: archivedData,
@@ -155,7 +174,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     error: archivedError,
   } = useJsonPatchWsStream<WorkspacesState>(
     archivedEndpoint,
-    true,
+    workspaceStreamsEnabled,
     initialData
   );
 
@@ -163,8 +182,8 @@ export function useWorkspaces(): UseWorkspacesResult {
   // Fetch summaries for active workspaces
   const { data: activeSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
-      queryKey: workspaceSummaryKeys.byArchived(false, hostId),
-      queryFn: () => fetchWorkspaceSummariesByArchived(false, hostId),
+      queryKey: workspaceSummaryKeys.byArchived(false, streamHostId),
+      queryFn: () => fetchWorkspaceSummariesByArchived(false, streamHostId),
       enabled: activeIsInitialized,
       staleTime: 1000,
       refetchInterval: 15000,
@@ -176,8 +195,8 @@ export function useWorkspaces(): UseWorkspacesResult {
   // Fetch summaries for archived workspaces
   const { data: archivedSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
-      queryKey: workspaceSummaryKeys.byArchived(true, hostId),
-      queryFn: () => fetchWorkspaceSummariesByArchived(true, hostId),
+      queryKey: workspaceSummaryKeys.byArchived(true, streamHostId),
+      queryFn: () => fetchWorkspaceSummariesByArchived(true, streamHostId),
       enabled: archivedIsInitialized,
       staleTime: 1000,
       refetchInterval: 15000,
@@ -219,7 +238,8 @@ export function useWorkspaces(): UseWorkspacesResult {
   }, [archivedData, archivedSummaries]);
 
   // isLoading is true when we haven't received initial data from either stream
-  const isLoading = !activeIsInitialized || !archivedIsInitialized;
+  const isLoading =
+    workspaceStreamsEnabled && (!activeIsInitialized || !archivedIsInitialized);
 
   // Combined connection status
   const isConnected = activeIsConnected && archivedIsConnected;

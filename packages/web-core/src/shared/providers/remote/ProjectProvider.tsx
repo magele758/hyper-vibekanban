@@ -1,4 +1,10 @@
-import { useMemo, useCallback, type ReactNode } from 'react';
+import {
+  useMemo,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useShape } from '@/shared/integrations/electric/hooks';
 import {
   PROJECT_ISSUES_SHAPE,
@@ -46,38 +52,56 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
     enabled,
     mutation: PROJECT_STATUS_MUTATION,
   });
-  const tagsResult = useShape(PROJECT_TAGS_SHAPE, params, {
+  const workspacesResult = useShape(PROJECT_WORKSPACES_SHAPE, params, {
     enabled,
+  });
+
+  const coreReady =
+    enabled && !issuesResult.isLoading && !statusesResult.isLoading;
+
+  const [hydrateSecondary, setHydrateSecondary] = useState(false);
+  useEffect(() => {
+    setHydrateSecondary(false);
+  }, [projectId]);
+  useEffect(() => {
+    if (!coreReady) return;
+    const timer = globalThis.setTimeout(() => setHydrateSecondary(true), 300);
+    return () => globalThis.clearTimeout(timer);
+  }, [coreReady]);
+
+  const secondaryEnabled = coreReady && hydrateSecondary;
+
+  const tagsResult = useShape(PROJECT_TAGS_SHAPE, params, {
+    enabled: secondaryEnabled,
     mutation: TAG_MUTATION,
   });
   const issueAssigneesResult = useShape(PROJECT_ISSUE_ASSIGNEES_SHAPE, params, {
-    enabled,
+    enabled: secondaryEnabled,
     mutation: ISSUE_ASSIGNEE_MUTATION,
   });
   const issueFollowersResult = useShape(PROJECT_ISSUE_FOLLOWERS_SHAPE, params, {
-    enabled,
+    enabled: secondaryEnabled,
     mutation: ISSUE_FOLLOWER_MUTATION,
   });
   const issueTagsResult = useShape(PROJECT_ISSUE_TAGS_SHAPE, params, {
-    enabled,
+    enabled: secondaryEnabled,
     mutation: ISSUE_TAG_MUTATION,
   });
   const issueRelationshipsResult = useShape(
     PROJECT_ISSUE_RELATIONSHIPS_SHAPE,
     params,
-    { enabled, mutation: ISSUE_RELATIONSHIP_MUTATION }
+    { enabled: secondaryEnabled, mutation: ISSUE_RELATIONSHIP_MUTATION }
   );
   const pullRequestsResult = useShape(PROJECT_PULL_REQUESTS_SHAPE, params, {
-    enabled,
+    enabled: secondaryEnabled,
   });
   const pullRequestIssuesResult = useShape(
     PROJECT_PULL_REQUEST_ISSUES_SHAPE,
     params,
-    { enabled, mutation: PULL_REQUEST_ISSUE_MUTATION }
+    { enabled: secondaryEnabled, mutation: PULL_REQUEST_ISSUE_MUTATION }
   );
-  const workspacesResult = useShape(PROJECT_WORKSPACES_SHAPE, params, {
-    enabled,
-  });
+
+  const isWorkspacesLoading = enabled && workspacesResult.isLoading;
 
   // Board readiness depends on core kanban data only.
   // Other project-scoped shapes hydrate opportunistically after render.
@@ -242,6 +266,7 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
 
       // Loading/error
       isLoading,
+      isWorkspacesLoading,
       error,
       retry,
 
@@ -311,6 +336,7 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       pullRequestIssuesResult,
       workspacesResult,
       isLoading,
+      isWorkspacesLoading,
       error,
       retry,
       getIssue,

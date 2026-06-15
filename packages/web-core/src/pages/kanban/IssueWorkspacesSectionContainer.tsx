@@ -46,6 +46,7 @@ export function IssueWorkspacesSectionContainer({
     getIssue,
     getWorkspacesForIssue,
     issues,
+    isWorkspacesLoading,
     isLoading: projectLoading,
   } = useProjectContext();
   const { activeWorkspaces, archivedWorkspaces } = useWorkspaceContext();
@@ -116,7 +117,7 @@ export function IssueWorkspacesSectionContainer({
     localWorkspacesById,
   ]);
 
-  const isLoading = projectLoading || orgLoading;
+  const isLoading = projectLoading || orgLoading || isWorkspacesLoading;
   const shouldAnimateCreateButton = useMemo(() => {
     if (issues.length !== 1) {
       return false;

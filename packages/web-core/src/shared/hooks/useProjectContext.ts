@@ -58,6 +58,7 @@ export interface ProjectContextValue {
 
   // Loading/error state
   isLoading: boolean;
+  isWorkspacesLoading: boolean;
   error: SyncError | null;
   retry: () => void;
 

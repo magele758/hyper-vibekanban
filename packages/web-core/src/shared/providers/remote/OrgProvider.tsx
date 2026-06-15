@@ -37,8 +37,9 @@ export function OrgProvider({ organizationId, children }: OrgProviderProps) {
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Combined loading state
-  const isLoading = projectsResult.isLoading || membersQuery.isLoading;
+  // Kanban only needs the project list to render; members hydrate in background.
+  const isLoading =
+    projectsResult.isLoading && projectsResult.data.length === 0;
 
   // First error found
   const error = projectsResult.error || null;

@@ -23,6 +23,13 @@ interface UseScratchOptions {
   enabled?: boolean;
 }
 
+const SCRATCH_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidScratchId(id: string): boolean {
+  return !id.includes(':') && SCRATCH_ID_UUID_RE.test(id);
+}
+
 /**
  * Runtime-aware scratch storage hook.
  *
@@ -46,7 +53,10 @@ export const useScratch = (
 
   // --- WebSocket/API path (local-web) ---
   const serverEnabled =
-    !isRemote && (options?.enabled ?? true) && id.length > 0;
+    !isRemote &&
+    (options?.enabled ?? true) &&
+    id.length > 0 &&
+    isValidScratchId(id);
   const endpoint = serverEnabled
     ? scratchApi.getStreamUrl(scratchType, id)
     : undefined;

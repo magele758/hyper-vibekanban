@@ -27,8 +27,8 @@ export interface RelayWsSigningContext {
   requestNonce: string;
   inboundSeq: number;
   outboundSeq: number;
-  signingKey: CryptoKey;
-  serverVerifyKey: CryptoKey;
+  signingKey: Uint8Array;
+  serverVerifyKey: Uint8Array;
 }
 
 export interface NormalizedRelayRequestBody {

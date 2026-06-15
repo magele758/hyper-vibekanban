@@ -26,12 +26,20 @@ export function resolveRelayNavigationHostId(
 ): string | null {
   const routeHostId = options?.routeHostId ?? null;
   if (routeHostId) {
-    return routeHostId;
+    const routeHost = hosts.find((host) => host.id === routeHostId);
+    if (routeHost && routeHost.status !== "unpaired") {
+      return routeHostId;
+    }
   }
 
   const onlineHost = hosts.find((host) => host.status === "online");
   if (onlineHost) {
     return onlineHost.id;
+  }
+
+  const pairedHost = hosts.find((host) => host.status !== "unpaired");
+  if (pairedHost) {
+    return pairedHost.id;
   }
 
   return null;

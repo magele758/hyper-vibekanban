@@ -17,7 +17,7 @@ use super::super::{
     state::RelayAppState,
 };
 
-const RELAY_PROXY_PREFIX: &str = "/relay/h";
+const RELAY_PROXY_PREFIX: &str = "/v1/relay/h";
 
 /// Handle `ANY /relay/h/{host_id}/s/{browser_session_id}`.
 pub(super) async fn relay_path_proxy(

@@ -830,7 +830,7 @@ export function KanbanIssuePanelContainer({
             ? Math.min(...statusIssues.map((i) => i.sort_order))
             : 0;
 
-        const { persisted } = insertIssue({
+        const { data: createdIssue, persisted } = insertIssue({
           project_id: projectId,
           status_id: displayData.statusId,
           title: displayData.title,
@@ -845,56 +845,53 @@ export function KanbanIssuePanelContainer({
           extension_metadata: null,
         });
 
-        // Wait for the issue to be confirmed by the backend and get the synced entity
-        const syncedIssue = await persisted;
+        if (displayData.createDraftWorkspace) {
+          const syncedIssue = await persisted;
 
-        // Commit only attachments still referenced in the description
-        const allUploadedIds = getAttachmentIds();
-        if (allUploadedIds.length > 0) {
-          const referencedIds = extractAttachmentIds(
-            displayData.description ?? ''
-          );
-          const idsToCommit = allUploadedIds.filter((id) =>
-            referencedIds.has(id)
-          );
-          const idsToDelete = allUploadedIds.filter(
-            (id) => !referencedIds.has(id)
-          );
+          // Commit only attachments still referenced in the description
+          const allUploadedIds = getAttachmentIds();
+          if (allUploadedIds.length > 0) {
+            const referencedIds = extractAttachmentIds(
+              displayData.description ?? ''
+            );
+            const idsToCommit = allUploadedIds.filter((id) =>
+              referencedIds.has(id)
+            );
+            const idsToDelete = allUploadedIds.filter(
+              (id) => !referencedIds.has(id)
+            );
 
-          if (idsToCommit.length > 0) {
-            await commitIssueAttachments(syncedIssue.id, {
-              attachment_ids: idsToCommit,
+            if (idsToCommit.length > 0) {
+              await commitIssueAttachments(syncedIssue.id, {
+                attachment_ids: idsToCommit,
+              });
+            }
+            for (const id of idsToDelete) {
+              deleteAttachment(id).catch((err) =>
+                console.error('Failed to delete abandoned attachment:', err)
+              );
+            }
+            clearAttachments();
+          }
+
+          displayData.assigneeIds.forEach((userId) => {
+            insertIssueAssignee({
+              issue_id: syncedIssue.id,
+              user_id: userId,
+            });
+          });
+
+          for (const tagId of displayData.tagIds) {
+            insertIssueTag({
+              issue_id: syncedIssue.id,
+              tag_id: tagId,
             });
           }
-          for (const id of idsToDelete) {
-            deleteAttachment(id).catch((err) =>
-              console.error('Failed to delete abandoned attachment:', err)
-            );
+
+          if (issueComposerKey) {
+            closeKanbanIssueComposer(issueComposerKey);
           }
-          clearAttachments();
-        }
 
-        // Create assignee records for all selected assignees
-        displayData.assigneeIds.forEach((userId) => {
-          insertIssueAssignee({
-            issue_id: syncedIssue.id,
-            user_id: userId,
-          });
-        });
-
-        // Create tag records if tags were selected
-        for (const tagId of displayData.tagIds) {
-          insertIssueTag({
-            issue_id: syncedIssue.id,
-            tag_id: tagId,
-          });
-        }
-
-        if (issueComposerKey) {
-          closeKanbanIssueComposer(issueComposerKey);
-        }
-
-        if (displayData.createDraftWorkspace) {
           const initialPrompt = buildWorkspaceCreatePrompt(
             displayData.title,
             displayData.description
@@ -928,12 +925,62 @@ export function KanbanIssuePanelContainer({
             onExpectIssueOpen?.(syncedIssue.id);
             openIssue(syncedIssue.id);
           }
-          return; // Don't open issue panel since we're navigating away
+          return;
         }
 
-        // Open the newly created issue
-        onExpectIssueOpen?.(syncedIssue.id);
-        openIssue(syncedIssue.id);
+        if (issueComposerKey) {
+          closeKanbanIssueComposer(issueComposerKey);
+        }
+
+        onExpectIssueOpen?.(createdIssue.id);
+        openIssue(createdIssue.id);
+
+        void (async () => {
+          try {
+            const syncedIssue = await persisted;
+
+            const allUploadedIds = getAttachmentIds();
+            if (allUploadedIds.length > 0) {
+              const referencedIds = extractAttachmentIds(
+                displayData.description ?? ''
+              );
+              const idsToCommit = allUploadedIds.filter((id) =>
+                referencedIds.has(id)
+              );
+              const idsToDelete = allUploadedIds.filter(
+                (id) => !referencedIds.has(id)
+              );
+
+              if (idsToCommit.length > 0) {
+                await commitIssueAttachments(syncedIssue.id, {
+                  attachment_ids: idsToCommit,
+                });
+              }
+              for (const id of idsToDelete) {
+                deleteAttachment(id).catch((err) =>
+                  console.error('Failed to delete abandoned attachment:', err)
+                );
+              }
+              clearAttachments();
+            }
+
+            displayData.assigneeIds.forEach((userId) => {
+              insertIssueAssignee({
+                issue_id: syncedIssue.id,
+                user_id: userId,
+              });
+            });
+
+            for (const tagId of displayData.tagIds) {
+              insertIssueTag({
+                issue_id: syncedIssue.id,
+                tag_id: tagId,
+              });
+            }
+          } catch (error) {
+            console.error('Failed to finalize issue create:', error);
+          }
+        })();
       } else {
         // Update existing issue - would use update mutation
         // For now, just close the panel
@@ -1021,8 +1068,12 @@ export function KanbanIssuePanelContainer({
     });
   }, [selectedKanbanIssueId, projectId]);
 
-  // Loading state
-  const isLoading = projectLoading || orgLoading;
+  // Loading state — create mode only needs statuses, not the full issues sync.
+  const isBlockingProjectLoad =
+    mode === 'create'
+      ? projectLoading && statuses.length === 0
+      : projectLoading;
+  const isLoading = isBlockingProjectLoad || (mode !== 'create' && orgLoading);
   const isResolvingExpectedIssue =
     mode === 'edit' &&
     selectedKanbanIssueId !== null &&

@@ -314,68 +314,54 @@ impl StandardCodingAgentExecutor for Codex {
         _workdir: Option<&std::path::Path>,
         _repo_path: Option<&std::path::Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
-        let xhigh_reasoning_options = ReasoningOption::from_names(
-            [
-                ReasoningEffort::Low,
-                ReasoningEffort::Medium,
-                ReasoningEffort::High,
-                ReasoningEffort::Xhigh,
-            ]
-            .map(|e| e.as_ref().to_string()),
-        );
+        let models =
+            match crate::model_discovery::discover_codex_models(Self::base_command(), &self.cmd)
+                .await
+            {
+                Ok(models) => models,
+                Err(error) => {
+                    tracing::warn!(
+                        ?error,
+                        "Codex model discovery failed; using built-in fallback list"
+                    );
+                    Self::fallback_models()
+                }
+            };
 
-        let options = ExecutorDiscoveredOptions {
+        let options = Self::discovered_options_with_models(models);
+        Ok(Box::pin(futures::stream::once(async move {
+            patch::executor_discovered_options(options)
+        })))
+    }
+
+    async fn spawn_review(
+        &self,
+        current_dir: &Path,
+        prompt: &str,
+        session_id: Option<&str>,
+        env: &ExecutionEnv,
+    ) -> Result<SpawnedChild, ExecutorError> {
+        let command_parts = self.build_command_builder()?.build_initial()?;
+        let review_target = ReviewTarget::Custom {
+            instructions: prompt.to_string(),
+        };
+        let action = CodexSessionAction::Review {
+            target: review_target,
+        };
+        self.spawn_inner(current_dir, command_parts, action, session_id, env)
+            .await
+    }
+}
+
+impl Codex {
+    pub fn base_command() -> &'static str {
+        "npx -y @openai/codex@0.124.0"
+    }
+
+    fn discovered_options_with_models(models: Vec<ModelInfo>) -> ExecutorDiscoveredOptions {
+        ExecutorDiscoveredOptions {
             model_selector: ModelSelectorConfig {
-                models: vec![
-                    ModelInfo {
-                        id: "gpt-5.5".to_string(),
-                        name: "GPT-5.5".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.5-fast".to_string(),
-                        name: "GPT-5.5 Fast".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.4".to_string(),
-                        name: "GPT-5.4".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.4-fast".to_string(),
-                        name: "GPT-5.4 Fast".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.4-mini".to_string(),
-                        name: "GPT-5.4 Mini".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.3-codex".to_string(),
-                        name: "GPT-5.3 Codex".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.3-codex-spark".to_string(),
-                        name: "GPT-5.3 Codex Spark".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options.clone(),
-                    },
-                    ModelInfo {
-                        id: "gpt-5.2".to_string(),
-                        name: "GPT-5.2".to_string(),
-                        provider_id: None,
-                        reasoning_options: xhigh_reasoning_options,
-                    },
-                ],
+                models,
                 permissions: vec![
                     PermissionPolicy::Auto,
                     PermissionPolicy::Supervised,
@@ -418,34 +404,38 @@ impl StandardCodingAgentExecutor for Codex {
                 },
             ],
             ..Default::default()
-        };
-        Ok(Box::pin(futures::stream::once(async move {
-            patch::executor_discovered_options(options)
-        })))
+        }
     }
 
-    async fn spawn_review(
-        &self,
-        current_dir: &Path,
-        prompt: &str,
-        session_id: Option<&str>,
-        env: &ExecutionEnv,
-    ) -> Result<SpawnedChild, ExecutorError> {
-        let command_parts = self.build_command_builder()?.build_initial()?;
-        let review_target = ReviewTarget::Custom {
-            instructions: prompt.to_string(),
-        };
-        let action = CodexSessionAction::Review {
-            target: review_target,
-        };
-        self.spawn_inner(current_dir, command_parts, action, session_id, env)
-            .await
-    }
-}
+    fn fallback_models() -> Vec<ModelInfo> {
+        let xhigh_reasoning_options = ReasoningOption::from_names(
+            [
+                ReasoningEffort::Low,
+                ReasoningEffort::Medium,
+                ReasoningEffort::High,
+                ReasoningEffort::Xhigh,
+            ]
+            .map(|e| e.as_ref().to_string()),
+        );
 
-impl Codex {
-    pub fn base_command() -> &'static str {
-        "npx -y @openai/codex@0.124.0"
+        [
+            ("gpt-5.5", "GPT-5.5"),
+            ("gpt-5.5-fast", "GPT-5.5 Fast"),
+            ("gpt-5.4", "GPT-5.4"),
+            ("gpt-5.4-fast", "GPT-5.4 Fast"),
+            ("gpt-5.4-mini", "GPT-5.4 Mini"),
+            ("gpt-5.3-codex", "GPT-5.3 Codex"),
+            ("gpt-5.3-codex-spark", "GPT-5.3 Codex Spark"),
+            ("gpt-5.2", "GPT-5.2"),
+        ]
+        .into_iter()
+        .map(|(id, name)| ModelInfo {
+            id: id.to_string(),
+            name: name.to_string(),
+            provider_id: None,
+            reasoning_options: xhigh_reasoning_options.clone(),
+        })
+        .collect()
     }
 
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {

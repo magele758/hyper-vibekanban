@@ -4,6 +4,7 @@ use axum::{
     http::HeaderMap,
     routing::{delete, get, post},
 };
+use deployment::Deployment;
 use relay_types::{
     FinishSpake2EnrollmentRequest, FinishSpake2EnrollmentResponse, ListRelayPairedClientsResponse,
     RefreshRelaySigningSessionRequest, RefreshRelaySigningSessionResponse,
@@ -109,10 +110,62 @@ async fn finish_spake2_enrollment(
     ExtractJson(payload): ExtractJson<FinishSpake2EnrollmentRequest>,
 ) -> Result<Json<ApiResponse<FinishSpake2EnrollmentResponse>>, ApiError> {
     let response = build_relay_pairing_server(&deployment)
-        .finish_spake2_enrollment(payload)
+        .finish_spake2_enrollment(payload.clone())
         .await?;
 
+    persist_browser_relay_host_credentials(&deployment, &payload, &response).await;
+
     Ok(Json(ApiResponse::success(response)))
+}
+
+async fn persist_browser_relay_host_credentials(
+    deployment: &DeploymentImpl,
+    payload: &FinishSpake2EnrollmentRequest,
+    response: &FinishSpake2EnrollmentResponse,
+) {
+    let Ok(relay_hosts) = deployment.relay_hosts() else {
+        return;
+    };
+    let Ok(remote_client) = deployment.remote_client() else {
+        return;
+    };
+
+    let hosts = match remote_client.list_relay_hosts().await {
+        Ok(hosts) => hosts,
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                "Failed to list relay hosts after browser SPAKE2 pairing"
+            );
+            return;
+        }
+    };
+
+    let machine_id = deployment.user_id();
+    let Some(local_host) = hosts.iter().find(|host| host.machine_id == machine_id) else {
+        tracing::warn!(
+            machine_id = %machine_id,
+            "No relay host registered for this machine after browser SPAKE2 pairing"
+        );
+        return;
+    };
+
+    if let Err(error) = relay_hosts
+        .register_browser_pairing(
+            local_host.id,
+            Some(local_host.name.clone()),
+            payload.client_id,
+            response.server_public_key_b64.clone(),
+            response.signing_session_id,
+        )
+        .await
+    {
+        tracing::warn!(
+            ?error,
+            host_id = %local_host.id,
+            "Failed to persist relay host credentials after browser SPAKE2 pairing"
+        );
+    }
 }
 
 async fn refresh_relay_signing_session(

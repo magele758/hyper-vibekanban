@@ -149,7 +149,8 @@ function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
 export function LandingPage() {
   const appNavigation = useAppNavigation();
   const { theme } = useTheme();
-  const { config, profiles, updateAndSaveConfig, loading } = useUserSystem();
+  const { config, profiles, updateAndSaveConfig, loading, remoteApiBase } =
+    useUserSystem();
   const posthog = usePostHog();
 
   const [initialized, setInitialized] = useState(false);
@@ -283,6 +284,7 @@ export function LandingPage() {
     const success = await updateAndSaveConfig({
       onboarding_acknowledged: true,
       disclaimer_acknowledged: true,
+      ...(remoteApiBase ? {} : { remote_onboarding_acknowledged: true }),
       executor_profile: {
         executor: selectedAgent,
         variant: null,
@@ -299,11 +301,17 @@ export function LandingPage() {
     if (success) {
       trackRemoteOnboardingEvent(REMOTE_ONBOARDING_EVENTS.STAGE_COMPLETED, {
         stage: 'landing',
-        destination: '/onboarding/sign-in',
+        destination: remoteApiBase
+          ? '/onboarding/sign-in'
+          : '/workspaces/create',
       });
-      appNavigation.goToOnboardingSignIn({
-        replace: true,
-      });
+      if (remoteApiBase) {
+        appNavigation.goToOnboardingSignIn({
+          replace: true,
+        });
+      } else {
+        appNavigation.goToWorkspacesCreate({ replace: true });
+      }
       return;
     }
 

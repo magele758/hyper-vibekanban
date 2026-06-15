@@ -1,27 +1,45 @@
 export function isWorkspaceRoutePath(pathname: string): boolean {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments[0] !== "hosts" || !segments[1]) {
-    return false;
+
+  if (segments[0] === "hosts" && segments[1]) {
+    if (segments[2] === "workspaces") {
+      return true;
+    }
+
+    if (segments[2] === "projects" && segments[3]) {
+      const isIssueWorkspacePath =
+        segments[4] === "issues" &&
+        !!segments[5] &&
+        segments[6] === "workspaces" &&
+        !!segments[7];
+
+      const isProjectWorkspaceCreatePath =
+        segments[4] === "workspaces" &&
+        segments[5] === "create" &&
+        !!segments[6];
+
+      return isIssueWorkspacePath || isProjectWorkspaceCreatePath;
+    }
   }
 
-  if (segments[2] === "workspaces") {
-    return true;
+  if (segments[0] === "projects" && segments[1] && segments[2] === "issues") {
+    const hostsIndex = segments.indexOf("hosts");
+    if (hostsIndex !== -1 && segments[hostsIndex + 1]) {
+      const afterHost = segments[hostsIndex + 2];
+      if (afterHost === "workspaces" && segments[hostsIndex + 3]) {
+        return true;
+      }
+      if (
+        afterHost === "workspaces" &&
+        segments[hostsIndex + 3] === "create" &&
+        segments[hostsIndex + 4]
+      ) {
+        return true;
+      }
+    }
   }
 
-  if (segments[2] !== "projects" || !segments[3]) {
-    return false;
-  }
-
-  const isIssueWorkspacePath =
-    segments[4] === "issues" &&
-    !!segments[5] &&
-    segments[6] === "workspaces" &&
-    !!segments[7];
-
-  const isProjectWorkspaceCreatePath =
-    segments[4] === "workspaces" && segments[5] === "create" && !!segments[6];
-
-  return isIssueWorkspacePath || isProjectWorkspaceCreatePath;
+  return false;
 }
 
 export function parseRelayHostIdFromPathname(pathname: string): string | null {

@@ -54,15 +54,14 @@ export function IssueWorkspacesSection({
         ) : (
           workspaces.map((workspace) => {
             const { localWorkspaceId } = workspace;
+            const canOpen = Boolean(onWorkspaceClick && localWorkspaceId);
             return (
               <IssueWorkspaceCard
                 key={workspace.id}
                 workspace={workspace}
                 onClick={
-                  onWorkspaceClick &&
-                  localWorkspaceId &&
-                  workspace.isOwnedByCurrentUser
-                    ? () => onWorkspaceClick(localWorkspaceId)
+                  canOpen
+                    ? () => onWorkspaceClick!(localWorkspaceId!)
                     : undefined
                 }
                 onUnlink={

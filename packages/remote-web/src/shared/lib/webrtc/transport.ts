@@ -1,6 +1,7 @@
 import type { DataChannelResponse } from "shared/types";
 import { base64ToBytes } from "@remote/shared/lib/relay/bytes";
 import { getActiveRelayHostId } from "@remote/shared/lib/relay/activeHostContext";
+import { getRelayHostFallback } from "@/shared/lib/relayHostFallback";
 import {
   shouldRelayApiPath,
   toPathAndQuery,
@@ -23,8 +24,21 @@ function resolveHostId(
   return (
     options.relayHostId ??
     resolveRelayHostIdForCurrentPage() ??
-    getActiveRelayHostId()
+    getActiveRelayHostId() ??
+    getRelayHostFallback()
   );
+}
+
+/** WebRTC data channels already target a specific host machine. */
+function toDirectWebRtcApiPath(pathAndQuery: string, hostId: string): string {
+  const [path, query] = pathAndQuery.split("?");
+  const prefix = `/api/host/${hostId}`;
+  if (!path.startsWith(prefix)) {
+    return pathAndQuery;
+  }
+
+  const stripped = `/api${path.slice(prefix.length)}`;
+  return query ? `${stripped}?${query}` : stripped;
 }
 
 function normalizeWebSocketUrl(pathOrUrl: string): string {
@@ -89,7 +103,7 @@ export async function requestLocalApiViaWebRtc(
   try {
     const dcResp = await conn.sendHttpRequest(
       method,
-      pathAndQuery,
+      toDirectWebRtcApiPath(pathAndQuery, hostId),
       headers,
       bodyBytes,
     );
@@ -120,7 +134,10 @@ export async function openLocalApiWebSocketViaWebRtc(
     return openLocalApiWebSocketViaRelay(pathOrUrl, options);
   }
 
-  return createDataChannelWebSocket(conn, pathAndQuery);
+  return createDataChannelWebSocket(
+    conn,
+    toDirectWebRtcApiPath(pathAndQuery, hostId),
+  );
 }
 
 function dataChannelResponseToResponse(dcResp: DataChannelResponse): Response {
