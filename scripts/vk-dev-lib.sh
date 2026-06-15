@@ -60,18 +60,44 @@ vk_read_runtime_backend_port() {
   fi
 }
 
-vk_detect_tailscale_ip() {
-  if ! command -v tailscale >/dev/null 2>&1; then
+# Resolve a usable tailscale binary. The Mac App Store GUI binary works only
+# when invoked via its full path (a PATH symlink crashes with SIGTRAP/"unknown
+# bundleIdentifier"), so prefer the app path over whatever is on PATH.
+vk_tailscale_bin() {
+  if [[ -n "${VK_TAILSCALE_BIN:-}" && -x "${VK_TAILSCALE_BIN}" ]]; then
+    echo "${VK_TAILSCALE_BIN}"
     return 0
   fi
-  tailscale ip -4 2>/dev/null | head -1
+  local app="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+  if [[ -x "${app}" ]]; then
+    echo "${app}"
+    return 0
+  fi
+  command -v tailscale 2>/dev/null || true
+}
+
+# Run the resolved tailscale binary, swallowing any crash signal message. The
+# inner bash reports "Trace/BPT trap" to its own (redirected) stderr and exits
+# with a normal code, so the caller's shell never prints the signal notice.
+vk_tailscale() {
+  local bin
+  bin="$(vk_tailscale_bin)"
+  [[ -n "${bin}" ]] || return 127
+  bash -c '"$0" "$@"' "${bin}" "$@" 2>/dev/null
+}
+
+vk_tailscale_ok() {
+  vk_tailscale status >/dev/null 2>&1
+}
+
+vk_detect_tailscale_ip() {
+  vk_tailscale_ok || return 0
+  vk_tailscale ip -4 2>/dev/null | head -1
 }
 
 vk_detect_tailscale_hostname() {
-  if ! command -v tailscale >/dev/null 2>&1; then
-    return 0
-  fi
-  tailscale status --json 2>/dev/null \
+  vk_tailscale_ok || return 0
+  vk_tailscale status --json 2>/dev/null \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['Self']['DNSName'].rstrip('.'))" 2>/dev/null \
     || true
 }
@@ -89,6 +115,9 @@ vk_configure_public_urls() {
   export VITE_RELAY_PORT="${VK_RELAY_PORT}"
 
   local allowed_origins="http://localhost:${frontend_port}"
+  # Desktop h2 front door page origins (relay at the desktop relay front door is
+  # a cross-origin request from the 13443 page, so its origin must be allowed).
+  allowed_origins="${allowed_origins},https://localhost:${VK_DESKTOP_HTTPS_PORT},https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}"
 
   if [[ -n "${lan_ip}" ]]; then
     export PUBLIC_BASE_URL="http://${lan_ip}:${VK_REMOTE_PORT}"

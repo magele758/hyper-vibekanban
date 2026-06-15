@@ -195,6 +195,12 @@ export function SharedAppLayout() {
     }
   }, [activeProjectId, setSelectedProjectId]);
 
+  // NOTE: No eager neighbor prefetch. On HTTP/1.1 each warmed project holds
+  // ~3 long-lived Electric "live" connections that compete with the active
+  // board for the ~6 per-origin connection slots, which stalls the board the
+  // user is actually looking at. We rely on hover/click prefetch instead, which
+  // only holds slots briefly right before a switch.
+
   const handleWorkspacesClick = useCallback(() => {
     void navigate({ to: '/workspaces' });
   }, [navigate]);

@@ -7,6 +7,8 @@ import {
 } from 'shared/remote-types';
 import { createShapeCollection } from '@/shared/lib/electric/collections';
 
+const PROJECT_KANBAN_READY_TIMEOUT_MS = 5_000;
+
 /**
  * Warm Electric collections for a project before navigation so the board can
  * render from cache instead of waiting for cold shape sync after route change.
@@ -18,16 +20,18 @@ export function prefetchProjectKanbanShapes(projectId: string): void {
   createShapeCollection(
     PROJECT_ISSUES_SHAPE,
     params,
-    undefined,
+    { readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS },
     ISSUE_MUTATION
   );
   createShapeCollection(
     PROJECT_PROJECT_STATUSES_SHAPE,
     params,
-    undefined,
+    { readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS },
     PROJECT_STATUS_MUTATION
   );
-  createShapeCollection(PROJECT_WORKSPACES_SHAPE, params);
+  createShapeCollection(PROJECT_WORKSPACES_SHAPE, params, {
+    readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS,
+  });
 }
 
 const HOVER_PREFETCH_DELAY_MS = 120;

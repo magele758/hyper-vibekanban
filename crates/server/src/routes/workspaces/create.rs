@@ -297,12 +297,9 @@ pub async fn create_and_start_workspace(
 
     if let Some(linked_issue) = &linked_issue {
         let client = deployment.remote_client()?;
-        let stats = diff_stream::compute_diff_stats(
-            &deployment.db().pool,
-            deployment.git(),
-            &workspace,
-        )
-        .await;
+        let stats =
+            diff_stream::compute_diff_stats(&deployment.db().pool, deployment.git(), &workspace)
+                .await;
         remote_sync::register_local_workspace_on_remote(
             &client,
             &workspace,

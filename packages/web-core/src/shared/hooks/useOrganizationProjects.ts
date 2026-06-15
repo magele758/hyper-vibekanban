@@ -1,5 +1,5 @@
 import { useShape } from '@/shared/integrations/electric/hooks';
-import { PROJECTS_SHAPE } from 'shared/remote-types';
+import { PROJECTS_SHAPE, PROJECT_MUTATION } from 'shared/remote-types';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 
 export function useOrganizationProjects(organizationId: string | null) {
@@ -11,7 +11,7 @@ export function useOrganizationProjects(organizationId: string | null) {
   const { data, isLoading, error } = useShape(
     PROJECTS_SHAPE,
     { organization_id: organizationId || '' },
-    { enabled }
+    { enabled, mutation: PROJECT_MUTATION }
   );
 
   return {

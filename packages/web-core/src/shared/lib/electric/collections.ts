@@ -68,7 +68,12 @@ type SyncConfigLike = {
   rowUpdateMode?: 'partial' | 'full';
 };
 
-const DEFAULT_GC_TIME_MS = 5 * 60 * 1000;
+// Keep inactive collections short-lived so a project we navigated away from
+// releases its Electric "live" connections quickly. On HTTP/1.1 those long-lived
+// connections occupy the ~6 per-origin slots and stall the active board's shapes.
+// Re-syncing on return is cheap (snapshot is ~10ms), so a shorter window trades
+// negligible re-fetch cost for far less connection contention while switching.
+const DEFAULT_GC_TIME_MS = 2 * 60 * 1000;
 const ELECTRIC_READY_TIMEOUT_MS = 12_000;
 const FALLBACK_REFRESH_INTERVAL_MS = 30 * 1000;
 
@@ -527,6 +532,7 @@ function createHybridSync(args: {
   params: Record<string, string>;
   reportError: (error: SyncError) => void;
   electricSync: SyncConfigLike['sync'];
+  readyTimeoutMs?: number;
 }) {
   const fallbackSync = createFallbackSync({
     sourceKey: args.sourceKey,
@@ -562,6 +568,7 @@ function createHybridSync(args: {
       switchToFallback
     );
 
+    const readyTimeoutMs = args.readyTimeoutMs ?? ELECTRIC_READY_TIMEOUT_MS;
     const scheduleReadyTimeout = () => {
       timeoutId = globalThis.setTimeout(() => {
         if (isCleanedUp || usingFallback || syncParams.collection.isReady()) {
@@ -579,7 +586,7 @@ function createHybridSync(args: {
           );
         }
         lockSourceToFallback(args.sourceKey);
-      }, ELECTRIC_READY_TIMEOUT_MS);
+      }, readyTimeoutMs);
     };
 
     scheduleReadyTimeout();
@@ -811,6 +818,7 @@ export function createShapeCollection<TRow extends ElectricRow>(
         params,
         reportError,
         electricSync: electricSyncConfig.sync,
+        readyTimeoutMs: config?.readyTimeoutMs,
       }),
     },
   };
