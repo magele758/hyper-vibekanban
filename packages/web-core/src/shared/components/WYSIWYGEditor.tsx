@@ -33,6 +33,11 @@ import {
 } from '@vibe/ui/components/component-info-node';
 import { TABLE_TRANSFORMER } from '@vibe/ui/lib/table-transformer';
 import {
+  MermaidNode,
+  MERMAID_TRANSFORMER,
+  MERMAID_EXPORT_TRANSFORMER,
+} from './mermaid-node';
+import {
   WorkspaceContext as EditorWorkspaceContext,
   SessionContext,
   LocalAttachmentsContext,
@@ -441,6 +446,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
           AttachmentNode,
           PrCommentNode,
           ComponentInfoNode,
+          MermaidNode,
           TableNode,
           TableRowNode,
           TableCellNode,
@@ -460,6 +466,8 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
         PR_COMMENT_TRANSFORMER,
         COMPONENT_INFO_EXPORT_TRANSFORMER,
         COMPONENT_INFO_TRANSFORMER,
+        MERMAID_EXPORT_TRANSFORMER,
+        MERMAID_TRANSFORMER,
         ...TRANSFORMERS,
       ],
       [ATTACHMENT_TRANSFORMER, IMAGE_TRANSFORMER]
