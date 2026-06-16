@@ -42,12 +42,13 @@ node scripts/setup-dev-environment.js get >/dev/null 2>&1 || true
 TS_HOSTNAME=""
 TS_IP=""
 MOBILE=0
-# Tailscale IP is still detected (used to widen CORS / print phone URLs) even
-# when the mobile HTTPS front door is off.
+# Tailscale IP/hostname are detected whenever Tailscale is up (CORS, browser
+# shared_api_base, optional HTTPS front door). VK_MOBILE=1 additionally points
+# VITE_* build-time bases at the Tailscale HTTPS front door.
 if vk_tailscale_ok; then
   TS_IP="$(vk_detect_tailscale_ip)"
+  TS_HOSTNAME="$(vk_detect_tailscale_hostname)"
   if [[ "${VK_MOBILE}" == "1" ]]; then
-    TS_HOSTNAME="$(vk_detect_tailscale_hostname)"
     if [[ -n "${TS_HOSTNAME}" ]]; then
       if [[ "${VK_MOBILE_HTTPS_PORT}" == "${FRONTEND_PORT}" ]]; then
         echo "WARN: VK_MOBILE_HTTPS_PORT(${VK_MOBILE_HTTPS_PORT}) 与前端口相同会冲突，已跳过手机前门 (设不同端口再开)"
@@ -110,6 +111,7 @@ cd "${ROOT}"
 
 CADDY_STARTED=0
 DESKTOP_H2_UP=0
+TS_CADDY_HOSTNAME=""
 WANT_DESKTOP_H2=0
 [[ "${VK_DESKTOP_H2:-1}" == "1" ]] && WANT_DESKTOP_H2=1
 
@@ -118,13 +120,16 @@ if [[ "${MOBILE}" -eq 1 || "${WANT_DESKTOP_H2}" -eq 1 ]]; then
     echo "WARN: 需要 Caddy 但未安装 — h2 前门不可用 (运行: brew install caddy)"
   else
     TS_ARGS_HOSTNAME=""
-    if [[ "${MOBILE}" -eq 1 ]]; then
+    if [[ -n "${TS_HOSTNAME}" ]]; then
       if [[ ! -f "${CERT_DIR}/${TS_HOSTNAME}.crt" ]]; then
         echo "==> 生成 Tailscale 证书 (${TS_HOSTNAME})..."
         (cd "${CERT_DIR}" && vk_tailscale cert "${TS_HOSTNAME}") \
-          || echo "WARN: tailscale cert 生成失败，手机 HTTPS 跳过"
+          || echo "WARN: tailscale cert 生成失败，Tailscale HTTPS 前门跳过"
       fi
-      TS_ARGS_HOSTNAME="${TS_HOSTNAME}"
+      if [[ -f "${CERT_DIR}/${TS_HOSTNAME}.crt" ]]; then
+        TS_ARGS_HOSTNAME="${TS_HOSTNAME}"
+        TS_CADDY_HOSTNAME="${TS_HOSTNAME}"
+      fi
     fi
 
     # args: DESKTOP_HTTPS_PORT REMOTE_PORT OUT [TS_HOSTNAME FE BE RELAY \
@@ -208,6 +213,10 @@ elif [[ "${DESKTOP_H2_UP}" -eq 1 ]]; then
   export VITE_RELAY_API_BASE_URL="https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}"
 fi
 
+if [[ -n "${TS_CADDY_HOSTNAME}" ]]; then
+  export VITE_TAILSCALE_RELAY_HTTPS_PORT="${VK_MOBILE_RELAY_HTTPS_PORT}"
+fi
+
 # Docker --force-recreate drops in-memory relay tunnels; backend must reconnect.
 if vk_dev_running; then
   if vk_local_dev_healthy "${BACKEND_PORT}"; then
@@ -229,8 +238,8 @@ else
   : > "${LOG_DIR}/dev.log"
   export FRONTEND_PORT BACKEND_PORT PREVIEW_PROXY_PORT
   unset PORT
-  export VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
-  export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL
+  export VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
+  export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL VITE_TAILSCALE_RELAY_HTTPS_PORT
   touch crates/server/build.rs crates/local-deployment/build.rs
   dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log")"
   echo "${dev_pid}" > "${PID_DIR}/dev.pid"
@@ -293,10 +302,14 @@ if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
   echo "  (Relay: https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT})"
 fi
 if [[ -n "${TS_IP}" ]]; then
-  echo "手机 (Tailscale IP，Remote Web 直连):"
-  echo "  Remote:  http://${TS_IP}:${VK_REMOTE_PORT}"
-  echo "  Relay:   http://${TS_IP}:${VK_RELAY_PORT}"
-  echo "  Desktop: http://${TS_IP}:${FRONTEND_PORT}"
+  echo "Tailscale 其他机器:"
+  if [[ -n "${TS_HOSTNAME}" && -f "${CERT_DIR}/${TS_HOSTNAME}.crt" ]]; then
+    echo "  HTTPS (推荐): https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
+    echo "  Relay HTTPS:  https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
+  fi
+  echo "  HTTP Desktop: http://${TS_IP}:${FRONTEND_PORT}"
+  echo "  HTTP Remote:  http://${TS_IP}:${VK_REMOTE_PORT}"
+  echo "  HTTP Relay:   http://${TS_IP}:${VK_RELAY_PORT}"
 elif [[ -n "${LAN_IP}" ]]; then
   echo "手机 (同一 WiFi):"
   echo "  Kanban:  http://${LAN_IP}:${FRONTEND_PORT}"

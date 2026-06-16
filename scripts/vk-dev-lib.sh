@@ -119,15 +119,26 @@ vk_configure_public_urls() {
   # a cross-origin request from the 13443 page, so its origin must be allowed).
   allowed_origins="${allowed_origins},https://localhost:${VK_DESKTOP_HTTPS_PORT},https://localhost:${VK_DESKTOP_RELAY_HTTPS_PORT}"
 
+  # Server-side Rust client always talks to local Remote/Relay over loopback so
+  # token refresh survives WiFi/VPN changes (stale LAN IPs caused 502 on
+  # /api/auth/token). Browser-facing bases may still use LAN/Tailscale below.
+  export VK_SHARED_API_BASE="http://127.0.0.1:${VK_REMOTE_PORT}"
+
+  if [[ -n "${ts_ip}" ]]; then
+    export VK_BROWSER_SHARED_API_BASE="http://${ts_ip}:${VK_REMOTE_PORT}"
+  elif [[ -n "${lan_ip}" ]]; then
+    export VK_BROWSER_SHARED_API_BASE="http://${lan_ip}:${VK_REMOTE_PORT}"
+  else
+    export VK_BROWSER_SHARED_API_BASE="http://localhost:${VK_REMOTE_PORT}"
+  fi
+
   if [[ -n "${lan_ip}" ]]; then
     export PUBLIC_BASE_URL="http://${lan_ip}:${VK_REMOTE_PORT}"
-    export VK_SHARED_API_BASE="http://${lan_ip}:${VK_REMOTE_PORT}"
     export VITE_VK_SHARED_API_BASE="http://${lan_ip}:${VK_REMOTE_PORT}"
     export VITE_RELAY_API_BASE_URL="http://${lan_ip}:${VK_RELAY_PORT}"
     allowed_origins="${allowed_origins},http://${lan_ip}:${frontend_port},http://${lan_ip}:${VK_REMOTE_PORT}"
   else
     export PUBLIC_BASE_URL="http://localhost:${VK_REMOTE_PORT}"
-    export VK_SHARED_API_BASE="http://localhost:${VK_REMOTE_PORT}"
     export VITE_VK_SHARED_API_BASE="http://localhost:${VK_REMOTE_PORT}"
     export VITE_RELAY_API_BASE_URL="http://localhost:${VK_RELAY_PORT}"
   fi

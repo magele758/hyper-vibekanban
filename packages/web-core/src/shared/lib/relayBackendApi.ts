@@ -69,6 +69,22 @@ export function resolveDefaultRelayApiBase(
       protocol === 'https:' &&
       BUILD_TIME_RELAY_API_BASE.startsWith('https:')
     ) {
+      try {
+        const baked = new URL(BUILD_TIME_RELAY_API_BASE);
+        if (
+          baked.hostname !== hostname &&
+          (hostname.endsWith('.ts.net') || isSelfHostedDevHostname(hostname))
+        ) {
+          if (hostname.endsWith('.ts.net')) {
+            const relayDoorPort =
+              import.meta.env.VITE_TAILSCALE_RELAY_HTTPS_PORT || '18443';
+            return `${protocol}//${hostname}:${relayDoorPort}`;
+          }
+          return `${protocol}//${hostname}:${relayPort}`;
+        }
+      } catch {
+        // fall through to baked base
+      }
       return BUILD_TIME_RELAY_API_BASE;
     }
 

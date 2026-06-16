@@ -25,6 +25,12 @@ DESKTOP_RELAY_HTTPS_PORT="${11:-}"
 # Electric shapes on one connection instead of hitting the ~6-per-origin
 # HTTP/1.1 limit. `tls internal` makes Caddy serve HTTP/2 using its local CA.
 cat > "${OUT}" <<EOF
+{
+    servers {
+        protocols h1 h2
+    }
+}
+
 localhost:${DESKTOP_HTTPS_PORT} {
     tls internal
 
