@@ -51,6 +51,8 @@
     "vk:start": "bash scripts/vk-start.sh",
     "vk:stop": "bash scripts/vk-stop.sh",
     "vk:status": "bash scripts/vk-status.sh",
+    "vk:install-autostart": "bash scripts/vk-install-autostart.sh",
+    "vk:uninstall-autostart": "bash scripts/vk-uninstall-autostart.sh",
     "remote:dev": "cd crates/remote && docker compose --env-file .env.remote up --build ; docker compose --env-file .env.remote down -v",
     "remote:dev:full": "cd crates/remote && docker compose --env-file .env.remote --profile relay --profile attachments up --build ; docker compose --env-file .env.remote down -v",
     "remote:down": "cd crates/remote && docker compose --env-file .env.remote --profile relay down",
