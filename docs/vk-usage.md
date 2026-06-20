@@ -82,6 +82,8 @@ vk-start
 
 详见 `mobile-testing.md`。
 
+> 手机经 Tailscale 访问**很慢/卡顿,但连 WiFi 就快**?多半是 5G 下 Tailscale 退回了 DERP 中继(绕东京),开路由器 UPnP 即可恢复直连。排查步骤见 [`vk-mobile-tailscale-troubleshooting.md`](vk-mobile-tailscale-troubleshooting.md)。
+
 ## 仅 Remote（不启本地 Desktop）
 
 ```bash
