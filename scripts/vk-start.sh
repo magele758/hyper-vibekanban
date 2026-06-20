@@ -13,6 +13,7 @@ CADDYFILE="${STATE_DIR}/Caddyfile"
 source "${ROOT}/scripts/vk-dev-lib.sh"
 
 mkdir -p "${LOG_DIR}" "${PID_DIR}" "${CERT_DIR}"
+vk_configure_asset_dir "${ROOT}"
 
 VK_START_LOCK="${PID_DIR}/vk-start.lock.d"
 if ! mkdir "${VK_START_LOCK}" 2>/dev/null; then
@@ -61,9 +62,7 @@ if vk_tailscale_ok; then
 fi
 
 echo "==> Starting Remote stack (Docker)..."
-if command -v orbctl >/dev/null 2>&1; then
-  orbctl config set network_proxy http://host.orb.internal:7897 2>/dev/null || true
-fi
+vk_configure_orbstack_proxy
 
 cd crates/remote
 export DOCKER_BUILDKIT=1
@@ -238,7 +237,7 @@ else
   : > "${LOG_DIR}/dev.log"
   export FRONTEND_PORT BACKEND_PORT PREVIEW_PROXY_PORT
   unset PORT
-  export VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
+  export VK_ASSET_DIR VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
   export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL VITE_TAILSCALE_RELAY_HTTPS_PORT
   touch crates/server/build.rs crates/local-deployment/build.rs
   dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log")"

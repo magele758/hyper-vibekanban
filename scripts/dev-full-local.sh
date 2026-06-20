@@ -12,6 +12,16 @@ export VK_SHARED_API_BASE="${VK_SHARED_API_BASE:-http://localhost:${VK_REMOTE_PO
 export VK_SHARED_RELAY_API_BASE="${VK_SHARED_RELAY_API_BASE:-http://localhost:${VK_RELAY_PORT}}"
 export VITE_VK_SHARED_API_BASE="${VITE_VK_SHARED_API_BASE:-$VK_SHARED_API_BASE}"
 
+# The backend's Rust reqwest client reads the macOS system proxy. If a VPN/proxy
+# app (Clash, etc.) sets a system HTTP(S) proxy without loopback in its bypass
+# list, the local server's calls to the Remote/Relay on 127.0.0.1 get routed
+# through the proxy, which refuses loopback and returns an empty-body 502 —
+# breaking /api/auth/token, relay registration, and project loading. Force every
+# local target to bypass the proxy. Append to any inherited NO_PROXY.
+VK_NO_PROXY_HOSTS="localhost,127.0.0.1,::1,host.orb.internal"
+export NO_PROXY="${NO_PROXY:+${NO_PROXY},}${VK_NO_PROXY_HOSTS}"
+export no_proxy="${no_proxy:+${no_proxy},}${VK_NO_PROXY_HOSTS}"
+
 # Re-enable relay (dev:lite turns it off)
 node -e "
 const fs=require('fs');

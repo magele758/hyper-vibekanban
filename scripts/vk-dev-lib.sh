@@ -4,6 +4,24 @@
 # shellcheck source=vk-ports.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/vk-ports.sh"
 
+# Local state lives outside any git checkout so multiple clones (e.g. vibe-kanban +
+# hyper-vibekanban) share one SQLite DB, session logs, credentials, and keys.
+vk_configure_asset_dir() {
+  local root="${1:?root required}"
+  local state_dir="${VK_STATE_DIR:-${HOME}/.vk-kanban}"
+  local shared="${VK_ASSET_DIR:-${state_dir}/dev_assets}"
+  local repo_assets="${root}/dev_assets"
+
+  mkdir -p "${shared}"
+
+  if [[ ! -f "${shared}/db.v2.sqlite" && -f "${repo_assets}/db.v2.sqlite" ]]; then
+    echo "==> 初始化共享 dev_assets: ${shared}"
+    rsync -a "${repo_assets}/" "${shared}/"
+  fi
+
+  export VK_ASSET_DIR="${shared}"
+}
+
 vk_dev_pgrep_pattern() {
   echo "vibe-kanban.*concurrently.*local-web:dev|vibe-kanban.*concurrently.*backend:dev:watch"
 }
@@ -88,6 +106,59 @@ vk_tailscale() {
 
 vk_tailscale_ok() {
   vk_tailscale status >/dev/null 2>&1
+}
+
+# Best-effort, bounded wait for Tailscale to come up. At login the LaunchAgent
+# fires as soon as Docker is ready, which can be before Tailscale connects — if
+# vk-start runs first, VK_BROWSER_SHARED_API_BASE / VK_ALLOWED_ORIGINS fall back
+# to the LAN IP and remote devices (cellular over Tailscale) can't reach the API.
+# Tailscale is optional, so a timeout is logged, not fatal.
+vk_wait_tailscale() {
+  local timeout="${VK_TAILSCALE_WAIT_SEC:-60}"
+  vk_tailscale_bin >/dev/null 2>&1 || return 0   # not installed → nothing to wait for
+  local elapsed=0
+  while ! vk_tailscale_ok; do
+    if (( elapsed >= timeout )); then
+      echo "WARN: Tailscale 未在 ${timeout}s 内就绪，按无 Tailscale 启动（仅 WiFi/LAN 可达）" >&2
+      return 0
+    fi
+    sleep 3
+    elapsed=$((elapsed + 3))
+  done
+  [[ "${elapsed}" -gt 0 ]] && echo "Tailscale ready after ${elapsed}s"
+  return 0
+}
+
+# Configure (or disable) the OrbStack container HTTP proxy.
+#
+# VK_ORBSTACK_PROXY controls it:
+#   0 / unset (default) → set to "none". Containers go direct. Correct when no
+#       proxy runs, OR when a host proxy (Clash/mihomo) binds loopback only
+#       (allow-lan: false) — then host.orb.internal:7897 is unreachable from
+#       containers and every egress (incl. the relay token fetch) returns 502,
+#       which breaks relay registration and project loading.
+#   1            → use the default URL http://host.orb.internal:7897
+#   http(s)://…  → use that URL verbatim (e.g. a proxy with allow-lan enabled)
+#
+# Only meaningful with OrbStack; a no-op when orbctl is absent.
+vk_configure_orbstack_proxy() {
+  command -v orbctl >/dev/null 2>&1 || return 0
+  local setting="${VK_ORBSTACK_PROXY:-0}"
+  local url
+  case "${setting}" in
+    0 | "" | none | off | false) url="none" ;;
+    1 | on | true) url="http://host.orb.internal:7897" ;;
+    http://* | https://*) url="${setting}" ;;
+    *)
+      echo "WARN: 无法识别 VK_ORBSTACK_PROXY='${setting}'，按 none 处理" >&2
+      url="none"
+      ;;
+  esac
+  if orbctl config set network_proxy "${url}" 2>/dev/null; then
+    echo "OrbStack 容器代理: ${url}"
+  else
+    echo "WARN: 设置 OrbStack network_proxy='${url}' 失败（已忽略）" >&2
+  fi
 }
 
 vk_detect_tailscale_ip() {
