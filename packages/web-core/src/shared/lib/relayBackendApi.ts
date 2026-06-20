@@ -22,7 +22,7 @@ const USE_REMOTE_API_BASE_FALLBACK = !BUILD_TIME_RELAY_API_BASE;
 let _relayApiBase: string = BUILD_TIME_RELAY_API_BASE || BUILD_TIME_API_BASE;
 
 /** Dev/self-host: baked relay URL may use LAN IP while the page is opened via Tailscale IP/DNS. */
-function isSelfHostedDevHostname(hostname: string): boolean {
+export function isSelfHostedDevHostname(hostname: string): boolean {
   if (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||

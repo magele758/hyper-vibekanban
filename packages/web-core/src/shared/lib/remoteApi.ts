@@ -14,7 +14,10 @@ import type {
 } from 'shared/remote-types';
 import { getAuthRuntime } from '@/shared/lib/auth/runtime';
 import { sha256Bytes } from '@/shared/lib/relayCrypto';
-import { syncRelayApiBaseWithRemote } from '@/shared/lib/relayBackendApi';
+import {
+  isSelfHostedDevHostname,
+  syncRelayApiBaseWithRemote,
+} from '@/shared/lib/relayBackendApi';
 
 const BUILD_TIME_API_BASE = import.meta.env.VITE_VK_SHARED_API_BASE || '';
 
@@ -29,8 +32,18 @@ let _remoteApiBase: string = BUILD_TIME_API_BASE;
  * lets them multiplex over a single h2 connection instead of stalling on the
  * ~6-per-origin HTTP/1.1 limit.
  *
- * Production safety: there apiBase is https, so the condition never matches and
- * the reported base is returned unchanged (never rewritten to window.origin).
+ * On a plain-http self-hosted/dev page, rewrite the reported base's host to the
+ * current page hostname (keeping its port). vk-start bakes a single host into
+ * VK_BROWSER_SHARED_API_BASE (LAN IP when Tailscale was down at startup — e.g.
+ * the login autostart, which waits for Docker but not Tailscale). Without this,
+ * a device opening the page over Tailscale (cellular) would be told to call the
+ * unreachable LAN IP for the Remote API, so the app loads but every remote call
+ * fails — even though WiFi works. Following the page host instead makes the
+ * Remote API reachable via whatever host opened the page (Tailscale IP/DNS or
+ * LAN), mirroring resolveDefaultRelayApiBase.
+ *
+ * Production safety: there apiBase is https, so neither branch matches and the
+ * reported base is returned unchanged (never rewritten to window.origin).
  */
 export function resolveSharedRemoteApiBase(
   apiBase: string | null | undefined
@@ -46,6 +59,19 @@ export function resolveSharedRemoteApiBase(
 
   if (window.location.protocol === 'https:' && apiBase.startsWith('http:')) {
     return window.location.origin;
+  }
+
+  if (window.location.protocol === 'http:' && apiBase.startsWith('http:')) {
+    const { hostname } = window.location;
+    try {
+      const baked = new URL(apiBase);
+      if (baked.hostname !== hostname && isSelfHostedDevHostname(hostname)) {
+        baked.hostname = hostname;
+        return baked.origin;
+      }
+    } catch {
+      // fall through to the reported base
+    }
   }
 
   return apiBase;
