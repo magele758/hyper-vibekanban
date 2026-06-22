@@ -95,3 +95,9 @@ vibe-kanban-cloud/
 *.ts.net.key
 Caddyfile
 Caddyfile.dev
+
+# Playwright MCP runtime artifacts (console/page snapshots)
+.playwright-mcp/
+
+# Per-developer local notes (do not track)
+docs/vk-self-hosted-derp.md
