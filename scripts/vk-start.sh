@@ -189,15 +189,26 @@ if [[ "${MOBILE}" -eq 1 || "${WANT_DESKTOP_H2}" -eq 1 ]]; then
 fi
 
 # Mobile (Tailscale) HTTPS front door: phone + desktop-via-tailscale already h2.
-# IMPORTANT: only the BROWSER-facing VITE_* bases point at the Tailscale HTTPS
-# front door. Server-side VK_SHARED_API_BASE / VK_SHARED_RELAY_API_BASE stay on
-# local http (set by vk_configure_public_urls) so the Rust reqwest client talks
-# to the remote/relay directly. Routing the server through Caddy made it loop
-# back over the tailscale hostname and fail /v1/tokens/refresh → 502 on
-# /api/auth/token, breaking auth + relay registration + project loading.
+# IMPORTANT: only the BROWSER-facing VITE_* bases are touched here. Server-side
+# VK_SHARED_API_BASE / VK_SHARED_RELAY_API_BASE stay on local http (set by
+# vk_configure_public_urls) so the Rust reqwest client talks to remote/relay
+# directly. Routing the server through Caddy made it loop back over the tailscale
+# hostname and fail /v1/tokens/refresh → 502 on /api/auth/token.
+#
+# We deliberately do NOT pin VITE_VK_SHARED_API_BASE to the Tailscale https front
+# door. vk_configure_public_urls already set it to the http LAN base, and the
+# frontend resolver (resolveSharedRemoteApiBase, remoteApi.ts) follows the page
+# host whenever the base is http: an https page (localhost/Tailscale front door)
+# routes Remote same-origin over h2; an http LAN page (same WiFi) routes Remote
+# direct to the LAN IP (fast). Pinning it to https short-circuited that resolver,
+# forcing the LAN-WiFi case through the Tailscale (DERP-relay) path. One config
+# now adapts to whatever host opened the page.
+#
+# The RELAY base IS pinned to the https front door: resolveDefaultRelayApiBase
+# needs it to route relay over :18443 on https pages, and already downgrades to
+# the direct http LAN relay origin (:18082) on http LAN pages — correct on both.
 # Allowed origins already include the tailscale https origins (see vk-dev-lib).
 if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
-  export VITE_VK_SHARED_API_BASE="https://${TS_HOSTNAME}:${VK_MOBILE_HTTPS_PORT}"
   export VITE_RELAY_API_BASE_URL="https://${TS_HOSTNAME}:${VK_MOBILE_RELAY_HTTPS_PORT}"
 elif [[ "${DESKTOP_H2_UP}" -eq 1 ]]; then
   # Non-mobile: the browser opens the full app via the localhost h2 front door
