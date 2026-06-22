@@ -46,7 +46,8 @@ pub struct Gemini {
 
 impl Gemini {
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @google/gemini-cli@0.29.3");
+        // 默认跟随上游最新版；稳定回滚基准见 docs/coding-agent-versions.md
+        let mut builder = CommandBuilder::new("npx -y @google/gemini-cli@latest");
 
         if let Some(model) = &self.model {
             builder = builder.extend_params(["--model", model.as_str()]);

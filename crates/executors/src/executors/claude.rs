@@ -60,9 +60,10 @@ const SUPPRESSED_STDERR_PATTERNS: &[&str] = &["[WARN] Fast mode requires the nat
 
 fn base_command(claude_code_router: bool) -> &'static str {
     if claude_code_router {
-        "npx -y @musistudio/claude-code-router@1.0.66 code"
+        // 默认跟随上游最新版；稳定回滚基准见 docs/coding-agent-versions.md
+        "npx -y @musistudio/claude-code-router@latest code"
     } else {
-        "npx -y @anthropic-ai/claude-code@2.1.183"
+        "npx -y @anthropic-ai/claude-code@latest"
     }
 }
 

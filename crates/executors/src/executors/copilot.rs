@@ -49,7 +49,8 @@ pub struct Copilot {
 
 impl Copilot {
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let mut builder = CommandBuilder::new("npx -y @github/copilot@0.0.403");
+        // 默认跟随上游最新版；稳定回滚基准见 docs/coding-agent-versions.md
+        let mut builder = CommandBuilder::new("npx -y @github/copilot@latest");
 
         if self.allow_all_tools.unwrap_or(false) {
             builder = builder.extend_params(["--allow-all-tools"]);

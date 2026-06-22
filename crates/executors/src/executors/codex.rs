@@ -355,7 +355,8 @@ impl StandardCodingAgentExecutor for Codex {
 
 impl Codex {
     pub fn base_command() -> &'static str {
-        "npx -y @openai/codex@0.124.0"
+        // 默认跟随上游最新版；稳定回滚基准见 docs/coding-agent-versions.md
+        "npx -y @openai/codex@latest"
     }
 
     fn discovered_options_with_models(models: Vec<ModelInfo>) -> ExecutorDiscoveredOptions {
