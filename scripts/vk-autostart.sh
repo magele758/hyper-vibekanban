@@ -17,6 +17,16 @@ if [[ -d "${HOME}/.nvm/versions/node" ]]; then
   NVM_NODE="$(ls -1d "${HOME}/.nvm/versions/node/"*/bin 2>/dev/null | tail -1 || true)"
   [[ -n "${NVM_NODE}" ]] && export PATH="${NVM_NODE}:${PATH}"
 fi
+# Rust (rustup): launchd lacks ~/.cargo/bin, which backend:dev:watch needs
+# (cargo / cargo-watch). Without it the Rust backend dies at boot with
+# "cargo: command not found" and concurrently tears down the whole dev process,
+# so local web/API never come up (Docker survives because docker is on PATH).
+if [[ -f "${HOME}/.cargo/env" ]]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/.cargo/env"
+elif [[ -d "${HOME}/.cargo/bin" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
 
 STATE_DIR="${VK_STATE_DIR:-${HOME}/.vk-kanban}"
 LOG_DIR="${STATE_DIR}/logs"

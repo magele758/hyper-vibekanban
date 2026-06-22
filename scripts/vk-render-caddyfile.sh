@@ -65,6 +65,12 @@ if [[ -n "${TS_HOSTNAME}" ]]; then
   cat >> "${OUT}" <<EOF
 
 ${TS_HOSTNAME}:${MOBILE_HTTPS_PORT} {
+    # Bind both IPv4 and IPv6 wildcards. A hostname-only site address makes Caddy
+    # listen IPv6-only (tcp6); Tailscale MagicDNS resolves this host to its IPv4
+    # (100.x) A-record, so phones connect over IPv4 and an IPv6-only listener
+    # silently refuses them. The bind below forces a dual-stack (tcp46) socket.
+    # (No backticks in this comment: heredoc is unquoted and would exec them.)
+    bind 0.0.0.0 ::
     tls ${CERT_DIR}/${TS_HOSTNAME}.crt ${CERT_DIR}/${TS_HOSTNAME}.key
 
     handle /v1/* {
@@ -82,6 +88,7 @@ ${TS_HOSTNAME}:${MOBILE_HTTPS_PORT} {
 }
 
 ${TS_HOSTNAME}:${MOBILE_RELAY_HTTPS_PORT} {
+    bind 0.0.0.0 ::
     tls ${CERT_DIR}/${TS_HOSTNAME}.crt ${CERT_DIR}/${TS_HOSTNAME}.key
     reverse_proxy 127.0.0.1:${RELAY_PORT}
 }
