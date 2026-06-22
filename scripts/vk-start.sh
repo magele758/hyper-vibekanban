@@ -246,6 +246,17 @@ else
   : > "${LOG_DIR}/dev.log"
   export FRONTEND_PORT BACKEND_PORT PREVIEW_PROXY_PORT
   unset PORT
+  # Scrub any inherited Claude provider env. When vk-start is launched from a
+  # Claude Code / cc-switch shell (e.g. the desktop 3p claude-code), that shell
+  # exports ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN etc. The backend would pass
+  # them to every spawned coding-agent, and a process-level ANTHROPIC_BASE_URL
+  # OVERRIDES each executor variant's own CLAUDE_CONFIG_DIR/settings.json — so all
+  # provider variants silently route to the same upstream (and provider billing
+  # lands on the wrong account). Executors must rely solely on per-variant config,
+  # so strip these before launching dev.
+  for __vk_v in $(compgen -v 2>/dev/null | grep -E '^ANTHROPIC_' || true); do unset "${__vk_v}"; done
+  unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY \
+        CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_HOST_AUTH_ENV_VAR 2>/dev/null || true
   export VK_ASSET_DIR VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
   export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL VITE_TAILSCALE_RELAY_HTTPS_PORT
   touch crates/server/build.rs crates/local-deployment/build.rs
