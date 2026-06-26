@@ -1038,14 +1038,24 @@ impl ClaudeLogProcessor {
                     ),
                 })
             }
-            ClaudeContentItem::Thinking { thinking } => Some(NormalizedEntry {
-                timestamp: None,
-                entry_type: NormalizedEntryType::Thinking,
-                content: thinking.clone(),
-                metadata: Some(
-                    serde_json::to_value(content_item).unwrap_or(serde_json::Value::Null),
-                ),
-            }),
+            ClaudeContentItem::Thinking { thinking } => {
+                // Skip empty/whitespace-only thinking blocks. Real Claude always
+                // emits content in thinking blocks, but gateway-proxied models
+                // (e.g. kimi/glm via a Claude-compatible endpoint) often emit an
+                // empty thinking block start followed only by signature deltas,
+                // which would otherwise surface as blank Thinking entries.
+                if thinking.trim().is_empty() {
+                    return None;
+                }
+                Some(NormalizedEntry {
+                    timestamp: None,
+                    entry_type: NormalizedEntryType::Thinking,
+                    content: thinking.clone(),
+                    metadata: Some(
+                        serde_json::to_value(content_item).unwrap_or(serde_json::Value::Null),
+                    ),
+                })
+            }
             ClaudeContentItem::ToolUse { tool_data, id: _ } => {
                 let (entry, _, _) =
                     Self::build_tool_use_entry(tool_data, worktree_path, ToolStatus::Created);
@@ -2856,6 +2866,25 @@ mod tests {
             NormalizedEntryType::Thinking
         ));
         assert_eq!(entries[0].content, "Let me think about this...");
+    }
+
+    #[test]
+    fn test_empty_thinking_block_is_skipped() {
+        // Gateway-proxied models (kimi/glm via a Claude-compatible endpoint) can
+        // emit empty or whitespace-only thinking blocks. These must not surface
+        // as blank Thinking entries in the conversation stream.
+        for empty in ["", "   ", "\n", "\t \n"] {
+            let json = format!(
+                r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"thinking","thinking":{}}}]}}}}"#,
+                serde_json::to_string(empty).unwrap()
+            );
+            let parsed: ClaudeJson = serde_json::from_str(&json).unwrap();
+            let entries = normalize(&parsed, "");
+            assert!(
+                entries.is_empty(),
+                "expected empty thinking ({empty:?}) to be skipped, got {entries:?}"
+            );
+        }
     }
 
     #[test]
