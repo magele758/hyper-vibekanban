@@ -57,7 +57,7 @@ codex-app-server-protocol = { git = "...codex.git", tag = "rust-v0.124.0" }
 
 | Agent | 启动方式 | 版本来源 |
 |---|---|---|
-| Cursor | 本地二进制 `cursor-agent` | 用户自行安装，需 `cursor-agent login` |
+| Cursor | 本地二进制 `agent`（兼容旧版 `cursor-agent`） | 用户自行安装，需 `agent login` |
 | Droid | 本地二进制 `droid exec` | 用户自行安装 |
 | Amp | `npx -y @sourcegraph/amp@latest` | 一直是浮动 latest（日历版本号） |
 

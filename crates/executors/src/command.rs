@@ -38,6 +38,24 @@ impl CommandParts {
             .ok_or(ExecutorError::ExecutableNotFound { program })?;
         Ok((executable, args))
     }
+
+    /// Resolve the program to an executable, trying the provided fallbacks if the
+    /// primary program is not found.
+    pub async fn into_resolved_with_fallback(
+        self,
+        fallbacks: &[&str],
+    ) -> Result<(PathBuf, Vec<String>), ExecutorError> {
+        let CommandParts { program, args } = self;
+        if let Some(executable) = resolve_executable_path(&program).await {
+            return Ok((executable, args));
+        }
+        for fallback in fallbacks {
+            if let Some(executable) = resolve_executable_path(fallback).await {
+                return Ok((executable, args));
+            }
+        }
+        Err(ExecutorError::ExecutableNotFound { program })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS, JsonSchema, Default)]

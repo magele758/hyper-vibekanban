@@ -80,17 +80,18 @@ async fn get_setup_helper_action() -> Result<ExecutorAction, ApiError> {
         use shlex::try_quote;
         use utils::shell::UnixShell;
         let base_command = CursorAgent::base_command();
+        let legacy_command = CursorAgent::legacy_base_command();
 
         // Install script with PATH setup
         let mut install_script = format!(
             r#"#!/bin/bash
 set -e
-if ! command -v {base_command} &> /dev/null; then
+if command -v {base_command} &> /dev/null || command -v {legacy_command} &> /dev/null; then
+    echo "Cursor CLI already installed"
+else
     echo "Installing Cursor CLI..."
     curl https://cursor.com/install -fsS | bash
     echo "Installation complete!"
-else
-    echo "Cursor CLI already installed"
 fi"#
         );
         let shell = UnixShell::current_shell();
@@ -116,7 +117,11 @@ fi"#
             r#"#!/bin/bash
 set -e
 export PATH="$HOME/.local/bin:$PATH"
-{base_command} login
+if command -v {base_command} &> /dev/null; then
+    {base_command} login
+else
+    {legacy_command} login
+fi
 "#
         );
         let login_request = ScriptRequest {

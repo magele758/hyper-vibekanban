@@ -36,7 +36,8 @@ use crate::{
 };
 
 mod mcp;
-const CURSOR_AUTH_REQUIRED_MSG: &str = "Authentication required. Please run 'cursor-agent login' first, or set CURSOR_API_KEY environment variable.";
+const CURSOR_AUTH_REQUIRED_MSG: &str = "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.";
+const CURSOR_LEGACY_AUTH_REQUIRED_MSG: &str = "Authentication required. Please run 'cursor-agent login' first, or set CURSOR_API_KEY environment variable.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS, JsonSchema)]
 pub struct CursorAgent {
@@ -137,8 +138,23 @@ pub(crate) fn cursor_reasoning_options(base_model: &str) -> Vec<ReasoningOption>
 }
 
 impl CursorAgent {
+    /// Cursor CLI executable names in resolution order. The Cursor install script
+    /// creates `~/.local/bin/agent` as the primary symlink and
+    /// `~/.local/bin/cursor-agent` as a legacy alias, so we prefer `agent` and
+    /// fall back to `cursor-agent`.
+    const EXECUTABLE_NAMES: [&'static str; 2] = ["agent", "cursor-agent"];
+
+    /// Primary Cursor CLI executable name (`agent`).
     pub fn base_command() -> &'static str {
-        "cursor-agent"
+        Self::EXECUTABLE_NAMES[0]
+    }
+
+    pub fn legacy_base_command() -> &'static str {
+        Self::EXECUTABLE_NAMES[1]
+    }
+
+    pub(crate) fn executable_names() -> &'static [&'static str] {
+        &Self::EXECUTABLE_NAMES
     }
 
     fn resolved_model(&self) -> Option<&str> {
@@ -193,7 +209,9 @@ impl StandardCodingAgentExecutor for CursorAgent {
 
         let command_parts = self.build_command_builder()?.build_initial()?;
 
-        let (executable_path, args) = command_parts.into_resolved().await?;
+        let (executable_path, args) = command_parts
+            .into_resolved_with_fallback(Self::executable_names())
+            .await?;
 
         let combined_prompt = self.append_prompt.combine_prompt(prompt);
 
@@ -234,7 +252,9 @@ impl StandardCodingAgentExecutor for CursorAgent {
         let command_parts = self
             .build_command_builder()?
             .build_follow_up(&["--resume".to_string(), session_id.to_string()])?;
-        let (executable_path, args) = command_parts.into_resolved().await?;
+        let (executable_path, args) = command_parts
+            .into_resolved_with_fallback(Self::executable_names())
+            .await?;
 
         let combined_prompt = self.append_prompt.combine_prompt(prompt);
 
@@ -293,7 +313,9 @@ impl StandardCodingAgentExecutor for CursorAgent {
 
             while let Some(Ok(chunk)) = stderr.next().await {
                 let content = strip_ansi_escapes::strip_str(&chunk);
-                if content.contains(CURSOR_AUTH_REQUIRED_MSG) {
+                if content.contains(CURSOR_AUTH_REQUIRED_MSG)
+                    || content.contains(CURSOR_LEGACY_AUTH_REQUIRED_MSG)
+                {
                     let error_message = NormalizedEntry {
                         timestamp: None,
                         entry_type: NormalizedEntryType::ErrorMessage {
@@ -613,7 +635,9 @@ impl StandardCodingAgentExecutor for CursorAgent {
     }
 
     fn get_availability_info(&self) -> AvailabilityInfo {
-        let binary_found = resolve_executable_path_blocking(Self::base_command()).is_some();
+        let binary_found = Self::executable_names()
+            .iter()
+            .any(|cmd| resolve_executable_path_blocking(cmd).is_some());
         if !binary_found {
             return AvailabilityInfo::NotFound;
         }

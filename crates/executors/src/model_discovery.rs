@@ -3,11 +3,14 @@ use std::{collections::HashMap, time::Duration};
 use convert_case::{Case, Casing};
 use serde::Deserialize;
 use tokio::{io::AsyncReadExt, process::Command, time};
-use workspace_utils::command_ext::GroupSpawnNoWindowExt;
+use workspace_utils::{command_ext::GroupSpawnNoWindowExt, shell::resolve_executable_path};
 
 use crate::{
     command::{CmdOverrides, CommandBuilder, apply_overrides},
-    executors::{ExecutorError, cursor::cursor_reasoning_options},
+    executors::{
+        ExecutorError,
+        cursor::{CursorAgent, cursor_reasoning_options},
+    },
     model_selector::{ModelInfo, ReasoningOption},
 };
 
@@ -17,8 +20,28 @@ pub async fn discover_cursor_models(
     base_command: &str,
     cmd: &CmdOverrides,
 ) -> Result<Vec<ModelInfo>, ExecutorError> {
+    // Prefer the primary Cursor CLI name (`agent`) and fall back to the legacy
+    // `cursor-agent` name when no override is configured.
+    let resolved_base = if cmd.base_command_override.is_some() {
+        base_command.to_string()
+    } else {
+        let mut executable = None;
+        for name in CursorAgent::executable_names() {
+            if let Some(path) = resolve_executable_path(name).await {
+                executable = Some(path);
+                break;
+            }
+        }
+        executable
+            .ok_or_else(|| ExecutorError::ExecutableNotFound {
+                program: base_command.to_string(),
+            })?
+            .to_string_lossy()
+            .into_owned()
+    };
+
     let builder = apply_overrides(
-        CommandBuilder::new(base_command).extend_params(["--list-models"]),
+        CommandBuilder::new(resolved_base).extend_params(["--list-models"]),
         cmd,
     )
     .map_err(|err| ExecutorError::Io(std::io::Error::other(err.to_string())))?;
@@ -26,7 +49,7 @@ pub async fn discover_cursor_models(
     let output = run_command_capture(&builder, &[], &cmd_env(cmd)).await?;
     parse_cursor_list_models(&output).ok_or_else(|| {
         ExecutorError::Io(std::io::Error::other(
-            "failed to parse cursor-agent --list-models output",
+            "failed to parse Cursor agent --list-models output",
         ))
     })
 }
