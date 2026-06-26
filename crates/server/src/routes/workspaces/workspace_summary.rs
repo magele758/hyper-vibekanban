@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use axum::{Json, extract::State, response::Json as ResponseJson};
 use db::models::{
@@ -16,10 +16,31 @@ use uuid::Uuid;
 
 use crate::{DeploymentImpl, error::ApiError};
 
+const MAX_DIFF_STATS_WORKSPACES: usize = 40;
+
 /// Request for fetching workspace summaries
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct WorkspaceSummaryRequest {
     pub archived: bool,
+}
+
+/// Request diff stats for a bounded set of workspaces (sidebar lazy load).
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct WorkspaceDiffStatsRequest {
+    pub workspace_ids: Vec<Uuid>,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct WorkspaceDiffStatsEntry {
+    pub workspace_id: Uuid,
+    pub files_changed: usize,
+    pub lines_added: usize,
+    pub lines_removed: usize,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct WorkspaceDiffStatsResponse {
+    pub stats: Vec<WorkspaceDiffStatsEntry>,
 }
 
 /// Summary info for a single workspace
@@ -112,29 +133,7 @@ pub async fn get_workspace_summaries(
     // 6. Get PR status for each workspace
     let pr_statuses = PullRequest::get_latest_for_workspaces(pool, archived).await?;
 
-    // 7. Compute diff stats for each workspace (in parallel)
-    let diff_futures: Vec<_> = workspaces
-        .iter()
-        .map(|ws| {
-            let workspace = ws.clone();
-            let deployment = deployment.clone();
-            async move {
-                if workspace.container_ref.is_some() {
-                    compute_workspace_diff_stats(&deployment, &workspace)
-                        .await
-                        .map(|stats| (workspace.id, stats))
-                } else {
-                    None
-                }
-            }
-        })
-        .collect();
-
-    let diff_results: Vec<Option<(Uuid, DiffStats)>> =
-        futures_util::future::join_all(diff_futures).await;
-    let diff_stats: HashMap<Uuid, DiffStats> = diff_results.into_iter().flatten().collect();
-
-    // 8. Assemble response
+    // 7. Assemble response (diff stats are lazy-loaded via /workspaces/diff-stats)
     let summaries: Vec<WorkspaceSummary> = workspaces
         .iter()
         .map(|ws| {
@@ -143,15 +142,14 @@ pub async fn get_workspace_summaries(
             let has_pending = latest
                 .map(|p| pending_approval_eps.contains(&p.execution_process_id))
                 .unwrap_or(false);
-            let stats = diff_stats.get(&id);
 
             WorkspaceSummary {
                 workspace_id: id,
                 latest_session_id: latest.map(|p| p.session_id),
                 has_pending_approval: has_pending,
-                files_changed: stats.map(|s| s.files_changed),
-                lines_added: stats.map(|s| s.lines_added),
-                lines_removed: stats.map(|s| s.lines_removed),
+                files_changed: None,
+                lines_added: None,
+                lines_removed: None,
                 latest_process_completed_at: latest.and_then(|p| p.completed_at),
                 latest_process_status: latest.map(|p| p.status.clone()),
                 has_running_dev_server: dev_server_workspaces.contains(&id),
@@ -165,6 +163,59 @@ pub async fn get_workspace_summaries(
 
     Ok(ResponseJson(ApiResponse::success(
         WorkspaceSummaryResponse { summaries },
+    )))
+}
+
+/// Compute git diff stats for an explicit workspace list (sidebar lazy load).
+#[axum::debug_handler]
+pub async fn get_workspace_diff_stats(
+    State(deployment): State<DeploymentImpl>,
+    Json(request): Json<WorkspaceDiffStatsRequest>,
+) -> Result<ResponseJson<ApiResponse<WorkspaceDiffStatsResponse>>, ApiError> {
+    let mut workspace_ids: Vec<Uuid> = request.workspace_ids;
+    workspace_ids.sort_unstable();
+    workspace_ids.dedup();
+    workspace_ids.truncate(MAX_DIFF_STATS_WORKSPACES);
+
+    if workspace_ids.is_empty() {
+        return Ok(ResponseJson(ApiResponse::success(
+            WorkspaceDiffStatsResponse { stats: vec![] },
+        )));
+    }
+
+    let requested: HashSet<Uuid> = workspace_ids.iter().copied().collect();
+    let pool = &deployment.db().pool;
+    let workspaces: Vec<Workspace> = Workspace::fetch_all(pool)
+        .await?
+        .into_iter()
+        .filter(|ws| requested.contains(&ws.id) && ws.container_ref.is_some())
+        .collect();
+
+    let diff_futures: Vec<_> = workspaces
+        .into_iter()
+        .map(|workspace| {
+            let deployment = deployment.clone();
+            async move {
+                compute_workspace_diff_stats(&deployment, &workspace)
+                    .await
+                    .map(|stats| WorkspaceDiffStatsEntry {
+                        workspace_id: workspace.id,
+                        files_changed: stats.files_changed,
+                        lines_added: stats.lines_added,
+                        lines_removed: stats.lines_removed,
+                    })
+            }
+        })
+        .collect();
+
+    let stats: Vec<WorkspaceDiffStatsEntry> = futures_util::future::join_all(diff_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
+
+    Ok(ResponseJson(ApiResponse::success(
+        WorkspaceDiffStatsResponse { stats },
     )))
 }
 

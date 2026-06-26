@@ -9,3 +9,17 @@ export const workspaceSummaryKeys = {
       archived ? 'archived' : 'active',
     ] as const,
 };
+
+export const workspaceDiffStatsKeys = {
+  byWorkspaceIds: (
+    archived: boolean,
+    hostId: string | null,
+    workspaceIds: readonly string[]
+  ) =>
+    [
+      'workspace-diff-stats',
+      getHostRequestScopeQueryKey(hostId),
+      archived ? 'archived' : 'active',
+      [...workspaceIds].sort().join(','),
+    ] as const,
+};

@@ -428,6 +428,12 @@ export type UpdateSession = { name: string | null, };
 
 export type WorkspaceSummaryRequest = { archived: boolean, };
 
+export type WorkspaceDiffStatsRequest = { workspace_ids: Array<string>, };
+
+export type WorkspaceDiffStatsEntry = { workspace_id: string, files_changed: number, lines_added: number, lines_removed: number, };
+
+export type WorkspaceDiffStatsResponse = { stats: Array<WorkspaceDiffStatsEntry>, };
+
 export type WorkspaceSummary = { workspace_id: string, 
 /**
  * Session ID of the latest execution process

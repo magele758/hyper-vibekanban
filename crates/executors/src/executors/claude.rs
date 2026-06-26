@@ -1275,7 +1275,7 @@ impl ClaudeLogProcessor {
                             patches.push(add_system_message(status.clone(), entry_index_provider));
                         }
                     }
-                    Some("compact_boundary") => {}
+                    Some("compact_boundary") | Some("thinking_tokens") => {}
                     Some("task_started") => {
                         if let Some(tool_use_id) = tool_use_id
                             && !self.tool_map.contains_key(tool_use_id)
@@ -2323,6 +2323,8 @@ pub enum ClaudeJson {
         parent_tool_use_id: Option<String>,
         #[serde(default)]
         uuid: Option<String>,
+        #[serde(default, rename = "ttft_ms")]
+        ttft_ms: Option<u64>,
     },
     Result {
         #[serde(default)]
@@ -2396,6 +2398,7 @@ pub struct ClaudeMessage {
     pub message_type: Option<String>,
     pub role: String,
     pub model: Option<String>,
+    #[serde(default)]
     pub content: ClaudeMessageContent,
     pub stop_reason: Option<String>,
 }
@@ -2405,6 +2408,12 @@ pub struct ClaudeMessage {
 pub enum ClaudeMessageContent {
     Array(Vec<ClaudeContentItem>),
     Text(String),
+}
+
+impl Default for ClaudeMessageContent {
+    fn default() -> Self {
+        Self::Array(Vec::new())
+    }
 }
 
 impl ClaudeMessageContent {
@@ -2982,6 +2991,30 @@ mod tests {
             patch_count > 0,
             "Expected JsonPatch messages to be generated from streaming processing"
         );
+    }
+
+    #[test]
+    fn test_kimi_stream_event_message_start_without_content() {
+        let stream_event_json = r#"{"parent_tool_use_id":null,"uuid":"c61afadc-6dc1-458a-be7c-d44a0a88950b","session_id":"455ab114-d2fc-4104-a16d-5bffcc973821","event":{"type":"message_start","message":{"id":"msg_1782452321185727485","type":"message","role":"assistant","model":"kimi-k2.7-code","usage":{"input_tokens":0,"output_tokens":0}}},"ttft_ms":5813,"type":"stream_event"}"#;
+        let parsed: ClaudeJson = serde_json::from_str(stream_event_json).unwrap();
+        assert!(matches!(parsed, ClaudeJson::StreamEvent { .. }));
+
+        let entries = normalize(&parsed, "");
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.content.contains("Unrecognized JSON message")),
+            "stream_event should parse cleanly, got: {:?}",
+            entries
+        );
+    }
+
+    #[test]
+    fn test_thinking_tokens_system_message_is_silent() {
+        let system_json = r#"{"type":"system","subtype":"thinking_tokens","session_id":"abc123"}"#;
+        let parsed: ClaudeJson = serde_json::from_str(system_json).unwrap();
+        let entries = normalize(&parsed, "");
+        assert_eq!(entries.len(), 0);
     }
 
     #[test]

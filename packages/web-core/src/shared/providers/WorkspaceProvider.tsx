@@ -2,7 +2,8 @@ import { ReactNode, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useWorkspaces } from '@/shared/hooks/useWorkspaces';
-import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
+import { markWorkspaceSeenInSummaryCache } from '@/shared/hooks/workspaceSummaryCache';
+import { useHostId } from '@/shared/providers/HostIdProvider';
 import { useWorkspaceRecord } from '@/shared/hooks/useWorkspaceRecord';
 import { useWorkspaceRepo } from '@/shared/hooks/useWorkspaceRepo';
 import { useWorkspaceSessions } from '@/shared/hooks/useWorkspaceSessions';
@@ -25,6 +26,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   const appNavigation = useAppNavigation();
   const currentDestination = useCurrentAppDestination();
   const queryClient = useQueryClient();
+  const hostId = useHostId();
 
   const isCreateMode = currentDestination?.kind === 'workspaces-create';
 
@@ -166,15 +168,12 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   useEffect(() => {
     if (!workspaceId || isCreateMode) return;
 
-    workspacesApi
-      .markSeen(workspaceId)
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: workspaceSummaryKeys.all });
-      })
-      .catch((error) => {
-        console.warn('Failed to mark workspace as seen:', error);
-      });
-  }, [workspaceId, isCreateMode, queryClient]);
+    markWorkspaceSeenInSummaryCache(queryClient, workspaceId, hostId);
+
+    workspacesApi.markSeen(workspaceId).catch((error) => {
+      console.warn('Failed to mark workspace as seen:', error);
+    });
+  }, [workspaceId, isCreateMode, queryClient, hostId]);
 
   const selectWorkspace = useCallback(
     (id: string) => {

@@ -1,7 +1,10 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
-import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
+import {
+  workspaceSummaryKeys,
+  workspaceDiffStatsKeys,
+} from '@/shared/hooks/workspaceSummaryKeys';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import { useHostId } from '@/shared/providers/HostIdProvider';
@@ -13,6 +16,7 @@ import type {
   WorkspaceWithStatus,
   WorkspaceSummary,
   WorkspaceSummaryResponse,
+  WorkspaceDiffStatsResponse,
   ApiResponse,
 } from 'shared/types';
 
@@ -59,7 +63,12 @@ type WorkspacesState = {
 // Transform WorkspaceWithStatus to SidebarWorkspace, optionally merging summary data
 function toSidebarWorkspace(
   ws: WorkspaceWithStatus,
-  summary?: WorkspaceSummary
+  summary?: WorkspaceSummary,
+  diffStats?: {
+    files_changed: number;
+    lines_added: number;
+    lines_removed: number;
+  }
 ): SidebarWorkspace {
   return {
     id: ws.id,
@@ -68,10 +77,11 @@ function toSidebarWorkspace(
     createdAt: ws.created_at,
     updatedAt: ws.updated_at,
     description: '',
-    // Use real stats from summary if available
-    filesChanged: summary?.files_changed ?? undefined,
-    linesAdded: summary?.lines_added ?? undefined,
-    linesRemoved: summary?.lines_removed ?? undefined,
+    filesChanged:
+      diffStats?.files_changed ?? summary?.files_changed ?? undefined,
+    linesAdded: diffStats?.lines_added ?? summary?.lines_added ?? undefined,
+    linesRemoved:
+      diffStats?.lines_removed ?? summary?.lines_removed ?? undefined,
     // Real data from stream
     isRunning: ws.is_running,
     isPinned: ws.pinned,
@@ -128,6 +138,58 @@ async function fetchWorkspaceSummariesByArchived(
     return map;
   } catch (err) {
     console.warn('Error fetching workspace summaries:', err);
+    return new Map();
+  }
+}
+
+async function fetchWorkspaceDiffStats(
+  workspaceIds: string[],
+  hostId: string | null
+): Promise<
+  Map<
+    string,
+    { files_changed: number; lines_added: number; lines_removed: number }
+  >
+> {
+  if (workspaceIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const basePath = hostId ? `/api/host/${hostId}` : '/api';
+    const response = await makeLocalApiRequest(
+      `${basePath}/workspaces/diff-stats`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspace_ids: workspaceIds }),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn('Failed to fetch workspace diff stats:', response.status);
+      return new Map();
+    }
+
+    const data: ApiResponse<WorkspaceDiffStatsResponse> = await response.json();
+    if (!data.success || !data.data?.stats) {
+      return new Map();
+    }
+
+    const map = new Map<
+      string,
+      { files_changed: number; lines_added: number; lines_removed: number }
+    >();
+    for (const entry of data.data.stats) {
+      map.set(entry.workspace_id, {
+        files_changed: entry.files_changed,
+        lines_added: entry.lines_added,
+        lines_removed: entry.lines_removed,
+      });
+    }
+    return map;
+  } catch (err) {
+    console.warn('Error fetching workspace diff stats:', err);
     return new Map();
   }
 }
@@ -205,6 +267,43 @@ export function useWorkspaces(): UseWorkspacesResult {
       placeholderData: keepPreviousData,
     });
 
+  const activeWorkspaceIds = useMemo(
+    () => Object.keys(activeData?.workspaces ?? {}).sort(),
+    [activeData?.workspaces]
+  );
+  const archivedWorkspaceIds = useMemo(
+    () => Object.keys(archivedData?.workspaces ?? {}).sort(),
+    [archivedData?.workspaces]
+  );
+
+  const { data: activeDiffStats = new Map() } = useQuery({
+    queryKey: workspaceDiffStatsKeys.byWorkspaceIds(
+      false,
+      streamHostId,
+      activeWorkspaceIds
+    ),
+    queryFn: () => fetchWorkspaceDiffStats(activeWorkspaceIds, streamHostId),
+    enabled: activeIsInitialized && activeWorkspaceIds.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
+
+  const { data: archivedDiffStats = new Map() } = useQuery({
+    queryKey: workspaceDiffStatsKeys.byWorkspaceIds(
+      true,
+      streamHostId,
+      archivedWorkspaceIds
+    ),
+    queryFn: () => fetchWorkspaceDiffStats(archivedWorkspaceIds, streamHostId),
+    enabled: archivedIsInitialized && archivedWorkspaceIds.length > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
+
   const workspaces = useMemo(() => {
     if (!activeData?.workspaces) return [];
     return Object.values(activeData.workspaces)
@@ -218,8 +317,14 @@ export function useWorkspaces(): UseWorkspacesResult {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
       })
-      .map((ws) => toSidebarWorkspace(ws, activeSummaries.get(ws.id)));
-  }, [activeData, activeSummaries]);
+      .map((ws) =>
+        toSidebarWorkspace(
+          ws,
+          activeSummaries.get(ws.id),
+          activeDiffStats.get(ws.id)
+        )
+      );
+  }, [activeData, activeSummaries, activeDiffStats]);
 
   const archivedWorkspaces = useMemo(() => {
     if (!archivedData?.workspaces) return [];
@@ -234,8 +339,14 @@ export function useWorkspaces(): UseWorkspacesResult {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
       })
-      .map((ws) => toSidebarWorkspace(ws, archivedSummaries.get(ws.id)));
-  }, [archivedData, archivedSummaries]);
+      .map((ws) =>
+        toSidebarWorkspace(
+          ws,
+          archivedSummaries.get(ws.id),
+          archivedDiffStats.get(ws.id)
+        )
+      );
+  }, [archivedData, archivedSummaries, archivedDiffStats]);
 
   // isLoading is true when we haven't received initial data from either stream
   const isLoading =
