@@ -6,8 +6,8 @@ use std::{
 use serde_json::Value;
 
 use crate::executors::opencode::{
-    sdk::{EventStreamContext, list_providers},
-    types::{MessageRole, OpencodeExecutorEvent, ProviderListResponse, SdkEvent},
+    sdk::{EventStreamContext, list_config_providers},
+    types::{MessageRole, OpencodeExecutorEvent, ProviderInfo, SdkEvent},
 };
 
 type ProviderId = String;
@@ -155,9 +155,11 @@ pub(super) async fn maybe_emit_token_usage(context: &EventStreamContext<'_>, eve
         .await;
 }
 
-pub(super) fn extract_context_windows(data: &ProviderListResponse) -> ModelContextWindows {
+pub(super) fn extract_context_windows_from_config(
+    providers: &[ProviderInfo],
+) -> ModelContextWindows {
     let mut windows = ModelContextWindows::new();
-    for provider in &data.all {
+    for provider in providers {
         for (model_id, info) in &provider.models {
             if info.limit.context > 0 {
                 windows.insert((provider.id.clone(), model_id.clone()), info.limit.context);
@@ -178,12 +180,12 @@ async fn fetch_model_context_windows(
     base_url: &str,
     directory: &str,
 ) -> Option<ModelContextWindows> {
-    let parsed = match list_providers(client, base_url, directory).await {
+    let parsed = match list_config_providers(client, base_url, directory).await {
         Ok(p) => p,
         Err(err) => {
-            tracing::debug!("OpenCode provider list request failed: {err}");
+            tracing::debug!("OpenCode config providers request failed: {err}");
             return None;
         }
     };
-    Some(extract_context_windows(&parsed))
+    Some(extract_context_windows_from_config(&parsed.providers))
 }

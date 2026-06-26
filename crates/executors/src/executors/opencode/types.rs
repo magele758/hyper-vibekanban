@@ -468,6 +468,7 @@ pub(super) struct ProviderInfo {
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ProviderListResponse {
+    #[allow(dead_code)]
     pub all: Vec<ProviderInfo>,
     #[serde(default)]
     pub connected: Vec<String>,

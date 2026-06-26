@@ -35,7 +35,7 @@ pub(crate) mod types;
 
 use sdk::{
     AgentInfo as SDKAgentInfo, LogWriter, RunConfig, build_authenticated_client,
-    generate_server_password, list_agents, list_commands, list_providers, run_session,
+    generate_server_password, list_agents, list_commands, list_config_providers, run_session,
     run_slash_command,
 };
 use slash_commands::{OpencodeSlashCommand, hardcoded_slash_commands};
@@ -626,7 +626,7 @@ impl StandardCodingAgentExecutor for Opencode {
             let base_url = server.base_url.clone();
             let directory_str = directory.to_string();
 
-            let providers_future = list_providers(&client, &base_url, &directory_str);
+            let providers_future = list_config_providers(&client, &base_url, &directory_str);
             let agents_future = list_agents(&client, &base_url, &directory_str);
             let commands_future = list_commands(&client, &base_url, &directory_str);
 
@@ -656,13 +656,12 @@ impl StandardCodingAgentExecutor for Opencode {
                 Ok(data) => {
                     models::seed_context_windows_cache(
                         &cmd_key_for_discovery,
-                        models::extract_context_windows(&data),
+                        models::extract_context_windows_from_config(&data.providers),
                     );
 
                     final_options.model_selector.providers = data
-                        .all
+                        .providers
                         .iter()
-                        .filter(|p| data.connected.contains(&p.id))
                         .map(|p| ModelProvider {
                             id: p.id.clone(),
                             name: p.name.clone(),
@@ -670,11 +669,29 @@ impl StandardCodingAgentExecutor for Opencode {
                         .collect();
 
                     final_options.model_selector.models = data
-                        .all
+                        .providers
                         .iter()
-                        .filter(|p| data.connected.contains(&p.id))
                         .flat_map(|p| this.transform_models(&p.models, &p.id))
                         .collect();
+
+                    // Derive a default model from the provider config if the server
+                    // did not report one via /config. This mirrors `opencode models`,
+                    // which sources available models from the user's configured providers.
+                    if final_options.model_selector.default_model.is_none() {
+                        let mut provider_ids: Vec<_> = data.default.keys().cloned().collect();
+                        provider_ids.sort();
+                        if let Some(provider_id) = provider_ids.first()
+                            && let Some(model_id) = data.default.get(provider_id)
+                        {
+                            final_options.model_selector.default_model =
+                                Some(format!("{provider_id}/{model_id}"));
+                        } else if let Some(provider) = data.providers.first()
+                            && let Some(model_id) = provider.models.keys().next()
+                        {
+                            final_options.model_selector.default_model =
+                                Some(format!("{}/{model_id}", provider.id));
+                        }
+                    }
 
                     yield patch::update_providers(final_options.model_selector.providers.clone());
                     yield patch::update_models(final_options.model_selector.models.clone());
@@ -687,11 +704,18 @@ impl StandardCodingAgentExecutor for Opencode {
 
             match config_result {
                 Ok(config) => {
-                    final_options.model_selector.default_model = config.model;
+                    // /config takes precedence; fall back to the default derived from
+                    // /config/providers when the server has no explicit default model.
+                    if config.model.is_some() {
+                        final_options.model_selector.default_model = config.model;
+                    }
                     yield patch::update_default_model(final_options.model_selector.default_model.clone());
                 }
                 Err(e) => {
                     tracing::warn!("Failed to fetch OpenCode config: {}", e);
+                    if final_options.model_selector.default_model.is_some() {
+                        yield patch::update_default_model(final_options.model_selector.default_model.clone());
+                    }
                 }
             }
 
