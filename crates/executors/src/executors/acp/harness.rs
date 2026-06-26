@@ -11,14 +11,13 @@ use command_group::AsyncGroupChild;
 use futures::StreamExt;
 use tokio::{io::AsyncWriteExt, process::Command, sync::mpsc};
 use tokio_util::{
+    codec::{FramedRead, LinesCodec},
     compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt},
-    io::ReaderStream,
+    io::{ReaderStream, StreamReader},
     sync::CancellationToken,
 };
 use tracing::error;
-use workspace_utils::{
-    approvals::ApprovalStatus, command_ext::GroupSpawnNoWindowExt, stream_lines::LinesStreamExt,
-};
+use workspace_utils::{approvals::ApprovalStatus, command_ext::GroupSpawnNoWindowExt};
 
 use super::{AcpClient, SessionManager};
 use crate::{
@@ -257,9 +256,9 @@ impl AcpAgentHarness {
         let stdin_shutdown_rx = shutdown_rx.clone();
         tokio::spawn(async move {
             let mut child_stdin = orig_stdin;
-            let mut lines = ReaderStream::new(acp_out_reader)
-                .map(|res| res.map(|bytes| String::from_utf8_lossy(&bytes).into_owned()))
-                .lines();
+            let byte_stream = ReaderStream::new(acp_out_reader);
+            let reader = StreamReader::new(byte_stream);
+            let mut lines = FramedRead::new(reader, LinesCodec::new());
             while let Some(result) = lines.next().await {
                 if *stdin_shutdown_rx.borrow() {
                     break;

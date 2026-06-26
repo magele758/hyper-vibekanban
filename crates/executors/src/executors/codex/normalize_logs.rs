@@ -41,6 +41,7 @@ use workspace_utils::{
     diff::normalize_unified_diff,
     msg_store::MsgStore,
     path::make_path_relative,
+    utf8_chunk_decoder::Utf8ChunkDecoder,
 };
 
 use crate::{
@@ -84,11 +85,20 @@ struct CommandState {
     command: String,
     stdout: String,
     stderr: String,
+    stdout_decoder: Utf8ChunkDecoder,
+    stderr_decoder: Utf8ChunkDecoder,
     formatted_output: Option<String>,
     status: ToolStatus,
     exit_code: Option<i32>,
     awaiting_approval: bool,
     call_id: String,
+}
+
+impl CommandState {
+    fn flush_output_decoders(&mut self) {
+        self.stdout.push_str(&self.stdout_decoder.finish());
+        self.stderr.push_str(&self.stderr_decoder.finish());
+    }
 }
 
 impl ToNormalizedEntry for CommandState {
@@ -1767,13 +1777,9 @@ pub fn normalize_logs(
                         CommandState {
                             index: None,
                             command: command_text,
-                            stdout: String::new(),
-                            stderr: String::new(),
-                            formatted_output: None,
                             status: ToolStatus::Created,
-                            exit_code: None,
-                            awaiting_approval: false,
                             call_id: call_id.clone(),
+                            ..Default::default()
                         },
                     );
                     let command_state = state.commands.get_mut(&call_id).unwrap();
@@ -1790,14 +1796,17 @@ pub fn normalize_logs(
                     chunk,
                 }) => {
                     if let Some(command_state) = state.commands.get_mut(&call_id) {
-                        let chunk = String::from_utf8_lossy(&chunk);
-                        if chunk.is_empty() {
+                        let decoded = match stream {
+                            ExecOutputStream::Stdout => command_state.stdout_decoder.push(&chunk),
+                            ExecOutputStream::Stderr => command_state.stderr_decoder.push(&chunk),
+                        };
+                        if decoded.is_empty() {
                             continue;
                         }
                         match stream {
-                            ExecOutputStream::Stdout => command_state.stdout.push_str(&chunk),
-                            ExecOutputStream::Stderr => command_state.stderr.push_str(&chunk),
-                        }
+                            ExecOutputStream::Stdout => command_state.stdout.push_str(&decoded),
+                            ExecOutputStream::Stderr => command_state.stderr.push_str(&decoded),
+                        };
                         let Some(index) = command_state.index else {
                             tracing::error!("missing entry index for existing command state");
                             continue;
@@ -1827,6 +1836,7 @@ pub fn normalize_logs(
                     ..
                 }) => {
                     if let Some(mut command_state) = state.commands.remove(&call_id) {
+                        command_state.flush_output_decoders();
                         command_state.formatted_output = Some(formatted_output);
                         command_state.exit_code = Some(exit_code);
                         command_state.awaiting_approval = false;

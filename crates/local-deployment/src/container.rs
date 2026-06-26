@@ -57,6 +57,7 @@ use utils::{
     log_msg::LogMsg,
     msg_store::MsgStore,
     text::{git_branch_id, short_uuid, truncate_to_char_boundary},
+    utf8_chunk_decoder::Utf8DecodeStream,
 };
 use uuid::Uuid;
 use workspace_manager::{RepoWorkspaceInput, WorkspaceError, WorkspaceManager};
@@ -866,13 +867,9 @@ impl LocalContainerService {
         let out = child.inner().stdout.take().expect("no stdout");
         let err = child.inner().stderr.take().expect("no stderr");
 
-        // Map stdout bytes -> LogMsg::Stdout
-        let out = ReaderStream::new(out)
-            .map_ok(|chunk| LogMsg::Stdout(String::from_utf8_lossy(&chunk).into_owned()));
-
-        // Map stderr bytes -> LogMsg::Stderr
-        let err = ReaderStream::new(err)
-            .map_ok(|chunk| LogMsg::Stderr(String::from_utf8_lossy(&chunk).into_owned()));
+        // Map stdout/stderr bytes -> LogMsg, preserving UTF-8 across chunk boundaries.
+        let out = Utf8DecodeStream::new(ReaderStream::new(out)).map_ok(LogMsg::Stdout);
+        let err = Utf8DecodeStream::new(ReaderStream::new(err)).map_ok(LogMsg::Stderr);
 
         // If you have a JSON Patch source, map it to LogMsg::JsonPatch too, then select all three.
 
