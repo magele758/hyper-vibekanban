@@ -117,6 +117,13 @@ export function resolveScrollIntent(
     return { type: 'initial-bottom', purgeEstimatedSizes: true };
   }
 
+  // Background history batches prepend older messages above the viewport.
+  // Explicit follow-bottom on each batch fights the bottom-lock correction
+  // loop and causes visible jitter when entering a workspace.
+  if (addType === 'historic') {
+    return { type: 'preserve-anchor' };
+  }
+
   if (addType === 'plan') {
     return isAtBottom
       ? { type: 'plan-reveal', align: 'start' }
@@ -146,7 +153,7 @@ export function shouldAutoFollow(
   addType: AddEntryType
 ): boolean {
   if (!state.isAtBottom) return false;
-  if (addType === 'plan') return false;
+  if (addType === 'plan' || addType === 'historic') return false;
   return true;
 }
 

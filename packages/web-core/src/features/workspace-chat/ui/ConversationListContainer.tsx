@@ -174,7 +174,6 @@ export const ConversationList = forwardRef<
     source: ConversationTimelineSource;
     addType: AddEntryType;
     loading: boolean;
-    isInitialLoad: boolean;
   } | null>(null);
   // rAF throttle: at most one state update per animation frame.
   // Replaces the previous 100ms trailing debounce which never fired during
@@ -191,6 +190,7 @@ export const ConversationList = forwardRef<
   } | null>(null);
   const pendingInteractionAnchorFrameRef = useRef<number | null>(null);
   const pendingInteractionAnchorDeadlineRef = useRef(0);
+  const initialScrollAppliedRef = useRef(false);
 
   // Use ref to access current repos without causing callback recreation
   const reposRef = useRef(repos);
@@ -245,6 +245,7 @@ export const ConversationList = forwardRef<
     setFilteredEntries([]);
     setDataVersion(0);
     lastSettledTailStartIndexRef.current = null;
+    initialScrollAppliedRef.current = false;
     reset();
   }, [conversationScopeKey, reset]);
 
@@ -359,7 +360,17 @@ export const ConversationList = forwardRef<
     setDataVersion((current) => current + 1);
     setEntries(derivedEntries.entries);
 
-    scrollOnEntriesChangedRef.current?.(pending.addType, pending.isInitialLoad);
+    let isInitialLoad = false;
+    if (
+      !initialScrollAppliedRef.current &&
+      pending.addType === 'initial' &&
+      !pending.loading
+    ) {
+      initialScrollAppliedRef.current = true;
+      isInitialLoad = derivedTimeline.displayEntries.length > 0;
+    }
+
+    scrollOnEntriesChangedRef.current?.(pending.addType, isInitialLoad);
 
     if (loading) {
       setLoading(pending.loading);
@@ -375,7 +386,6 @@ export const ConversationList = forwardRef<
       source,
       addType,
       loading: newLoading,
-      isInitialLoad: addType === 'initial',
     };
 
     if (rafIdRef.current === null) {
@@ -760,6 +770,29 @@ export const ConversationList = forwardRef<
             <SpinnerIcon className="size-6 animate-spin text-low" />
           </div>
         )}
+        {isLoadingHistory && !showLoader && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex flex-col items-center gap-2 px-double">
+            <div className="flex w-full max-w-md flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-2.5 w-16 animate-pulse rounded-full bg-foreground/10" />
+                <div className="h-2.5 flex-1 animate-pulse rounded-full bg-foreground/[0.06]" />
+              </div>
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-2.5 w-24 animate-pulse rounded-full bg-foreground/[0.07]"
+                  style={{ animationDelay: '150ms' }}
+                />
+                <div
+                  className="h-2.5 w-32 animate-pulse rounded-full bg-foreground/[0.05]"
+                  style={{ animationDelay: '150ms' }}
+                />
+              </div>
+            </div>
+            <span className="text-xs text-low">
+              {t('conversation.loadingEarlierMessages')}
+            </span>
+          </div>
+        )}
         <div
           ref={tanstackScrollRef}
           className="h-full overflow-y-auto scrollbar-none"
@@ -776,30 +809,6 @@ export const ConversationList = forwardRef<
               </div>
             )}
           </div>
-
-          {isLoadingHistory && !showLoader && (
-            <div className="flex flex-col items-center gap-2 px-double py-3">
-              <div className="flex w-full max-w-md flex-col gap-1.5">
-                <div className="flex items-center gap-2">
-                  <div className="h-2.5 w-16 animate-pulse rounded-full bg-foreground/10" />
-                  <div className="h-2.5 flex-1 animate-pulse rounded-full bg-foreground/[0.06]" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-2.5 w-24 animate-pulse rounded-full bg-foreground/[0.07]"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                  <div
-                    className="h-2.5 w-32 animate-pulse rounded-full bg-foreground/[0.05]"
-                    style={{ animationDelay: '150ms' }}
-                  />
-                </div>
-              </div>
-              <span className="text-xs text-low">
-                {t('conversation.loadingEarlierMessages')}
-              </span>
-            </div>
-          )}
 
           {showEmptyState && (
             <div className="flex min-h-full items-center justify-center px-double py-12">
