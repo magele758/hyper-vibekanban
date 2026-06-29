@@ -1426,6 +1426,21 @@ impl ContainerService for LocalContainerService {
         env.insert("VK_WORKSPACE_ID", workspace.id.to_string());
         env.insert("VK_WORKSPACE_BRANCH", &workspace.branch);
 
+        // Keep agent cargo builds in the workspace repo's own target/ so they never
+        // contend with the main dev stack's cargo watch (shared target/ race).
+        if !env.contains_key("CARGO_TARGET_DIR")
+            && let Some(repo_path) = env
+                .repo_context
+                .repo_paths()
+                .into_iter()
+                .find(|path| path.join("Cargo.toml").exists())
+        {
+            env.insert(
+                "CARGO_TARGET_DIR",
+                repo_path.join("target").to_string_lossy().to_string(),
+            );
+        }
+
         // Create the child and stream, add to execution tracker with timeout
         let mut spawned = tokio::time::timeout(
             Duration::from_secs(30),

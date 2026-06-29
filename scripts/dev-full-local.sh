@@ -39,6 +39,10 @@ echo "Local web:   see .dev-ports.json after start"
 echo "Login:       admin@local.dev / devpass123 (SELF_HOST on remote-web)"
 echo ""
 
+# shellcheck source=vk-dev-lib.sh
+source "${ROOT}/scripts/vk-dev-lib.sh"
+vk_configure_dev_cargo_target
+
 export VK_DEV_HOST="${VK_BIND_ADDR}"
 export FRONTEND_PORT="${FRONTEND_PORT:-${VK_FRONTEND_PORT}}"
 export BACKEND_PORT="${BACKEND_PORT:-${VK_BACKEND_PORT}}"

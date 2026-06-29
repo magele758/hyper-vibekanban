@@ -6,6 +6,14 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/vk-ports.sh"
 
 # Local state lives outside any git checkout so multiple clones (e.g. vibe-kanban +
 # hyper-vibekanban) share one SQLite DB, session logs, credentials, and keys.
+# Main dev stack (13001/13002) uses its own cargo target dir so workspace agents
+# running `cargo build/check` in a worktree never corrupt or lock the dev target/.
+vk_configure_dev_cargo_target() {
+  local state_dir="${VK_STATE_DIR:-${HOME}/.vk-kanban}"
+  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${VK_DEV_CARGO_TARGET_DIR:-${state_dir}/cargo-target-main}}"
+  mkdir -p "${CARGO_TARGET_DIR}"
+}
+
 vk_configure_asset_dir() {
   local root="${1:?root required}"
   local state_dir="${VK_STATE_DIR:-${HOME}/.vk-kanban}"

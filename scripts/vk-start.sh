@@ -259,6 +259,7 @@ else
         CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_HOST_AUTH_ENV_VAR 2>/dev/null || true
   export VK_ASSET_DIR VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
   export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL VITE_TAILSCALE_RELAY_HTTPS_PORT
+  vk_configure_dev_cargo_target
   touch crates/server/build.rs crates/local-deployment/build.rs
   dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log")"
   echo "${dev_pid}" > "${PID_DIR}/dev.pid"

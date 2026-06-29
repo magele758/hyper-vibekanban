@@ -117,7 +117,7 @@ cmd_up() {
     local BE_PORT="$((slot+1))"
     local PP_PORT="$((slot+2))"
 
-    mkdir -p "$ASSETS_DIR" "$TMP_DIR" "$PIDS_DIR" "$LOGS_DIR"
+    mkdir -p "$ASSETS_DIR" "$TMP_DIR" "$PIDS_DIR" "$LOGS_DIR" "${TEST_DIR}/cargo-target"
 
     # Persist chosen ports so status/logs can read them without a live server.
     cat >"$PORTS_FILE" <<EOF
@@ -143,6 +143,7 @@ EOF
     env \
         VK_ASSET_DIR="$ASSETS_DIR" \
         TMPDIR="$TMP_DIR" \
+        CARGO_TARGET_DIR="${TEST_DIR}/cargo-target" \
         DISABLE_WORKTREE_CLEANUP=1 \
         BACKEND_PORT="$BE_PORT" \
         PREVIEW_PROXY_PORT="$PP_PORT" \
