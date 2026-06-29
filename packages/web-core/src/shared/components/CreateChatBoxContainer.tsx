@@ -14,7 +14,7 @@ import {
   toPrettyCase,
   splitMessageToTitleDescription,
 } from '@/shared/lib/string';
-import type { BaseCodingAgent, Repo } from 'shared/types';
+import type { BaseCodingAgent, Repo, WorkspaceKind } from 'shared/types';
 import { CreateChatBox } from '@vibe/ui/components/CreateChatBox';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { CreateModeRepoPickerBar } from './CreateModeRepoPickerBar';
@@ -63,6 +63,18 @@ export function CreateChatBoxContainer({
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [hasInitializedStep, setHasInitializedStep] = useState(false);
   const [isSelectingRepos, setIsSelectingRepos] = useState(true);
+  // Workspace kind selector. The UI exposes two modes; `in_place` still exists
+  // in the API/backend but is intentionally not surfaced here.
+  //   - worktree: isolated git worktree, new vk/ branch, auto-commits (default).
+  //   - console:  runs in the repo's own working tree on its CURRENT branch,
+  //               never creates a branch or auto-commits (ops control plane).
+  // Console requires exactly one repository.
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceKind>('worktree');
+  const repoDirModeAvailable = repos.length === 1;
+  const effectiveMode: WorkspaceKind =
+    workspaceMode !== 'worktree' && !repoDirModeAvailable
+      ? 'worktree'
+      : workspaceMode;
 
   useEffect(() => {
     if (!hasInitialValue || hasInitializedStep) return;
@@ -241,6 +253,7 @@ export function CreateChatBoxContainer({
           }
         : null,
       attachment_ids: getAttachmentIds(),
+      kind: effectiveMode,
     };
     const linkToIssue = linkedIssue
       ? {
@@ -278,6 +291,7 @@ export function CreateChatBoxContainer({
     clearAttachments,
     clearDraft,
     linkedIssue,
+    effectiveMode,
   ]);
 
   // Determine error to display
@@ -318,6 +332,44 @@ export function CreateChatBoxContainer({
               <h2 className="mb-double text-center text-4xl font-medium tracking-tight text-high">
                 {t('createMode.headings.chatStep')}
               </h2>
+
+              {repoDirModeAvailable && (
+                <div className="mb-base flex flex-col items-center gap-half">
+                  <label className="flex items-center gap-half text-sm text-mid">
+                    <span>
+                      {t('createMode.mode.label', {
+                        defaultValue: 'Where should the agent run?',
+                      })}
+                    </span>
+                    <select
+                      className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high"
+                      value={effectiveMode}
+                      onChange={(e) =>
+                        setWorkspaceMode(e.target.value as WorkspaceKind)
+                      }
+                    >
+                      <option value="worktree">
+                        {t('createMode.mode.worktree', {
+                          defaultValue: 'Isolated worktree (default)',
+                        })}
+                      </option>
+                      <option value="console">
+                        {t('createMode.mode.console', {
+                          defaultValue: 'Main directory console (current branch)',
+                        })}
+                      </option>
+                    </select>
+                  </label>
+                  {effectiveMode === 'console' && (
+                    <p className="text-center text-xs text-low">
+                      {t('createMode.console.warning', {
+                        defaultValue:
+                          'The agent runs directly in your repo’s current directory and branch. It will not create a branch or commit for you — you stay in control of commits.',
+                      })}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-center @container">
                 <CreateChatBox

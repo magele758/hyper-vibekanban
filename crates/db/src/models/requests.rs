@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use super::{execution_process::ExecutionProcess, workspace::Workspace};
+use super::{
+    execution_process::ExecutionProcess,
+    workspace::{Workspace, WorkspaceKind},
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ContainerQuery {
@@ -20,6 +23,8 @@ pub struct WorkspaceRepoInput {
 #[derive(Debug, Serialize, Deserialize, TS)]
 pub struct CreateWorkspaceApiRequest {
     pub name: Option<String>,
+    #[serde(default)]
+    pub kind: WorkspaceKind,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -36,6 +41,8 @@ pub struct CreateAndStartWorkspaceRequest {
     pub executor_config: ExecutorConfig,
     pub prompt: String,
     pub attachment_ids: Option<Vec<Uuid>>,
+    #[serde(default)]
+    pub kind: WorkspaceKind,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]

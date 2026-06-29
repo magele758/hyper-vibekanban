@@ -154,6 +154,16 @@ impl LocalContainerService {
                 branch,
                 repo_name
             )),
+            WorkspaceError::InPlaceRequiresSingleRepo(count) => ContainerError::Other(anyhow!(
+                "In-place workspaces support exactly one repository (found {})",
+                count
+            )),
+            WorkspaceError::InPlaceDirtyWorkingTree { repo_name } => {
+                ContainerError::Other(anyhow!(
+                    "Repository '{}' has uncommitted changes; commit or stash them before starting an in-place workspace",
+                    repo_name
+                ))
+            }
             WorkspaceError::PartialCreation(msg) => ContainerError::Other(anyhow!(msg)),
         }
     }
@@ -250,17 +260,25 @@ impl LocalContainerService {
             .unwrap_or_default();
 
         if repositories.is_empty() {
-            tracing::warn!(
-                "No repositories found for workspace {}, cleaning up workspace directory only",
-                workspace.id
-            );
-            if workspace_dir.exists()
-                && let Err(e) = tokio::fs::remove_dir_all(&workspace_dir).await
-            {
-                tracing::warn!("Failed to remove workspace directory: {}", e);
+            // For repo-working-tree workspaces, workspace_dir IS the user's repo — never delete it.
+            if workspace.kind.uses_repo_working_tree() {
+                tracing::warn!(
+                    "No repositories found for repo-working-tree workspace {}, skipping filesystem cleanup to protect the repo",
+                    workspace.id
+                );
+            } else {
+                tracing::warn!(
+                    "No repositories found for workspace {}, cleaning up workspace directory only",
+                    workspace.id
+                );
+                if workspace_dir.exists()
+                    && let Err(e) = tokio::fs::remove_dir_all(&workspace_dir).await
+                {
+                    tracing::warn!("Failed to remove workspace directory: {}", e);
+                }
             }
         } else {
-            WorkspaceManager::cleanup_workspace(&workspace_dir, &repositories)
+            WorkspaceManager::cleanup_workspace(&workspace_dir, &repositories, workspace.kind)
                 .await
                 .unwrap_or_else(|e| {
                     tracing::warn!(
@@ -283,6 +301,15 @@ impl LocalContainerService {
         }
 
         let expired_workspaces = Workspace::find_expired_for_cleanup(&self.db.pool).await?;
+        // Repo-working-tree workspaces (InPlace/Console) are backed by the user's own
+        // repo. Time-based expiry must never touch them: there is no worktree to
+        // reclaim, and marking `worktree_deleted` would misrepresent state (and, for
+        // in-place, strand the repo on the vk branch). They are only torn down through
+        // explicit deletion.
+        let expired_workspaces: Vec<_> = expired_workspaces
+            .into_iter()
+            .filter(|workspace| !workspace.kind.uses_repo_working_tree())
+            .collect();
         if expired_workspaces.is_empty() {
             tracing::debug!("No expired workspaces found");
             return Ok(());
@@ -327,7 +354,10 @@ impl LocalContainerService {
         if let Ok(ctx) = ExecutionProcess::load_context(&self.db.pool, exec_id).await {
             let workspace_root = self.workspace_to_current_dir(&ctx.workspace);
             for repo in &ctx.repos {
-                let repo_path = workspace_root.join(&repo.name);
+                let repo_path = ctx
+                    .workspace
+                    .kind
+                    .repo_working_path(&workspace_root, &repo.name);
                 if let Ok(head) = self.git().get_head_info(&repo_path) {
                     let _ = ExecutionProcessRepoState::update_after_head_commit(
                         &self.db.pool,
@@ -390,6 +420,7 @@ impl LocalContainerService {
     /// Check which repos have uncommitted changes. Fails if any repo is inaccessible.
     fn check_repos_for_changes(
         &self,
+        workspace: &Workspace,
         workspace_root: &Path,
         repos: &[Repo],
     ) -> Result<Vec<(Repo, PathBuf)>, ContainerError> {
@@ -397,7 +428,7 @@ impl LocalContainerService {
         let mut repos_with_changes = Vec::new();
 
         for repo in repos {
-            let worktree_path = workspace_root.join(&repo.name);
+            let worktree_path = workspace.kind.repo_working_path(workspace_root, &repo.name);
 
             match git.get_worktree_status(&worktree_path) {
                 Ok(ws) if !ws.entries.is_empty() => {
@@ -432,7 +463,10 @@ impl LocalContainerService {
         .await?;
 
         for repo in &ctx.repos {
-            let repo_path = workspace_root.join(&repo.name);
+            let repo_path = ctx
+                .workspace
+                .kind
+                .repo_working_path(&workspace_root, &repo.name);
             let current_head = self.git().get_head_info(&repo_path).ok().map(|h| h.oid);
 
             let before_head = repo_states
@@ -953,7 +987,12 @@ impl LocalContainerService {
             if let Some(copy_files) = &repo.copy_files
                 && !copy_files.trim().is_empty()
             {
-                let worktree_path = workspace_dir.join(&repo.name);
+                let worktree_path = workspace.kind.repo_working_path(workspace_dir, &repo.name);
+                // In-place workspaces run in the repo itself; there is no separate
+                // worktree to seed, so copying would target the repo onto itself.
+                if worktree_path == repo.path {
+                    continue;
+                }
                 self.copy_project_files(&repo.path, &worktree_path, copy_files)
                     .await
                     .unwrap_or_else(|e| {
@@ -988,10 +1027,19 @@ impl LocalContainerService {
     /// Create workspace-level CLAUDE.md and AGENTS.md files that import from each repo.
     /// Uses the @import syntax to reference each repo's config files.
     /// Skips creating files if they already exist or if no repos have the source file.
+    ///
+    /// No-op for repo-working-tree workspaces (InPlace/Console): there the workspace
+    /// dir is the repo itself, so writing an aggregating config file would pollute the
+    /// user's real working tree.
     async fn create_workspace_config_files(
+        workspace: &Workspace,
         workspace_dir: &Path,
         repos: &[Repo],
     ) -> Result<(), ContainerError> {
+        if workspace.kind.uses_repo_working_tree() {
+            return Ok(());
+        }
+
         const CONFIG_FILES: [&str; 2] = ["CLAUDE.md", "AGENTS.md"];
 
         for config_file in CONFIG_FILES {
@@ -1207,6 +1255,7 @@ impl ContainerService for LocalContainerService {
             &workspace_dir,
             &workspace_inputs,
             &workspace.branch,
+            workspace.kind,
         )
         .await
         .map_err(Self::map_workspace_manager_error)?;
@@ -1215,8 +1264,12 @@ impl ContainerService for LocalContainerService {
         self.copy_files_and_images(&created_workspace.workspace_dir, workspace)
             .await?;
 
-        Self::create_workspace_config_files(&created_workspace.workspace_dir, &repositories)
-            .await?;
+        Self::create_workspace_config_files(
+            workspace,
+            &created_workspace.workspace_dir,
+            &repositories,
+        )
+        .await?;
 
         Workspace::update_container_ref(
             &self.db.pool,
@@ -1246,6 +1299,14 @@ impl ContainerService for LocalContainerService {
 
         let workspace_dir = if let Some(container_ref) = &workspace.container_ref {
             PathBuf::from(container_ref)
+        } else if workspace.kind.uses_repo_working_tree() {
+            // InPlace/Console workspaces are backed by the repo's own working tree.
+            workspace_inputs
+                .first()
+                .map(|input| input.repo.path.clone())
+                .ok_or(ContainerError::Other(anyhow!(
+                    "Repo-working-tree workspace has no repository"
+                )))?
         } else {
             let label = workspace.name.as_deref().unwrap_or("workspace");
             let workspace_dir_name =
@@ -1257,6 +1318,7 @@ impl ContainerService for LocalContainerService {
             &workspace_dir,
             &workspace_inputs,
             &workspace.branch,
+            workspace.kind,
         )
         .await
         .map_err(Self::map_workspace_manager_error)?;
@@ -1278,7 +1340,7 @@ impl ContainerService for LocalContainerService {
         self.copy_files_and_images(&workspace_dir, workspace)
             .await?;
 
-        Self::create_workspace_config_files(&workspace_dir, &repositories).await?;
+        Self::create_workspace_config_files(workspace, &workspace_dir, &repositories).await?;
 
         Ok(workspace_dir.to_string_lossy().to_string())
     }
@@ -1297,7 +1359,7 @@ impl ContainerService for LocalContainerService {
             WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await?;
 
         for repo in &repositories {
-            let worktree_path = workspace_dir.join(&repo.name);
+            let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
             if worktree_path.exists() {
                 let (uncommitted, untracked) =
                     self.git().get_worktree_change_counts(&worktree_path)?;
@@ -1344,7 +1406,8 @@ impl ContainerService for LocalContainerService {
 
         let repos = WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await?;
         let repo_names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
-        let repo_context = RepoContext::new(current_dir.clone(), repo_names);
+        let repo_context = RepoContext::new(current_dir.clone(), repo_names)
+            .in_place(workspace.kind.uses_repo_working_tree());
 
         let config = self.config.read().await;
         let commit_reminder_enabled = config.commit_reminder_enabled;
@@ -1495,7 +1558,9 @@ impl ContainerService for LocalContainerService {
         let workspace_root = PathBuf::from(container_ref);
 
         for repo in repositories {
-            let worktree_path = workspace_root.join(&repo.name);
+            let worktree_path = workspace
+                .kind
+                .repo_working_path(&workspace_root, &repo.name);
             let branch = &workspace.branch;
 
             let Some(target_branch) = target_branches.get(&repo.id) else {
@@ -1549,6 +1614,13 @@ impl ContainerService for LocalContainerService {
     }
 
     async fn try_commit_changes(&self, ctx: &ExecutionContext) -> Result<bool, ContainerError> {
+        // Console workspaces are a control plane on the user's real working tree:
+        // we never commit on their behalf. The user decides what to commit.
+        if ctx.workspace.kind.is_console() {
+            tracing::debug!("Console workspace: skipping auto-commit (user-controlled)");
+            return Ok(false);
+        }
+
         if !matches!(
             ctx.execution_process.run_reason,
             ExecutionProcessRunReason::CodingAgent | ExecutionProcessRunReason::CleanupScript,
@@ -1565,7 +1637,8 @@ impl ContainerService for LocalContainerService {
             .ok_or_else(|| ContainerError::Other(anyhow!("Container reference not found")))?;
         let workspace_root = PathBuf::from(container_ref);
 
-        let repos_with_changes = self.check_repos_for_changes(&workspace_root, &ctx.repos)?;
+        let repos_with_changes =
+            self.check_repos_for_changes(&ctx.workspace, &workspace_root, &ctx.repos)?;
         if repos_with_changes.is_empty() {
             tracing::debug!("No changes to commit in any repository");
             return Ok(false);

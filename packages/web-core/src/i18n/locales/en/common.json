@@ -509,6 +509,19 @@
       "setupHint": "Tip: Configure setup scripts for this repository in Settings → Repositories",
       "setupHintDismiss": "Dismiss",
       "setupHintLink": "Configure in Settings"
+    },
+    "inPlace": {
+      "label": "Work in the repository directory (no worktree)",
+      "warning": "The agent runs on a new branch in your repo's own working tree. Commit or stash changes first; only one in-place workspace per repo at a time."
+    },
+    "mode": {
+      "label": "Where should the agent run?",
+      "worktree": "Isolated worktree (default)",
+      "inPlace": "In repo directory, new branch",
+      "console": "Main directory console (current branch)"
+    },
+    "console": {
+      "warning": "The agent runs directly in your repo's current directory and branch. It will not create a branch or commit for you — you stay in control of commits."
     }
   },
   "modelSelector": {

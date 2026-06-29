@@ -495,6 +495,19 @@
       "setupHint": "提示：在設定 → 儲存庫中為此儲存庫設定安裝腳本",
       "setupHintDismiss": "關閉",
       "setupHintLink": "Configure in Settings"
+    },
+    "inPlace": {
+      "label": "在儲存庫目錄中工作（不使用 worktree）",
+      "warning": "智慧代理會在你儲存庫自身的工作區中新建一個分支執行。請先提交或暫存變更；每個儲存庫同一時間只能有一個就地（in-place）工作區。"
+    },
+    "mode": {
+      "label": "智慧代理在哪裡執行？",
+      "worktree": "隔離的 worktree（預設）",
+      "inPlace": "在儲存庫目錄中，新建分支",
+      "console": "主目錄主控台（目前分支）"
+    },
+    "console": {
+      "warning": "智慧代理直接在你儲存庫的目前目錄和目前分支上執行。它不會替你新建分支或提交——是否提交由你決定。"
     }
   },
   "modelSelector": {

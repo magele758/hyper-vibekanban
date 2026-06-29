@@ -846,6 +846,39 @@ impl GitService {
         Ok(self.get_head_info(repo_path)?.branch)
     }
 
+    /// Check out `branch_name` directly in the repo's own working tree (in-place mode).
+    ///
+    /// If the branch already exists it is checked out as-is; otherwise it is created
+    /// from `base_branch` and checked out. Unlike worktree creation this mutates the
+    /// repo's HEAD and working tree, so callers must ensure the tree is clean first.
+    pub fn checkout_branch_in_place(
+        &self,
+        repo_path: &Path,
+        branch_name: &str,
+        base_branch: &str,
+    ) -> Result<(), GitServiceError> {
+        let git = GitCli::new();
+        if self.check_branch_exists(repo_path, branch_name)? {
+            git.git(repo_path, ["checkout", branch_name])?;
+        } else {
+            git.git(repo_path, ["checkout", "-b", branch_name, base_branch])?;
+        }
+        Ok(())
+    }
+
+    /// Restore the repo's working tree to `branch_name` (in-place teardown).
+    /// Best-effort: does not create the branch and never touches working-tree contents
+    /// beyond the checkout itself.
+    pub fn restore_branch_in_place(
+        &self,
+        repo_path: &Path,
+        branch_name: &str,
+    ) -> Result<(), GitServiceError> {
+        let git = GitCli::new();
+        git.git(repo_path, ["checkout", branch_name])?;
+        Ok(())
+    }
+
     /// Get the commit OID (as hex string) for a given branch without modifying HEAD
     pub fn get_branch_oid(
         &self,

@@ -217,7 +217,7 @@ pub async fn merge_workspace(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     let workspace_label = workspace.name.as_deref().unwrap_or(&workspace.branch);
     let vk_id = resolve_vibe_kanban_identifier(&deployment, workspace.id).await;
@@ -286,7 +286,7 @@ pub async fn push_workspace_branch(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     match deployment
         .git()
@@ -340,7 +340,7 @@ pub async fn force_push_workspace_branch(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     deployment
         .git()
@@ -400,7 +400,7 @@ pub async fn get_workspace_branch_status(
         };
 
         let repo_merges = merges_by_repo.get(&repo.id).cloned().unwrap_or_default();
-        let worktree_path = workspace_dir.join(&repo.name);
+        let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
 
         let head_oid = deployment
             .git()
@@ -598,7 +598,7 @@ pub async fn rename_branch(
     let workspace_dir = PathBuf::from(&container_ref);
 
     for repo in &repos {
-        let worktree_path = workspace_dir.join(&repo.name);
+        let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
 
         if deployment
             .git()
@@ -624,7 +624,7 @@ pub async fn rename_branch(
     let mut renamed_repos: Vec<&Repo> = Vec::new();
 
     for repo in &repos {
-        let worktree_path = workspace_dir.join(&repo.name);
+        let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
 
         match deployment.git().rename_local_branch(
             &worktree_path,
@@ -636,7 +636,9 @@ pub async fn rename_branch(
             }
             Err(e) => {
                 for renamed_repo in &renamed_repos {
-                    let rollback_path = workspace_dir.join(&renamed_repo.name);
+                    let rollback_path = workspace
+                        .kind
+                        .repo_working_path(&workspace_dir, &renamed_repo.name);
                     if let Err(rollback_err) = deployment.git().rename_local_branch(
                         &rollback_path,
                         new_branch_name,
@@ -744,7 +746,7 @@ pub async fn rebase_workspace(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     let result = deployment.git().rebase_branch(
         &repo.path,
@@ -808,7 +810,7 @@ pub async fn abort_workspace_conflicts(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     deployment.git().abort_conflicts(&worktree_path)?;
 
@@ -832,7 +834,7 @@ pub async fn continue_workspace_rebase(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
 
     deployment.git().continue_rebase(&worktree_path)?;
 

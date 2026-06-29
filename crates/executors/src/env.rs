@@ -11,6 +11,9 @@ pub struct RepoContext {
     pub workspace_root: PathBuf,
     /// Names of repositories in the workspace (subdirectory names)
     pub repo_names: Vec<String>,
+    /// In-place workspaces are backed by the repo's own working tree, so the
+    /// workspace root IS the single repo path (no per-repo subdirectory).
+    pub in_place: bool,
 }
 
 impl RepoContext {
@@ -18,10 +21,21 @@ impl RepoContext {
         Self {
             workspace_root,
             repo_names,
+            in_place: false,
         }
     }
 
+    /// Mark this context as in-place (workspace root is the repo working tree).
+    pub fn in_place(mut self, in_place: bool) -> Self {
+        self.in_place = in_place;
+        self
+    }
+
     pub fn repo_paths(&self) -> Vec<PathBuf> {
+        if self.in_place {
+            // The single repo's working tree IS the workspace root.
+            return vec![self.workspace_root.clone()];
+        }
         self.repo_names
             .iter()
             .map(|name| self.workspace_root.join(name))

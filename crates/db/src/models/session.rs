@@ -5,7 +5,7 @@ use thiserror::Error;
 use ts_rs::TS;
 use uuid::Uuid;
 
-use super::workspace_repo::WorkspaceRepo;
+use super::{workspace::Workspace, workspace_repo::WorkspaceRepo};
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -182,9 +182,31 @@ impl Session {
         }
 
         let repo = &repos[0];
+
+        // For workspaces that run in the repo's own working tree (InPlace/Console)
+        // the container_ref IS the repo root, so the agent working dir is relative
+        // to that root directly — we must NOT prepend repo.name (that would resolve
+        // to <repo>/<repo>, which doesn't exist and makes the executor fail to
+        // spawn with ENOENT).
+        let in_repo_dir = Workspace::find_by_id(pool, workspace_id)
+            .await?
+            .is_some_and(|w| w.kind.uses_repo_working_tree());
+
         let path = match repo.default_working_dir.as_deref() {
-            Some(subdir) if !subdir.is_empty() => std::path::PathBuf::from(&repo.name).join(subdir),
-            _ => std::path::PathBuf::from(&repo.name),
+            Some(subdir) if !subdir.is_empty() => {
+                if in_repo_dir {
+                    std::path::PathBuf::from(subdir)
+                } else {
+                    std::path::PathBuf::from(&repo.name).join(subdir)
+                }
+            }
+            _ => {
+                if in_repo_dir {
+                    // Repo root itself; no relative subdir.
+                    return Ok(None);
+                }
+                std::path::PathBuf::from(&repo.name)
+            }
         };
 
         Ok(Some(path.to_string_lossy().to_string()))

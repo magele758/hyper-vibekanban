@@ -5,7 +5,7 @@ use db::models::{
     requests::{
         CreateAndStartWorkspaceRequest, CreateAndStartWorkspaceResponse, CreateWorkspaceApiRequest,
     },
-    workspace::{CreateWorkspace, Workspace},
+    workspace::{CreateWorkspace, Workspace, WorkspaceKind},
 };
 use deployment::Deployment;
 use services::services::{container::ContainerService, diff_stream, remote_sync};
@@ -23,6 +23,7 @@ use crate::{
 pub(crate) async fn create_workspace_record(
     deployment: &DeploymentImpl,
     name: Option<String>,
+    kind: WorkspaceKind,
 ) -> Result<Workspace, ApiError> {
     let workspace_id = Uuid::new_v4();
     let branch_label = name
@@ -39,6 +40,7 @@ pub(crate) async fn create_workspace_record(
         &CreateWorkspace {
             branch: git_branch_name,
             name: name.filter(|workspace_name| !workspace_name.is_empty()),
+            kind,
         },
         workspace_id,
     )
@@ -51,7 +53,7 @@ pub async fn create_workspace(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<CreateWorkspaceApiRequest>,
 ) -> Result<ResponseJson<ApiResponse<Workspace>>, ApiError> {
-    let workspace = create_workspace_record(&deployment, payload.name).await?;
+    let workspace = create_workspace_record(&deployment, payload.name, payload.kind).await?;
 
     deployment
         .track_if_analytics_allowed(
@@ -220,6 +222,7 @@ pub async fn create_and_start_workspace(
         executor_config,
         prompt,
         attachment_ids,
+        kind,
     } = payload;
 
     let mut workspace_prompt = normalize_prompt(&prompt).ok_or_else(|| {
@@ -234,9 +237,15 @@ pub async fn create_and_start_workspace(
         ));
     }
 
+    if kind == WorkspaceKind::InPlace && repos.len() > 1 {
+        return Err(ApiError::BadRequest(
+            "In-place workspaces support exactly one repository".to_string(),
+        ));
+    }
+
     let mut managed_workspace = deployment
         .workspace_manager()
-        .load_managed_workspace(create_workspace_record(&deployment, name).await?)
+        .load_managed_workspace(create_workspace_record(&deployment, name, kind).await?)
         .await?;
 
     for repo in &repos {
@@ -244,6 +253,23 @@ pub async fn create_and_start_workspace(
             .add_repository(repo, deployment.git())
             .await
             .map_err(ApiError::from)?;
+    }
+
+    // Console workspaces stay on the repo's *current* branch (no vk/ branch is
+    // created or checked out). Reflect that real branch in the record so any
+    // branch-scoped UI/git operation references something that actually exists,
+    // instead of the generated placeholder name.
+    if kind.is_console()
+        && let Some(repo) = managed_workspace.repos.first()
+        && let Ok(current_branch) = deployment.git().get_current_branch(&repo.repo.path)
+    {
+        Workspace::update_branch_name(
+            &deployment.db().pool,
+            managed_workspace.workspace.id,
+            &current_branch,
+        )
+        .await?;
+        managed_workspace.workspace.branch = current_branch;
     }
 
     if let Some(ids) = &attachment_ids {

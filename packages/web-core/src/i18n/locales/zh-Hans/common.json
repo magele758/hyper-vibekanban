@@ -495,6 +495,19 @@
       "setupHint": "提示：在设置 → 仓库中为此仓库配置设置脚本",
       "setupHintDismiss": "关闭",
       "setupHintLink": "Configure in Settings"
+    },
+    "inPlace": {
+      "label": "在仓库目录中工作（不使用 worktree）",
+      "warning": "智能体会在你仓库自身的工作区中新建一个分支运行。请先提交或暂存改动；每个仓库同一时间只能有一个就地（in-place）工作区。"
+    },
+    "mode": {
+      "label": "智能体在哪里运行？",
+      "worktree": "隔离的 worktree（默认）",
+      "inPlace": "在仓库目录中，新建分支",
+      "console": "主目录控制台（当前分支）"
+    },
+    "console": {
+      "warning": "智能体直接在你仓库的当前目录和当前分支上运行。它不会替你新建分支或提交——是否提交由你决定。"
     }
   },
   "modelSelector": {

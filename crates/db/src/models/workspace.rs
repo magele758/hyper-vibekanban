@@ -1,10 +1,87 @@
 use chrono::{DateTime, Utc};
 use executors::actions::{ExecutorAction, ExecutorActionType};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{FromRow, SqlitePool, Type};
+use strum_macros::{Display, EnumString};
 use thiserror::Error;
 use ts_rs::TS;
 use uuid::Uuid;
+
+/// How a workspace's working tree is materialized.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Type,
+    Serialize,
+    Deserialize,
+    TS,
+    EnumString,
+    Display,
+    Default,
+)]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+pub enum WorkspaceKind {
+    /// Dedicated git worktree per repo (default, isolated).
+    #[default]
+    Worktree,
+    /// Coding agent runs directly in the repo's own working tree, on a new
+    /// `vk/...` branch checked out for the workspace (single feature in the
+    /// real repo). Auto-commits like Worktree, just without the isolation.
+    InPlace,
+    /// Operations console: the agent runs directly in the repo's own working
+    /// tree on whatever branch it is *already* on. No branch is created or
+    /// checked out, the working tree is never required to be clean, and changes
+    /// are NOT auto-committed. Intended as a control plane on the main directory
+    /// (manage worktrees/branches, merge, run commands) rather than feature work.
+    Console,
+}
+
+impl WorkspaceKind {
+    /// Resolve the on-disk working directory for a single repo within a workspace.
+    ///
+    /// - `Worktree`: each repo lives in its own subdirectory `<workspace_root>/<repo_name>`.
+    /// - `InPlace` / `Console`: the workspace is backed by the repo's own working
+    ///   tree, so `workspace_root` (the stored `container_ref`) IS the repo path.
+    ///   These kinds are constrained to a single repo, so `repo_name` is unused.
+    pub fn repo_working_path(
+        self,
+        workspace_root: &std::path::Path,
+        repo_name: &str,
+    ) -> std::path::PathBuf {
+        if self.uses_repo_working_tree() {
+            workspace_root.to_path_buf()
+        } else {
+            workspace_root.join(repo_name)
+        }
+    }
+
+    pub fn is_in_place(self) -> bool {
+        matches!(self, WorkspaceKind::InPlace)
+    }
+
+    pub fn is_console(self) -> bool {
+        matches!(self, WorkspaceKind::Console)
+    }
+
+    /// True when the workspace runs in the repo's own working tree (InPlace or
+    /// Console) rather than a dedicated worktree. These share path resolution
+    /// and "never delete the repo on cleanup" semantics.
+    pub fn uses_repo_working_tree(self) -> bool {
+        matches!(self, WorkspaceKind::InPlace | WorkspaceKind::Console)
+    }
+
+    /// True when the workspace owns a `vk/...` branch it created and may
+    /// auto-commit to. Console does NOT (it stays on the current branch and
+    /// never commits on the user's behalf).
+    pub fn manages_own_branch(self) -> bool {
+        matches!(self, WorkspaceKind::Worktree | WorkspaceKind::InPlace)
+    }
+}
 
 /// Maximum length for auto-generated workspace names (derived from first user prompt)
 const WORKSPACE_NAME_MAX_LEN: usize = 60;
@@ -51,6 +128,8 @@ pub struct Workspace {
     pub pinned: bool,
     pub name: Option<String>,
     pub worktree_deleted: bool,
+    #[serde(default)]
+    pub kind: WorkspaceKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -85,6 +164,8 @@ pub struct WorkspaceContext {
 pub struct CreateWorkspace {
     pub branch: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub kind: WorkspaceKind,
 }
 
 impl Workspace {
@@ -102,7 +183,8 @@ impl Workspace {
                           archived AS "archived!: bool",
                           pinned AS "pinned!: bool",
                           name,
-                          worktree_deleted AS "worktree_deleted!: bool"
+                          worktree_deleted AS "worktree_deleted!: bool",
+                          kind AS "kind!: WorkspaceKind"
                    FROM workspaces
                    ORDER BY created_at DESC"#
         )
@@ -204,7 +286,8 @@ impl Workspace {
                        archived          AS "archived!: bool",
                        pinned            AS "pinned!: bool",
                        name,
-                       worktree_deleted  AS "worktree_deleted!: bool"
+                       worktree_deleted  AS "worktree_deleted!: bool",
+                       kind              AS "kind!: WorkspaceKind"
                FROM    workspaces
                WHERE   id = $1"#,
             id
@@ -226,7 +309,8 @@ impl Workspace {
                        archived          AS "archived!: bool",
                        pinned            AS "pinned!: bool",
                        name,
-                       worktree_deleted  AS "worktree_deleted!: bool"
+                       worktree_deleted  AS "worktree_deleted!: bool",
+                       kind              AS "kind!: WorkspaceKind"
                FROM    workspaces
                WHERE   rowid = $1"#,
             rowid
@@ -269,7 +353,8 @@ impl Workspace {
                 w.archived as "archived!: bool",
                 w.pinned as "pinned!: bool",
                 w.name,
-                w.worktree_deleted as "worktree_deleted!: bool"
+                w.worktree_deleted as "worktree_deleted!: bool",
+                w.kind as "kind!: WorkspaceKind"
             FROM workspaces w
             LEFT JOIN sessions s ON w.id = s.workspace_id
             LEFT JOIN execution_processes ep ON s.id = ep.session_id AND ep.completed_at IS NOT NULL
@@ -315,15 +400,16 @@ impl Workspace {
     ) -> Result<Self, WorkspaceError> {
         Ok(sqlx::query_as!(
             Workspace,
-            r#"INSERT INTO workspaces (id, task_id, container_ref, branch, setup_completed_at, name)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING id as "id!: Uuid", task_id as "task_id: Uuid", container_ref, branch, setup_completed_at as "setup_completed_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>", archived as "archived!: bool", pinned as "pinned!: bool", name, worktree_deleted as "worktree_deleted!: bool""#,
+            r#"INSERT INTO workspaces (id, task_id, container_ref, branch, setup_completed_at, name, kind)
+               VALUES ($1, $2, $3, $4, $5, $6, $7)
+               RETURNING id as "id!: Uuid", task_id as "task_id: Uuid", container_ref, branch, setup_completed_at as "setup_completed_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>", archived as "archived!: bool", pinned as "pinned!: bool", name, worktree_deleted as "worktree_deleted!: bool", kind as "kind!: WorkspaceKind""#,
             id,
             Option::<Uuid>::None,
             Option::<String>::None,
             data.branch,
             Option::<DateTime<Utc>>::None,
-            data.name
+            data.name,
+            data.kind
         )
         .fetch_one(pool)
         .await?)
@@ -514,6 +600,7 @@ impl Workspace {
                 w.pinned AS "pinned!: bool",
                 w.name,
                 w.worktree_deleted AS "worktree_deleted!: bool",
+                w.kind AS "kind!: WorkspaceKind",
 
                 CASE WHEN EXISTS (
                     SELECT 1
@@ -556,6 +643,7 @@ impl Workspace {
                     pinned: rec.pinned,
                     name: rec.name,
                     worktree_deleted: rec.worktree_deleted,
+                    kind: rec.kind,
                 },
                 is_running: rec.is_running != 0,
                 is_errored: rec.is_errored != 0,
@@ -608,6 +696,7 @@ impl Workspace {
                 w.pinned AS "pinned!: bool",
                 w.name,
                 w.worktree_deleted AS "worktree_deleted!: bool",
+                w.kind AS "kind!: WorkspaceKind",
 
                 CASE WHEN EXISTS (
                     SELECT 1
@@ -653,6 +742,7 @@ impl Workspace {
                 pinned: rec.pinned,
                 name: rec.name,
                 worktree_deleted: rec.worktree_deleted,
+                kind: rec.kind,
             },
             is_running: rec.is_running != 0,
             is_errored: rec.is_errored != 0,
@@ -674,7 +764,36 @@ impl Workspace {
 mod tests {
     use uuid::Uuid;
 
-    use super::Workspace;
+    use super::{Workspace, WorkspaceKind};
+
+    #[test]
+    fn repo_working_path_worktree_appends_repo_subdir() {
+        let root = std::path::Path::new("/tmp/ws");
+        assert_eq!(
+            WorkspaceKind::Worktree.repo_working_path(root, "my-repo"),
+            std::path::PathBuf::from("/tmp/ws/my-repo")
+        );
+    }
+
+    #[test]
+    fn repo_working_path_in_place_is_the_root_itself() {
+        // For in-place, container_ref already IS the repo path; no subdir appended.
+        let root = std::path::Path::new("/home/user/my-repo");
+        assert_eq!(
+            WorkspaceKind::InPlace.repo_working_path(root, "my-repo"),
+            std::path::PathBuf::from("/home/user/my-repo")
+        );
+        // Even if the repo name differs from the dir name, it stays the root.
+        assert_eq!(
+            WorkspaceKind::InPlace.repo_working_path(root, "renamed"),
+            std::path::PathBuf::from("/home/user/my-repo")
+        );
+    }
+
+    #[test]
+    fn workspace_kind_default_is_worktree() {
+        assert_eq!(WorkspaceKind::default(), WorkspaceKind::Worktree);
+    }
 
     #[test]
     fn best_matching_container_ref_prefers_deepest_match() {

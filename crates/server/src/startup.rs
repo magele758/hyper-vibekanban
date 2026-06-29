@@ -275,11 +275,12 @@ async fn collect_attachment_migration_paths(
         for repo in
             WorkspaceRepo::find_repos_for_workspace(&deployment.db().pool, workspace.id).await?
         {
+            let repo_working = workspace
+                .kind
+                .repo_working_path(&workspace_root, &repo.name);
             let repo_base = match repo.default_working_dir.as_deref() {
-                Some(default_dir) if !default_dir.is_empty() => {
-                    workspace_root.join(&repo.name).join(default_dir)
-                }
-                _ => workspace_root.join(&repo.name),
+                Some(default_dir) if !default_dir.is_empty() => repo_working.join(default_dir),
+                _ => repo_working,
             };
             paths.insert(repo_base);
         }

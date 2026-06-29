@@ -495,6 +495,19 @@
       "setupHint": "Consejo: Configura los scripts de instalación para este repositorio en Ajustes → Repositorios",
       "setupHintDismiss": "Cerrar",
       "setupHintLink": "Configure in Settings"
+    },
+    "inPlace": {
+      "label": "Trabajar en el directorio del repositorio (sin worktree)",
+      "warning": "El agente se ejecuta en una nueva rama dentro del propio árbol de trabajo de tu repositorio. Confirma o guarda tus cambios primero; solo un espacio de trabajo in-place por repositorio a la vez."
+    },
+    "mode": {
+      "label": "¿Dónde debe ejecutarse el agente?",
+      "worktree": "Worktree aislado (predeterminado)",
+      "inPlace": "En el directorio del repo, nueva rama",
+      "console": "Consola en el directorio principal (rama actual)"
+    },
+    "console": {
+      "warning": "El agente se ejecuta directamente en el directorio y la rama actuales de tu repositorio. No creará ninguna rama ni confirmará por ti: tú mantienes el control de las confirmaciones."
     }
   },
   "modelSelector": {

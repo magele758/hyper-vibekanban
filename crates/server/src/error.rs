@@ -132,6 +132,14 @@ impl From<WorkspaceManagerError> for ApiError {
             WorkspaceManagerError::NoRepositories => {
                 ApiError::BadRequest("Workspace has no repositories configured".to_string())
             }
+            WorkspaceManagerError::InPlaceRequiresSingleRepo(count) => ApiError::BadRequest(
+                format!("In-place workspaces support exactly one repository (found {count})"),
+            ),
+            WorkspaceManagerError::InPlaceDirtyWorkingTree { repo_name } => {
+                ApiError::Conflict(format!(
+                    "Repository '{repo_name}' has uncommitted changes; commit or stash them before starting an in-place workspace"
+                ))
+            }
             WorkspaceManagerError::PartialCreation(msg) => ApiError::Conflict(msg),
         }
     }

@@ -7,7 +7,7 @@ use db::{
         repo::{Repo, RepoError},
         requests::WorkspaceRepoInput,
         session::Session,
-        workspace::Workspace as DbWorkspace,
+        workspace::{Workspace as DbWorkspace, WorkspaceKind},
         workspace_repo::{CreateWorkspaceRepo, RepoWithTargetBranch, WorkspaceRepo},
     },
 };
@@ -52,6 +52,12 @@ pub enum WorkspaceError {
     BranchNotFound { repo_name: String, branch: String },
     #[error("No repositories provided")]
     NoRepositories,
+    #[error("In-place workspaces support exactly one repository (found {0})")]
+    InPlaceRequiresSingleRepo(usize),
+    #[error(
+        "Repository '{repo_name}' has uncommitted changes; commit or stash them before starting an in-place workspace"
+    )]
+    InPlaceDirtyWorkingTree { repo_name: String },
     #[error("Partial workspace creation failed: {0}")]
     PartialCreation(String),
 }
@@ -80,6 +86,10 @@ pub struct WorkspaceDeletionContext {
     pub repositories: Vec<Repo>,
     pub repo_paths: Vec<PathBuf>,
     pub session_ids: Vec<Uuid>,
+    pub kind: WorkspaceKind,
+    /// For in-place workspaces: target branch to restore the repo to before
+    /// deleting the workspace branch. Worktree workspaces leave this `None`.
+    pub restore_branch: Option<String>,
 }
 
 #[derive(Clone)]
@@ -179,6 +189,14 @@ impl ManagedWorkspace {
             .map(|repo| repo.path.clone())
             .collect::<Vec<_>>();
 
+        // For in-place workspaces, capture the target branch to restore the repo to
+        // before deleting the workspace branch (you can't delete a checked-out branch).
+        let restore_branch = if self.workspace.kind.is_in_place() {
+            self.repos.first().map(|r| r.target_branch.clone())
+        } else {
+            None
+        };
+
         Ok(WorkspaceDeletionContext {
             workspace_id: self.workspace.id,
             branch_name: self.workspace.branch.clone(),
@@ -186,6 +204,8 @@ impl ManagedWorkspace {
             repositories,
             repo_paths,
             session_ids,
+            kind: self.workspace.kind,
+            restore_branch,
         })
     }
 
@@ -226,6 +246,8 @@ impl WorkspaceManager {
                 repositories,
                 repo_paths,
                 session_ids,
+                kind,
+                restore_branch,
             } = context;
 
             for session_id in session_ids {
@@ -244,7 +266,7 @@ impl WorkspaceManager {
                     workspace_dir.display()
                 );
 
-                if let Err(e) = Self::cleanup_workspace(&workspace_dir, &repositories).await {
+                if let Err(e) = Self::cleanup_workspace(&workspace_dir, &repositories, kind).await {
                     error!(
                         "Background workspace cleanup failed for {} at {}: {}",
                         workspace_id,
@@ -256,6 +278,22 @@ impl WorkspaceManager {
                         "Background cleanup completed for workspace {}",
                         workspace_id
                     );
+                }
+            }
+
+            // For in-place workspaces, restore the repo to its target branch before any
+            // branch deletion (a checked-out branch cannot be deleted).
+            if kind.is_in_place()
+                && let Some(restore_branch) = &restore_branch
+            {
+                let git_service = GitService::new();
+                for repo_path in &repo_paths {
+                    if let Err(e) = git_service.restore_branch_in_place(repo_path, restore_branch) {
+                        warn!(
+                            "Failed to restore branch '{}' in repo {:?}: {}",
+                            restore_branch, repo_path, e
+                        );
+                    }
                 }
             }
 
@@ -289,13 +327,26 @@ impl WorkspaceManager {
 
     /// Create a workspace with worktrees for all repositories.
     /// On failure, rolls back any already-created worktrees.
+    ///
+    /// For `WorkspaceKind::InPlace` no worktree is created: the single repo's own
+    /// working tree is checked out onto `branch_name` directly. In-place workspaces
+    /// must contain exactly one repo and require a clean working tree.
     pub async fn create_workspace(
         workspace_dir: &Path,
         repos: &[RepoWorkspaceInput],
         branch_name: &str,
+        kind: WorkspaceKind,
     ) -> Result<WorktreeContainer, WorkspaceError> {
         if repos.is_empty() {
             return Err(WorkspaceError::NoRepositories);
+        }
+
+        if kind.is_console() {
+            return Self::create_console_workspace(repos).await;
+        }
+
+        if kind.is_in_place() {
+            return Self::create_in_place_workspace(repos, branch_name).await;
         }
 
         info!(
@@ -370,14 +421,133 @@ impl WorkspaceManager {
         })
     }
 
+    /// Create an in-place workspace: check out `branch_name` directly in the repo's
+    /// own working tree. The "workspace dir" IS the repo path. No directory is
+    /// created and no worktree is registered.
+    async fn create_in_place_workspace(
+        repos: &[RepoWorkspaceInput],
+        branch_name: &str,
+    ) -> Result<WorktreeContainer, WorkspaceError> {
+        if repos.len() != 1 {
+            return Err(WorkspaceError::InPlaceRequiresSingleRepo(repos.len()));
+        }
+        let input = &repos[0];
+        let repo = &input.repo;
+
+        info!(
+            "Creating in-place workspace for repo '{}' at {} on branch '{}'",
+            repo.name,
+            repo.path.display(),
+            branch_name
+        );
+
+        let repo_path = repo.path.clone();
+        let repo_name = repo.name.clone();
+        let branch = branch_name.to_string();
+        let target_branch = input.target_branch.clone();
+
+        // Guard against clobbering uncommitted work, then check out the branch.
+        // Run the blocking git work off the async runtime.
+        tokio::task::spawn_blocking(move || -> Result<(), WorkspaceError> {
+            let git = GitService::new();
+            let (uncommitted, untracked) = git.get_worktree_change_counts(&repo_path)?;
+            if uncommitted > 0 || untracked > 0 {
+                return Err(WorkspaceError::InPlaceDirtyWorkingTree {
+                    repo_name: repo_name.clone(),
+                });
+            }
+            git.checkout_branch_in_place(&repo_path, &branch, &target_branch)?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            WorkspaceError::PartialCreation(format!("in-place checkout join error: {e}"))
+        })??;
+
+        Ok(WorktreeContainer {
+            workspace_dir: repo.path.clone(),
+            worktrees: vec![RepoWorktree {
+                repo_id: repo.id,
+                repo_name: repo.name.clone(),
+                source_repo_path: repo.path.clone(),
+                worktree_path: repo.path.clone(),
+            }],
+        })
+    }
+
+    /// Create a console workspace: the agent attaches to the repo's own working
+    /// tree on whatever branch it is *already* on. Unlike in-place, NO branch is
+    /// created or checked out, the tree is NOT required to be clean, and nothing
+    /// on disk is mutated. The "workspace dir" IS the repo path.
+    async fn create_console_workspace(
+        repos: &[RepoWorkspaceInput],
+    ) -> Result<WorktreeContainer, WorkspaceError> {
+        if repos.len() != 1 {
+            return Err(WorkspaceError::InPlaceRequiresSingleRepo(repos.len()));
+        }
+        let input = &repos[0];
+        let repo = &input.repo;
+
+        info!(
+            "Creating console workspace for repo '{}' at {} (current branch, no checkout)",
+            repo.name,
+            repo.path.display(),
+        );
+
+        Ok(WorktreeContainer {
+            workspace_dir: repo.path.clone(),
+            worktrees: vec![RepoWorktree {
+                repo_id: repo.id,
+                repo_name: repo.name.clone(),
+                source_repo_path: repo.path.clone(),
+                worktree_path: repo.path.clone(),
+            }],
+        })
+    }
+
     /// Ensure all worktrees in a workspace exist (for cold restart scenarios)
     pub async fn ensure_workspace_exists(
         workspace_dir: &Path,
         repos: &[RepoWorkspaceInput],
         branch_name: &str,
+        kind: WorkspaceKind,
     ) -> Result<(), WorkspaceError> {
         if repos.is_empty() {
             return Err(WorkspaceError::NoRepositories);
+        }
+
+        // Console workspaces attach to the repo's own working tree on its current
+        // branch. Nothing is materialized, no branch is created or checked out —
+        // there is nothing to "ensure" on disk.
+        if kind.is_console() {
+            if repos.len() != 1 {
+                return Err(WorkspaceError::InPlaceRequiresSingleRepo(repos.len()));
+            }
+            return Ok(());
+        }
+
+        // In-place workspaces are backed by the repo's own working tree; there is
+        // no worktree to recreate. Just make sure the branch is checked out.
+        if kind.is_in_place() {
+            if repos.len() != 1 {
+                return Err(WorkspaceError::InPlaceRequiresSingleRepo(repos.len()));
+            }
+            let input = &repos[0];
+            let repo_path = input.repo.path.clone();
+            let branch = branch_name.to_string();
+            let target_branch = input.target_branch.clone();
+            tokio::task::spawn_blocking(move || -> Result<(), WorkspaceError> {
+                let git = GitService::new();
+                if git.get_current_branch(&repo_path)? != branch {
+                    git.checkout_branch_in_place(&repo_path, &branch, &target_branch)?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| {
+                WorkspaceError::PartialCreation(format!("in-place ensure join error: {e}"))
+            })??;
+            return Ok(());
         }
 
         // Try legacy migration first (single repo projects only)
@@ -424,11 +594,25 @@ impl WorkspaceManager {
         Ok(())
     }
 
-    /// Clean up all worktrees in a workspace
+    /// Clean up all worktrees in a workspace.
+    ///
+    /// For workspaces backed by the repo's own working tree (`InPlace`/`Console`)
+    /// this is a no-op on disk: the workspace IS the user's own repo, so we must
+    /// NOT remove worktrees or delete the directory. Branch restoration (in-place
+    /// only) is handled separately by the deletion path on the real repo.
     pub async fn cleanup_workspace(
         workspace_dir: &Path,
         repos: &[Repo],
+        kind: WorkspaceKind,
     ) -> Result<(), WorkspaceError> {
+        if kind.uses_repo_working_tree() {
+            info!(
+                "Skipping filesystem cleanup for repo-working-tree workspace at {} (repo working tree is preserved)",
+                workspace_dir.display()
+            );
+            return Ok(());
+        }
+
         info!("Cleaning up workspace at {}", workspace_dir.display());
 
         let cleanup_data: Vec<WorktreeCleanup> = repos
@@ -649,5 +833,166 @@ impl WorkspaceManager {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod in_place_tests {
+    use db::models::repo::Repo;
+    use git::GitService;
+    use uuid::Uuid;
+
+    use super::{RepoWorkspaceInput, WorkspaceKind, WorkspaceManager};
+
+    fn make_repo(path: std::path::PathBuf) -> Repo {
+        let now = chrono::Utc::now();
+        Repo {
+            id: Uuid::new_v4(),
+            path,
+            name: "my-repo".to_string(),
+            display_name: "my-repo".to_string(),
+            setup_script: None,
+            cleanup_script: None,
+            archive_script: None,
+            copy_files: None,
+            parallel_setup_script: false,
+            dev_server_script: None,
+            default_target_branch: None,
+            default_working_dir: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    /// Data-loss guard: in-place cleanup must NEVER touch the repo's working tree,
+    /// `.git`, or committed files. The workspace dir IS the user's repo.
+    #[tokio::test]
+    async fn in_place_cleanup_preserves_repo() {
+        let td = tempfile::TempDir::new().unwrap();
+        let repo_path = td.path().join("repo");
+        let git = GitService::new();
+        git.initialize_repo_with_main_branch(&repo_path).unwrap();
+
+        let sentinel = repo_path.join("KEEP_ME.txt");
+        std::fs::write(&sentinel, b"do not delete the user's repo").unwrap();
+
+        let repo = make_repo(repo_path.clone());
+
+        // In-place cleanup: workspace_dir == repo_path, kind == InPlace.
+        WorkspaceManager::cleanup_workspace(&repo_path, &[repo], WorkspaceKind::InPlace)
+            .await
+            .unwrap();
+
+        assert!(
+            repo_path.exists(),
+            "repo root must survive in-place cleanup"
+        );
+        assert!(
+            repo_path.join(".git").exists(),
+            "repo .git must survive in-place cleanup"
+        );
+        assert!(
+            sentinel.exists(),
+            "sentinel file in repo working tree must survive in-place cleanup"
+        );
+        assert_eq!(
+            std::fs::read(&sentinel).unwrap(),
+            b"do not delete the user's repo",
+            "sentinel contents must be unchanged"
+        );
+    }
+
+    /// In-place creation checks out the workspace branch directly in the repo.
+    #[tokio::test]
+    async fn in_place_create_checks_out_branch_in_repo() {
+        let td = tempfile::TempDir::new().unwrap();
+        let repo_path = td.path().join("repo");
+        let git = GitService::new();
+        git.initialize_repo_with_main_branch(&repo_path).unwrap();
+
+        let repo = make_repo(repo_path.clone());
+        let input = RepoWorkspaceInput::new(repo, "main".to_string());
+
+        let container = WorkspaceManager::create_workspace(
+            // workspace_dir is ignored for in-place (repo path is used)
+            std::path::Path::new("/unused"),
+            std::slice::from_ref(&input),
+            "vk/in-place-branch",
+            WorkspaceKind::InPlace,
+        )
+        .await
+        .unwrap();
+
+        // The workspace dir resolves to the repo itself, no new dir created.
+        assert_eq!(container.workspace_dir, repo_path);
+        // The repo is now on the workspace branch.
+        assert_eq!(
+            git.get_current_branch(&repo_path).unwrap(),
+            "vk/in-place-branch"
+        );
+    }
+
+    /// In-place creation refuses to run when the repo has uncommitted changes.
+    #[tokio::test]
+    async fn in_place_create_rejects_dirty_tree() {
+        let td = tempfile::TempDir::new().unwrap();
+        let repo_path = td.path().join("repo");
+        let git = GitService::new();
+        git.initialize_repo_with_main_branch(&repo_path).unwrap();
+
+        // Introduce an uncommitted change.
+        std::fs::write(repo_path.join("dirty.txt"), b"uncommitted").unwrap();
+
+        let repo = make_repo(repo_path.clone());
+        let input = RepoWorkspaceInput::new(repo, "main".to_string());
+
+        let result = WorkspaceManager::create_workspace(
+            std::path::Path::new("/unused"),
+            &[input],
+            "vk/in-place-branch",
+            WorkspaceKind::InPlace,
+        )
+        .await;
+
+        assert!(
+            matches!(
+                result,
+                Err(super::WorkspaceError::InPlaceDirtyWorkingTree { .. })
+            ),
+            "expected dirty-tree rejection, got {result:?}"
+        );
+    }
+
+    /// In-place workspaces are limited to a single repository.
+    #[tokio::test]
+    async fn in_place_create_rejects_multiple_repos() {
+        let td = tempfile::TempDir::new().unwrap();
+        let git = GitService::new();
+
+        let repo_a_path = td.path().join("repo-a");
+        let repo_b_path = td.path().join("repo-b");
+        git.initialize_repo_with_main_branch(&repo_a_path).unwrap();
+        git.initialize_repo_with_main_branch(&repo_b_path).unwrap();
+
+        let inputs = vec![
+            RepoWorkspaceInput::new(make_repo(repo_a_path), "main".to_string()),
+            RepoWorkspaceInput::new(make_repo(repo_b_path), "main".to_string()),
+        ];
+
+        let result = WorkspaceManager::create_workspace(
+            std::path::Path::new("/unused"),
+            &inputs,
+            "vk/in-place-branch",
+            WorkspaceKind::InPlace,
+        )
+        .await;
+
+        assert!(
+            matches!(
+                result,
+                Err(super::WorkspaceError::InPlaceRequiresSingleRepo(2))
+            ),
+            "expected single-repo rejection, got {result:?}"
+        );
     }
 }

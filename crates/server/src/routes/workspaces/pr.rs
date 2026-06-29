@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use api_types::{PullRequestStatus, UpsertPullRequestRequest};
 use axum::{
@@ -14,7 +14,7 @@ use db::models::{
     pull_request::PullRequest,
     repo::{Repo, RepoError},
     session::{CreateSession, Session},
-    workspace::{CreateWorkspace, Workspace, WorkspaceError},
+    workspace::{CreateWorkspace, Workspace, WorkspaceError, WorkspaceKind},
     workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
 };
 use deployment::Deployment;
@@ -213,7 +213,9 @@ pub async fn create_pr(
         .ensure_container_exists(&workspace)
         .await?;
     let workspace_path = PathBuf::from(&container_ref);
-    let worktree_path = workspace_path.join(&repo.name);
+    let worktree_path = workspace
+        .kind
+        .repo_working_path(&workspace_path, &repo.name);
 
     let git = deployment.git();
     let push_remote = git.resolve_remote_for_branch(&repo_path, &workspace.branch)?;
@@ -650,6 +652,7 @@ pub enum CreateFromPrError {
 /// as a background task to avoid blocking the error response.
 async fn cleanup_failed_pr_workspace(pool: &sqlx::SqlitePool, workspace: &Workspace) {
     let workspace_id = workspace.id;
+    let workspace_kind = workspace.kind;
 
     // Gather data needed for background filesystem cleanup before deleting DB records
     let workspace_dir = workspace.container_ref.clone().map(PathBuf::from);
@@ -677,7 +680,9 @@ async fn cleanup_failed_pr_workspace(pool: &sqlx::SqlitePool, workspace: &Worksp
     // Spawn background cleanup for filesystem resources (worktrees, workspace dir)
     if let Some(workspace_dir) = workspace_dir {
         tokio::spawn(async move {
-            if let Err(e) = WorkspaceManager::cleanup_workspace(&workspace_dir, &repositories).await
+            if let Err(e) =
+                WorkspaceManager::cleanup_workspace(&workspace_dir, &repositories, workspace_kind)
+                    .await
             {
                 tracing::error!(
                     "Background cleanup failed for workspace {} at {}: {}",
@@ -719,6 +724,7 @@ pub async fn create_workspace_from_pr(
         &CreateWorkspace {
             branch: target_branch_ref.clone(),
             name: Some(payload.pr_title.clone()),
+            kind: WorkspaceKind::default(),
         },
         workspace_id,
     )
@@ -744,7 +750,9 @@ pub async fn create_workspace_from_pr(
 
     // Use gh pr checkout to fetch and switch to the PR branch
     // This handles SSH/HTTPS auth correctly regardless of fork URL format
-    let worktree_path = PathBuf::from(&container_ref).join(&repo.name);
+    let worktree_path = workspace
+        .kind
+        .repo_working_path(Path::new(&container_ref), &repo.name);
     match GhCli::new().get_repo_info(&remote.url, &worktree_path) {
         Ok(repo_info) => {
             if let Err(e) = GhCli::new().pr_checkout(

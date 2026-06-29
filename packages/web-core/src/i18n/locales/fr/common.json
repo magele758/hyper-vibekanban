@@ -495,6 +495,19 @@
       "setupHint": "Astuce : Configurez les scripts d'installation pour ce dépôt dans Paramètres → Dépôts",
       "setupHintDismiss": "Fermer",
       "setupHintLink": "Configure in Settings"
+    },
+    "inPlace": {
+      "label": "Travailler dans le répertoire du dépôt (sans worktree)",
+      "warning": "L'agent s'exécute sur une nouvelle branche dans l'arbre de travail de votre propre dépôt. Validez ou remisez vos modifications d'abord ; un seul espace de travail in-place par dépôt à la fois."
+    },
+    "mode": {
+      "label": "Où l'agent doit-il s'exécuter ?",
+      "worktree": "Worktree isolé (par défaut)",
+      "inPlace": "Dans le répertoire du dépôt, nouvelle branche",
+      "console": "Console du répertoire principal (branche actuelle)"
+    },
+    "console": {
+      "warning": "L'agent s'exécute directement dans le répertoire et la branche actuels de votre dépôt. Il ne créera pas de branche ni ne validera à votre place — vous gardez le contrôle des validations."
     }
   },
   "modelSelector": {

@@ -1,3 +1,6 @@
+# vk-test-feature isolated test instance (data + logs, never commit)
+.vk-test/
+
 # Rust
 target/
 **/*.rs.bk
