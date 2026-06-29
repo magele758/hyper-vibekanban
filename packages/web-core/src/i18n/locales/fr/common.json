@@ -507,7 +507,8 @@
       "console": "Console du répertoire principal (branche actuelle)"
     },
     "console": {
-      "warning": "L'agent s'exécute directement dans le répertoire et la branche actuels de votre dépôt. Il ne créera pas de branche ni ne validera à votre place — vous gardez le contrôle des validations."
+      "warning": "L'agent s'exécute directement dans le répertoire et la branche actuels de votre dépôt. Il ne créera pas de branche ni ne validera à votre place — vous gardez le contrôle des validations.",
+      "repoLabel": "Ouvrir la console sur"
     }
   },
   "modelSelector": {

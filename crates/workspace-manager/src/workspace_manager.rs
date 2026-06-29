@@ -297,7 +297,14 @@ impl WorkspaceManager {
                 }
             }
 
-            if delete_branches {
+            // Only delete the workspace's branch if the workspace actually owns
+            // one. Console workspaces attach to the repo's *existing* current
+            // branch (e.g. `main`) without creating it, so `branch_name` here is
+            // the user's own branch — deleting it would be data loss. `git branch
+            // -D` refuses to drop a checked-out branch, but if the user has since
+            // switched away, the delete would succeed and wipe their branch.
+            // `manages_own_branch()` is false for Console, true for Worktree/InPlace.
+            if delete_branches && kind.manages_own_branch() {
                 let git_service = GitService::new();
                 for repo_path in repo_paths {
                     match git_service.delete_branch(&repo_path, &branch_name) {

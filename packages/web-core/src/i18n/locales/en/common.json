@@ -521,7 +521,8 @@
       "console": "Main directory console (current branch)"
     },
     "console": {
-      "warning": "The agent runs directly in your repo's current directory and branch. It will not create a branch or commit for you — you stay in control of commits."
+      "warning": "The agent runs directly in your repo's current directory and branch. It will not create a branch or commit for you — you stay in control of commits.",
+      "repoLabel": "Open console on"
     }
   },
   "modelSelector": {

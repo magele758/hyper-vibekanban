@@ -301,14 +301,18 @@ impl LocalContainerService {
         }
 
         let expired_workspaces = Workspace::find_expired_for_cleanup(&self.db.pool).await?;
-        // Repo-working-tree workspaces (InPlace/Console) are backed by the user's own
-        // repo. Time-based expiry must never touch them: there is no worktree to
-        // reclaim, and marking `worktree_deleted` would misrepresent state (and, for
-        // in-place, strand the repo on the vk branch). They are only torn down through
-        // explicit deletion.
+        // In-place workspaces check out the user's repo onto the vk branch, so expiry
+        // must never touch them: cleaning up would strand the repo on that branch and
+        // marking `worktree_deleted` would misrepresent state. They are only torn down
+        // through explicit deletion. Console workspaces are different — they merely
+        // borrow the repo's current branch (no worktree, no branch of their own), so
+        // expiry CAN reclaim their stale DB rows (and cascaded sessions/logs) without
+        // ever touching the filesystem or any branch; the per-workspace loop below
+        // does that DB-only delete for console. `find_expired_for_cleanup` already
+        // excludes pinned workspaces.
         let expired_workspaces: Vec<_> = expired_workspaces
             .into_iter()
-            .filter(|workspace| !workspace.kind.uses_repo_working_tree())
+            .filter(|workspace| !workspace.kind.is_in_place())
             .collect();
         if expired_workspaces.is_empty() {
             tracing::debug!("No expired workspaces found");
@@ -319,7 +323,54 @@ impl LocalContainerService {
             expired_workspaces.len()
         );
         for workspace in &expired_workspaces {
-            self.cleanup_workspace(workspace).await;
+            if workspace.kind.is_console() {
+                // Console workspaces own no worktree and no branch, so there is
+                // nothing on disk to reclaim — only stale DB rows. Reuse the exact
+                // explicit-deletion machinery so the two paths can't drift: deleting
+                // the workspace row cascades to its sessions / execution_processes /
+                // logs, and `spawn_workspace_deletion_cleanup` clears the on-disk
+                // process logs. `cleanup_workspace` (filesystem) and the branch
+                // delete inside it both no-op for console, so the user's repo
+                // directory and current branch are never touched.
+                let managed = match self
+                    .workspace_manager
+                    .load_managed_workspace(workspace.clone())
+                    .await
+                {
+                    Ok(managed) => managed,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to load console workspace {} for expiry cleanup: {}",
+                            workspace.id,
+                            e
+                        );
+                        continue;
+                    }
+                };
+                let deletion_context = match managed.prepare_deletion_context().await {
+                    Ok(ctx) => ctx,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to prepare deletion context for expired console workspace {}: {}",
+                            workspace.id,
+                            e
+                        );
+                        continue;
+                    }
+                };
+                if let Err(e) = managed.delete_record().await {
+                    tracing::warn!(
+                        "Failed to delete expired console workspace {}: {}",
+                        workspace.id,
+                        e
+                    );
+                    continue;
+                }
+                // delete_branches = false: console never owns a branch to delete.
+                WorkspaceManager::spawn_workspace_deletion_cleanup(deletion_context, false);
+            } else {
+                self.cleanup_workspace(workspace).await;
+            }
         }
         Ok(())
     }

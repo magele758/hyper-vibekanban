@@ -68,11 +68,40 @@ async fn insert_candidate(
     age_hours: i64,
     process_running: bool,
 ) {
+    insert_candidate_pinned(
+        pool,
+        id,
+        container_ref,
+        branch,
+        archived,
+        worktree_deleted,
+        age_hours,
+        process_running,
+        false,
+    )
+    .await;
+}
+
+/// Same as [`insert_candidate`] but with an explicit `pinned` flag. Pinned
+/// workspaces are user-protected and must never be selected for expiry, no
+/// matter how stale.
+#[allow(clippy::too_many_arguments)] // fixture builder: explicit fields read clearer than a struct here
+async fn insert_candidate_pinned(
+    pool: &SqlitePool,
+    id: Uuid,
+    container_ref: Option<&str>,
+    branch: &str,
+    archived: bool,
+    worktree_deleted: bool,
+    age_hours: i64,
+    process_running: bool,
+    pinned: bool,
+) {
     let offset = format!("-{age_hours} hours");
 
     sqlx::query(
         "INSERT INTO workspaces (id, container_ref, branch, archived, pinned, worktree_deleted, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 0, ?5, datetime('now', ?6), datetime('now', ?6))",
+         VALUES (?1, ?2, ?3, ?4, ?7, ?5, datetime('now', ?6), datetime('now', ?6))",
     )
     .bind(id)
     .bind(container_ref)
@@ -80,6 +109,7 @@ async fn insert_candidate(
     .bind(archived)
     .bind(worktree_deleted)
     .bind(&offset)
+    .bind(pinned)
     .execute(pool)
     .await
     .expect("insert workspace fixture");
@@ -233,6 +263,22 @@ async fn find_expired_for_cleanup_selects_only_eligible_workspaces() {
     )
     .await;
 
+    // (g) Stale enough to expire, but PINNED -> excluded. Pinning is a user-set
+    //     "do not auto-clean" flag and must win over every staleness threshold.
+    let pinned = Uuid::new_v4();
+    insert_candidate_pinned(
+        &pool,
+        pinned,
+        Some("/tmp/ws/pinned"),
+        "pinned",
+        false,
+        false,
+        100,
+        false,
+        true,
+    )
+    .await;
+
     let expired: Vec<Uuid> = Workspace::find_expired_for_cleanup(&pool)
         .await
         .expect("cleanup query")
@@ -263,5 +309,9 @@ async fn find_expired_for_cleanup_selects_only_eligible_workspaces() {
     assert!(
         !expired.contains(&running),
         "workspace with a running process must never be cleaned up"
+    );
+    assert!(
+        !expired.contains(&pinned),
+        "pinned workspace must never be expired, no matter how stale"
     );
 }

@@ -360,6 +360,7 @@ impl Workspace {
             LEFT JOIN execution_processes ep ON s.id = ep.session_id AND ep.completed_at IS NOT NULL
             WHERE w.container_ref IS NOT NULL
                 AND w.worktree_deleted = FALSE
+                AND w.pinned = FALSE
                 AND w.id NOT IN (
                     SELECT DISTINCT s2.workspace_id
                     FROM sessions s2
@@ -793,6 +794,21 @@ mod tests {
     #[test]
     fn workspace_kind_default_is_worktree() {
         assert_eq!(WorkspaceKind::default(), WorkspaceKind::Worktree);
+    }
+
+    /// Data-loss guard contract: the deletion path only deletes a workspace's
+    /// branch when `manages_own_branch()` is true. Console attaches to the repo's
+    /// pre-existing current branch (e.g. `main`) without creating it, so it must
+    /// NEVER report ownership — otherwise `git branch -D` could wipe the user's
+    /// own branch. If someone adds Console here, this test fails loudly.
+    #[test]
+    fn console_does_not_manage_its_own_branch() {
+        assert!(
+            !WorkspaceKind::Console.manages_own_branch(),
+            "Console must not own its branch (deletion would target the user's real branch)"
+        );
+        assert!(WorkspaceKind::Worktree.manages_own_branch());
+        assert!(WorkspaceKind::InPlace.manages_own_branch());
     }
 
     #[test]

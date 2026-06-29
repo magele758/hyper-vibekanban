@@ -237,9 +237,14 @@ pub async fn create_and_start_workspace(
         ));
     }
 
-    if kind == WorkspaceKind::InPlace && repos.len() > 1 {
+    // Both in-place and console attach to a single repo's own working tree, so
+    // the API must reject multi-repo payloads here. Without this guard the
+    // workspace record + repo links would be written before `start_workspace`
+    // fails deeper in `create_console_workspace`, leaving a half-created
+    // workspace that can never start.
+    if kind.uses_repo_working_tree() && repos.len() > 1 {
         return Err(ApiError::BadRequest(
-            "In-place workspaces support exactly one repository".to_string(),
+            "In-place and console workspaces support exactly one repository".to_string(),
         ));
     }
 

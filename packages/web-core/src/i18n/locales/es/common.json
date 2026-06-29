@@ -507,7 +507,8 @@
       "console": "Consola en el directorio principal (rama actual)"
     },
     "console": {
-      "warning": "El agente se ejecuta directamente en el directorio y la rama actuales de tu repositorio. No creará ninguna rama ni confirmará por ti: tú mantienes el control de las confirmaciones."
+      "warning": "El agente se ejecuta directamente en el directorio y la rama actuales de tu repositorio. No creará ninguna rama ni confirmará por ti: tú mantienes el control de las confirmaciones.",
+      "repoLabel": "Abrir consola en"
     }
   },
   "modelSelector": {

@@ -126,6 +126,25 @@ VK_TEST_BE_PORT=${BE_PORT}
 VK_TEST_PP_PORT=${PP_PORT}
 EOF
 
+    # ── Remote wiring (opt-in via VK_TEST_REMOTE=1) ──────────────────────────
+    # Login / remote-project sync need a remote backend. By default this lite
+    # instance has NONE (empty bases → /auth/methods 400), which is what keeps
+    # it fully isolated. Setting VK_TEST_REMOTE=1 points it at the SAME remote
+    # Docker stack the main service uses (remote-server :13000, relay :18082),
+    # which is backed by a SHARED Postgres. Login tokens still land only in this
+    # instance's own config.json, but any remote workspace/project writes hit
+    # the shared DB — acceptable for testing, but not zero-impact.
+    local REMOTE_PORT="${VK_REMOTE_PORT:-13000}"
+    local RELAY_PORT="${VK_RELAY_PORT:-18082}"
+    local SHARED_API_BASE="" SHARED_RELAY_BASE=""
+    local BROWSER_API_BASE="" BROWSER_RELAY_BASE=""
+    if [ "${VK_TEST_REMOTE:-0}" = "1" ]; then
+        SHARED_API_BASE="http://127.0.0.1:${REMOTE_PORT}"
+        SHARED_RELAY_BASE="http://127.0.0.1:${RELAY_PORT}"
+        BROWSER_API_BASE="http://localhost:${REMOTE_PORT}"
+        BROWSER_RELAY_BASE="http://localhost:${RELAY_PORT}"
+    fi
+
     echo ""
     echo "╔══ vk-test-feature ══════════════════════════════════════╗"
     echo "║  Isolated lite-mode instance (this worktree only)       ║"
@@ -136,6 +155,16 @@ EOF
     printf "║  Logs       %-43s ║\n" ".vk-test/logs/{server,vite}.log"
     echo "╠══════════════════════════════════════════════════════════╣"
     echo "║  Main service (13001) is NOT affected.                   ║"
+    if [ "${VK_TEST_REMOTE:-0}" = "1" ]; then
+        echo "╠══════════════════════════════════════════════════════════╣"
+        printf "\033[1;31m"
+        echo "║  ⚠  REMOTE ON: wired to shared stack :${REMOTE_PORT}/:${RELAY_PORT}        ║"
+        echo "║     Login enabled, but remote writes hit the SHARED      ║"
+        echo "║     Postgres the main service uses. Not zero-impact.     ║"
+        printf "\033[0m"
+    else
+        echo "║  Remote OFF (no login). Set VK_TEST_REMOTE=1 to enable.  ║"
+    fi
     echo "╚══════════════════════════════════════════════════════════╝"
     echo ""
 
@@ -149,9 +178,9 @@ EOF
         PREVIEW_PROXY_PORT="$PP_PORT" \
         RUST_LOG="${RUST_LOG:-info}" \
         VK_ALLOWED_ORIGINS="http://localhost:${FE_PORT}" \
-        VITE_VK_SHARED_API_BASE="" \
-        VK_SHARED_API_BASE="" \
-        VK_SHARED_RELAY_API_BASE="" \
+        VITE_VK_SHARED_API_BASE="${BROWSER_API_BASE}" \
+        VK_SHARED_API_BASE="${SHARED_API_BASE}" \
+        VK_SHARED_RELAY_API_BASE="${SHARED_RELAY_BASE}" \
         cargo watch -q -w "${ROOT}/crates" \
             -x "run --bin server" \
             >"${LOGS_DIR}/server.log" 2>&1 &
@@ -168,7 +197,8 @@ EOF
         PREVIEW_PROXY_PORT="$PP_PORT" \
         VK_DEV_HOST="localhost" \
         VITE_OPEN="false" \
-        VITE_VK_SHARED_API_BASE="" \
+        VITE_VK_SHARED_API_BASE="${BROWSER_API_BASE}" \
+        VITE_RELAY_API_BASE_URL="${BROWSER_RELAY_BASE}" \
         pnpm --dir "${ROOT}/packages/local-web" run dev \
             >"${LOGS_DIR}/vite.log" 2>&1 &
     echo "$!" >"$(_pid_file vite)"

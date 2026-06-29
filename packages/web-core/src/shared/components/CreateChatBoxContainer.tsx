@@ -68,13 +68,24 @@ export function CreateChatBoxContainer({
   //   - worktree: isolated git worktree, new vk/ branch, auto-commits (default).
   //   - console:  runs in the repo's own working tree on its CURRENT branch,
   //               never creates a branch or auto-commits (ops control plane).
-  // Console requires exactly one repository.
+  // Console attaches to a SINGLE repo's working tree, so it is offered whenever
+  // at least one repo is selected. When several repos are selected, the user
+  // picks which one the console opens on (`consoleRepoId`), and only that repo
+  // is sent to the backend (which itself rejects multi-repo console payloads).
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceKind>('worktree');
-  const repoDirModeAvailable = repos.length === 1;
+  const repoDirModeAvailable = hasSelectedRepos;
   const effectiveMode: WorkspaceKind =
     workspaceMode !== 'worktree' && !repoDirModeAvailable
       ? 'worktree'
       : workspaceMode;
+
+  // Which repo a console workspace opens on when multiple repos are selected.
+  // Falls back to the first repo when unset or the chosen repo was removed.
+  const [consoleRepoId, setConsoleRepoId] = useState<string | null>(null);
+  const effectiveConsoleRepoId =
+    consoleRepoId && repos.some((r) => r.id === consoleRepoId)
+      ? consoleRepoId
+      : (repos[0]?.id ?? null);
 
   useEffect(() => {
     if (!hasInitialValue || hasInitializedStep) return;
@@ -238,11 +249,18 @@ export function CreateChatBoxContainer({
     if (!canSubmit || !executorConfig) return;
 
     const { title } = splitMessageToTitleDescription(message);
+    // Console attaches to a single repo's working tree. When several repos are
+    // selected, send only the one the user picked to open the console on; the
+    // backend rejects multi-repo console payloads outright.
+    const submittedRepos =
+      effectiveMode === 'console' && effectiveConsoleRepoId
+        ? repos.filter((r) => r.id === effectiveConsoleRepoId)
+        : repos;
     const data = {
       executor_config: executorConfig,
       name: title,
       prompt: message,
-      repos: repos.map((r) => ({
+      repos: submittedRepos.map((r) => ({
         repo_id: r.id,
         target_branch: targetBranches[r.id]!,
       })),
@@ -292,6 +310,7 @@ export function CreateChatBoxContainer({
     clearDraft,
     linkedIssue,
     effectiveMode,
+    effectiveConsoleRepoId,
   ]);
 
   // Determine error to display
@@ -355,18 +374,41 @@ export function CreateChatBoxContainer({
                       </option>
                       <option value="console">
                         {t('createMode.mode.console', {
-                          defaultValue: 'Main directory console (current branch)',
+                          defaultValue:
+                            'Main directory console (current branch)',
                         })}
                       </option>
                     </select>
                   </label>
                   {effectiveMode === 'console' && (
-                    <p className="text-center text-xs text-low">
-                      {t('createMode.console.warning', {
-                        defaultValue:
-                          'The agent runs directly in your repo’s current directory and branch. It will not create a branch or commit for you — you stay in control of commits.',
-                      })}
-                    </p>
+                    <>
+                      {repos.length > 1 && (
+                        <label className="flex items-center gap-half text-sm text-mid">
+                          <span>
+                            {t('createMode.console.repoLabel', {
+                              defaultValue: 'Open console on',
+                            })}
+                          </span>
+                          <select
+                            className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high"
+                            value={effectiveConsoleRepoId ?? ''}
+                            onChange={(e) => setConsoleRepoId(e.target.value)}
+                          >
+                            {repos.map((repo) => (
+                              <option key={repo.id} value={repo.id}>
+                                {repo.display_name || repo.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <p className="text-center text-xs text-low">
+                        {t('createMode.console.warning', {
+                          defaultValue:
+                            'The agent runs directly in your repo’s current directory and branch. It will not create a branch or commit for you — you stay in control of commits.',
+                        })}
+                      </p>
+                    </>
                   )}
                 </div>
               )}
