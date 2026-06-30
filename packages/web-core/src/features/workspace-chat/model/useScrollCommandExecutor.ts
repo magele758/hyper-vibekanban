@@ -50,8 +50,8 @@ export interface ScrollCommandExecutorOptions {
 
   dataVersion: number;
 
-  /** Point-in-time DOM check for isAtBottom (avoids stale React state). */
-  checkIsAtBottom: () => boolean;
+  /** Whether the reader is following the latest messages (stick to bottom). */
+  shouldStickToBottom: () => boolean;
 
   scrollToBottom: (behavior?: TanStackScrollBehavior) => void;
 
@@ -97,7 +97,7 @@ export function useScrollCommandExecutor({
   virtualizer,
   itemCount,
   dataVersion,
-  checkIsAtBottom,
+  shouldStickToBottom,
   scrollToBottom,
   scrollToAbsoluteIndex,
 }: ScrollCommandExecutorOptions): ScrollCommandExecutorResult {
@@ -113,11 +113,11 @@ export function useScrollCommandExecutor({
       const intent = resolveScrollIntent(
         addType,
         isInitialLoad,
-        checkIsAtBottom()
+        shouldStickToBottom()
       );
       stateRef.current = setPendingIntent(stateRef.current, intent);
     },
-    [checkIsAtBottom]
+    [shouldStickToBottom]
   );
 
   // -------------------------------------------------------------------------

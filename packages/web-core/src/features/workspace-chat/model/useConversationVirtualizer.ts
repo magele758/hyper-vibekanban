@@ -27,6 +27,7 @@ import {
 } from './conversation-row-model';
 import {
   NEAR_BOTTOM_THRESHOLD_PX,
+  isAtBottom,
   isNearBottom,
 } from './conversation-scroll-commands';
 
@@ -68,6 +69,12 @@ export interface ConversationVirtualizerOptions {
   onAtBottomChange?: (atBottom: boolean) => void;
 
   shouldSuppressSizeAdjustment?: () => boolean;
+
+  /**
+   * Bumps whenever conversation content changes (including in-place tail
+   * growth during streaming). Used to re-run bottom-lock correction.
+   */
+  contentVersion?: number;
 }
 
 export interface ConversationVirtualizerResult {
@@ -116,6 +123,12 @@ export interface ConversationVirtualizerResult {
   checkIsAtBottom: () => boolean;
 
   /**
+   * Whether new content should auto-scroll to the bottom. True when the
+   * bottom-lock is active or the reader is already near the bottom.
+   */
+  shouldStickToBottom: () => boolean;
+
+  /**
    * Release the bottom-lock. Call when navigating away from the
    * bottom (e.g., scrollToPreviousUserMessage).
    */
@@ -151,8 +164,11 @@ export function useConversationVirtualizer({
   scrollContainerRef,
   onAtBottomChange,
   shouldSuppressSizeAdjustment,
+  contentVersion = 0,
 }: ConversationVirtualizerOptions): ConversationVirtualizerResult {
   const bottomLockedRef = useRef(false);
+  const userDetachedFromBottomRef = useRef(false);
+  const userScrollUpDeadlineRef = useRef(0);
   const smoothScrollDeadlineRef = useRef(0);
 
   const isBottomScrollCorrectionActive = useCallback(
@@ -254,6 +270,32 @@ export function useConversationVirtualizer({
 
   const prevScrollTopRef = useRef(0);
 
+  const snapToBottomIfLocked = useCallback(() => {
+    if (!bottomLockedRef.current) return;
+    if (performance.now() < smoothScrollDeadlineRef.current) return;
+    if (performance.now() < userScrollUpDeadlineRef.current) return;
+
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll > 0 && Math.abs(maxScroll - el.scrollTop) > 1) {
+      el.scrollTop = maxScroll;
+    }
+  }, [scrollContainerRef]);
+
+  const engageBottomLock = useCallback(() => {
+    bottomLockedRef.current = true;
+    userDetachedFromBottomRef.current = false;
+    userScrollUpDeadlineRef.current = 0;
+  }, []);
+
+  const detachFromBottom = useCallback(() => {
+    bottomLockedRef.current = false;
+    userDetachedFromBottomRef.current = true;
+    userScrollUpDeadlineRef.current = performance.now() + 200;
+  }, []);
+
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -262,32 +304,63 @@ export function useConversationVirtualizer({
 
     const handleScroll = () => {
       const currentScrollTop = el.scrollTop;
-
-      // Release bottom lock on any user-initiated upward scroll.
-      // Guards prevent false positives from programmatic scroll sources:
-      // - smoothScrollDeadlineRef: set during scrollToBottom('smooth')
-      // - shouldSuppressSizeAdjustment: set during interaction anchor corrections
-      // - 5px threshold: filters input-resize micro-adjustments
-      if (
-        bottomLockedRef.current &&
-        prevScrollTopRef.current - currentScrollTop > 5 &&
+      const atBottom = isAtBottom(
+        currentScrollTop,
+        el.clientHeight,
+        el.scrollHeight
+      );
+      const canChangeBottomLock =
         performance.now() > smoothScrollDeadlineRef.current &&
-        !shouldSuppressSizeAdjustment?.()
+        performance.now() > userScrollUpDeadlineRef.current &&
+        !shouldSuppressSizeAdjustment?.();
+      const scrolledUp = prevScrollTopRef.current - currentScrollTop > 2;
+      const scrolledDown = currentScrollTop - prevScrollTopRef.current > 2;
+
+      // Release bottom lock on user-initiated upward scroll.
+      if (bottomLockedRef.current && scrolledUp && canChangeBottomLock) {
+        detachFromBottom();
+      } else if (
+        userDetachedFromBottomRef.current &&
+        !bottomLockedRef.current &&
+        atBottom &&
+        scrolledDown &&
+        canChangeBottomLock
       ) {
-        bottomLockedRef.current = false;
+        // Reader scrolled back to the exact bottom — resume auto-follow.
+        engageBottomLock();
+        snapToBottomIfLocked();
       }
 
       prevScrollTopRef.current = currentScrollTop;
       syncIsAtBottom();
     };
 
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY >= 0 || !bottomLockedRef.current) return;
+      if (performance.now() < smoothScrollDeadlineRef.current) return;
+      if (shouldSuppressSizeAdjustment?.()) return;
+
+      // Release lock on upward wheel intent before scroll position catches up,
+      // so bottom-lock correction does not fight the first drag.
+      detachFromBottom();
+    };
+
     el.addEventListener('scroll', handleScroll, { passive: true });
+    el.addEventListener('wheel', handleWheel, { passive: true });
     handleScroll();
 
     return () => {
       el.removeEventListener('scroll', handleScroll);
+      el.removeEventListener('wheel', handleWheel);
     };
-  }, [scrollContainerRef, shouldSuppressSizeAdjustment, syncIsAtBottom]);
+  }, [
+    detachFromBottom,
+    engageBottomLock,
+    scrollContainerRef,
+    shouldSuppressSizeAdjustment,
+    snapToBottomIfLocked,
+    syncIsAtBottom,
+  ]);
 
   // -------------------------------------------------------------------------
   // Derived state
@@ -298,23 +371,14 @@ export function useConversationVirtualizer({
 
   useLayoutEffect(() => {
     syncIsAtBottom();
-
-    if (!bottomLockedRef.current) return;
-    if (performance.now() < smoothScrollDeadlineRef.current) return;
-
-    const el = scrollContainerRef.current;
-    if (!el) return;
-
-    const maxScroll = el.scrollHeight - el.clientHeight;
-    if (maxScroll > 0 && Math.abs(maxScroll - el.scrollTop) > 1) {
-      el.scrollTop = maxScroll;
-    }
+    snapToBottomIfLocked();
   }, [
     rows.length,
     totalRowCount,
     totalSize,
+    contentVersion,
+    snapToBottomIfLocked,
     syncIsAtBottom,
-    scrollContainerRef,
   ]);
 
   // -------------------------------------------------------------------------
@@ -326,7 +390,7 @@ export function useConversationVirtualizer({
       const el = scrollContainerRef.current;
       if (!el) return;
 
-      bottomLockedRef.current = true;
+      engageBottomLock();
 
       if (behavior === 'smooth') {
         smoothScrollDeadlineRef.current = performance.now() + 500;
@@ -335,7 +399,7 @@ export function useConversationVirtualizer({
         el.scrollTop = el.scrollHeight - el.clientHeight;
       }
     },
-    [scrollContainerRef, virtualizer]
+    [engageBottomLock, scrollContainerRef]
   );
 
   const scrollToIndex = useCallback(
@@ -347,7 +411,7 @@ export function useConversationVirtualizer({
       }
     ) => {
       if (bottomLockedRef.current) {
-        bottomLockedRef.current = false;
+        detachFromBottom();
       }
 
       virtualizer.scrollToIndex(index, {
@@ -355,7 +419,7 @@ export function useConversationVirtualizer({
         behavior: options?.behavior ?? 'smooth',
       });
     },
-    [virtualizer]
+    [detachFromBottom, virtualizer]
   );
 
   const scrollToPreviousUserMessage = useCallback((): boolean => {
@@ -383,10 +447,16 @@ export function useConversationVirtualizer({
     return isNearBottom(el.scrollTop, el.clientHeight, el.scrollHeight);
   }, [scrollContainerRef]);
 
+  const shouldStickToBottom = useCallback((): boolean => {
+    if (userDetachedFromBottomRef.current) return false;
+    if (bottomLockedRef.current) return true;
+    return checkIsAtBottom();
+  }, [checkIsAtBottom]);
+
   const releaseBottomLock = useCallback(() => {
-    if (!bottomLockedRef.current) return;
-    bottomLockedRef.current = false;
-  }, []);
+    if (!bottomLockedRef.current && userDetachedFromBottomRef.current) return;
+    detachFromBottom();
+  }, [detachFromBottom]);
 
   // -------------------------------------------------------------------------
   // Row ↔ VirtualItem mapping
@@ -423,6 +493,7 @@ export function useConversationVirtualizer({
     scrollToPreviousUserMessage,
     isAtBottom: isAtBottomState,
     checkIsAtBottom,
+    shouldStickToBottom,
     releaseBottomLock,
     rowIndexForVirtualItem,
     rowForVirtualItem,

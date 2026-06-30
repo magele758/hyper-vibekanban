@@ -475,6 +475,7 @@ export const ConversationList = forwardRef<
     scrollContainerRef: tanstackScrollRef,
     onAtBottomChange,
     shouldSuppressSizeAdjustment: shouldSuppressInteractionDrivenSizeAdjustment,
+    contentVersion: dataVersion,
   });
 
   // NOTE: Do NOT call conversationVirtualizer.virtualizer.measure() when
@@ -553,7 +554,7 @@ export const ConversationList = forwardRef<
     virtualizer: conversationVirtualizer.virtualizer,
     itemCount: conversationRows.length,
     dataVersion,
-    checkIsAtBottom: conversationVirtualizer.checkIsAtBottom,
+    shouldStickToBottom: conversationVirtualizer.shouldStickToBottom,
     scrollToBottom: scrollToBottomAndClearSpacer,
     scrollToAbsoluteIndex,
   });

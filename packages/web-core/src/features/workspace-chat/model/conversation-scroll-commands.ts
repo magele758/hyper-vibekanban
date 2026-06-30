@@ -16,6 +16,9 @@ import type { AddEntryType } from '@/shared/hooks/useConversationHistory/types';
  */
 export const NEAR_BOTTOM_THRESHOLD_PX = 64;
 
+/** Distance from bottom treated as "exactly at bottom" for re-engaging auto-follow. */
+export const AT_BOTTOM_THRESHOLD_PX = 2;
+
 // ---------------------------------------------------------------------------
 // Scroll Intent
 // ---------------------------------------------------------------------------
@@ -107,36 +110,40 @@ export function createInitialScrollState(): ScrollState {
 
 /**
  * Map a data update to the scroll intent that should be applied next.
+ *
+ * @param shouldStickToBottom When true, the reader is following the latest
+ *   messages and new tail content should stay in view. When false, preserve
+ *   the current viewport so history can be read uninterrupted.
  */
 export function resolveScrollIntent(
   addType: AddEntryType,
   isInitialLoad: boolean,
-  isAtBottom: boolean
+  shouldStickToBottom: boolean
 ): ScrollIntent {
   if (isInitialLoad) {
     return { type: 'initial-bottom', purgeEstimatedSizes: true };
   }
 
   // Background history batches prepend older messages above the viewport.
-  // Explicit follow-bottom on each batch fights the bottom-lock correction
-  // loop and causes visible jitter when entering a workspace.
+  // Bottom-lock correction keeps the reader pinned when they are already
+  // following the latest messages; otherwise preserve their viewport.
   if (addType === 'historic') {
     return { type: 'preserve-anchor' };
   }
 
   if (addType === 'plan') {
-    return isAtBottom
+    return shouldStickToBottom
       ? { type: 'plan-reveal', align: 'start' }
       : { type: 'preserve-anchor' };
   }
 
   if (addType === 'running') {
-    return isAtBottom
+    return shouldStickToBottom
       ? { type: 'follow-bottom', behavior: 'auto' }
       : { type: 'preserve-anchor' };
   }
 
-  return isAtBottom
+  return shouldStickToBottom
     ? { type: 'follow-bottom', behavior: 'auto' }
     : { type: 'preserve-anchor' };
 }
@@ -201,6 +208,33 @@ export function clearPendingIntent(state: ScrollState): ScrollState {
  * Check whether a scroll container is within `NEAR_BOTTOM_THRESHOLD_PX`
  * of the bottom. Returns true for non-finite inputs (unmounted containers).
  */
+export function distanceFromBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number
+): number {
+  if (
+    !Number.isFinite(scrollTop) ||
+    !Number.isFinite(clientHeight) ||
+    !Number.isFinite(scrollHeight)
+  ) {
+    return 0;
+  }
+
+  return scrollHeight - clientHeight - scrollTop;
+}
+
+export function isAtBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number
+): boolean {
+  return (
+    distanceFromBottom(scrollTop, clientHeight, scrollHeight) <=
+    AT_BOTTOM_THRESHOLD_PX
+  );
+}
+
 export function isNearBottom(
   scrollTop: number,
   clientHeight: number,
@@ -214,8 +248,10 @@ export function isNearBottom(
     return true;
   }
 
-  const distanceFromBottom = scrollHeight - clientHeight - scrollTop;
-  return distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+  return (
+    distanceFromBottom(scrollTop, clientHeight, scrollHeight) <=
+    NEAR_BOTTOM_THRESHOLD_PX
+  );
 }
 
 // ---------------------------------------------------------------------------
