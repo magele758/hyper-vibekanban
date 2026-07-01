@@ -54,9 +54,10 @@ export async function classifyLinkedWorkspacesForIssues(
 }
 
 /**
- * Deletes the given local workspaces (and their local directories) on a
- * best-effort basis. Failures (e.g. a still-running workspace) are surfaced
- * to the user without blocking the caller's own deletion flow.
+ * Deletes the given local workspaces (local DB row + worktree directory) and
+ * removes their corresponding remote workspace record, on a best-effort
+ * basis. Failures (e.g. a still-running workspace) are surfaced to the user
+ * without blocking the caller's own deletion flow.
  */
 export async function deleteWorkspacesBestEffort(
   workspaces: DeletableWorkspaceSummary[]
@@ -64,7 +65,11 @@ export async function deleteWorkspacesBestEffort(
   const failures: string[] = [];
   for (const workspace of workspaces) {
     try {
+      // Deletes the local workspace DB row + worktree directory.
       await workspacesApi.delete(workspace.id, false);
+      // Removes the corresponding remote workspace record so it doesn't
+      // linger as an orphan once the issue (and this cascade) is gone.
+      await workspacesApi.unlinkFromIssue(workspace.id);
     } catch {
       failures.push(workspace.name || workspace.branch);
     }
