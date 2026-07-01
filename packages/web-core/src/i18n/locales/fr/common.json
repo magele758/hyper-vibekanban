@@ -154,6 +154,18 @@
     },
     "linkError": "Failed to link workspace"
   },
+  "issues": {
+    "deleteDialog": {
+      "title": "Supprimer le ticket",
+      "titlePlural": "Supprimer {{count}} tickets",
+      "description": "Êtes-vous sûr de vouloir supprimer ce ticket ? Cette action est irréversible.",
+      "descriptionPlural": "Êtes-vous sûr de vouloir supprimer ces {{count}} tickets ? Cette action est irréversible.",
+      "deleteWorkspaceLabel": "Supprimer également l'espace de travail lié et son répertoire local",
+      "deleteWorkspacesLabel": "Supprimer également {{count}} espaces de travail liés et leurs répertoires locaux",
+      "consoleExemptSingular": "1 espace de travail en mode console est conservé et ne sera pas supprimé.",
+      "consoleExemptPlural": "{{count}} espaces de travail en mode console sont conservés et ne seront pas supprimés."
+    }
+  },
   "fileTree": {
     "searchPlaceholder": "Rechercher des fichiers...",
     "noResults": "Aucun fichier correspondant",

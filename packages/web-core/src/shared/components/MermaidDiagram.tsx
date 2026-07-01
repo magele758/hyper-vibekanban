@@ -1,63 +1,20 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import { useMermaidRender } from '@/shared/hooks/useMermaidRender';
+import { MermaidPreviewDialog } from '@/shared/dialogs/shared/MermaidPreviewDialog';
 
 interface MermaidDiagramProps {
   chart: string;
   theme: 'light' | 'dark';
 }
 
-// Serialize all mermaid operations to avoid concurrent render/initialize races
-let mermaidQueue: Promise<void> = Promise.resolve();
-let initializedTheme: string | null = null;
-
 export function MermaidDiagram({ chart, theme }: MermaidDiagramProps) {
-  const [svg, setSvg] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const renderCountRef = useRef(0);
+  const { svg, error } = useMermaidRender(chart, theme);
+  const [isHovered, setIsHovered] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    const renderId = ++renderCountRef.current;
-
-    mermaidQueue = mermaidQueue.then(async () => {
-      if (cancelled) return;
-
-      try {
-        const { default: mermaid } = await import('mermaid');
-        const mermaidTheme = theme === 'dark' ? 'dark' : 'default';
-
-        if (initializedTheme !== mermaidTheme) {
-          mermaid.initialize({
-            startOnLoad: false,
-            theme: mermaidTheme,
-            securityLevel: 'strict',
-          });
-          initializedTheme = mermaidTheme;
-        }
-
-        // Use renderId to ensure each render call gets a unique DOM element ID
-        const { svg: renderedSvg } = await mermaid.render(
-          `mermaid-${renderId}-${Date.now()}`,
-          chart
-        );
-
-        if (!cancelled) {
-          setSvg(renderedSvg);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : 'Failed to render diagram'
-          );
-          setSvg('');
-        }
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [chart, theme]);
+  const openPreview = () => {
+    void MermaidPreviewDialog.show({ chart, theme });
+  };
 
   if (error) {
     return (
@@ -80,8 +37,36 @@ export function MermaidDiagram({ chart, theme }: MermaidDiagramProps) {
 
   return (
     <div
-      className="my-3 flex justify-center overflow-auto"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+      className="relative my-3 flex justify-center overflow-auto"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div
+        className="cursor-zoom-in"
+        role="button"
+        tabIndex={0}
+        onClick={openPreview}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openPreview();
+          }
+        }}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {isHovered && (
+        <button
+          type="button"
+          className="absolute right-1 top-1 rounded-sm border border-border bg-primary/90 p-1.5 text-low shadow-sm hover:bg-secondary hover:text-high"
+          onClick={(e) => {
+            e.stopPropagation();
+            openPreview();
+          }}
+          title="放大查看"
+        >
+          <Maximize2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
   );
 }

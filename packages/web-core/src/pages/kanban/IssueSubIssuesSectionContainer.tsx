@@ -9,11 +9,16 @@ import { useActions } from '@/shared/hooks/useActions';
 import { Actions } from '@/shared/actions';
 import { bulkUpdateIssues } from '@/shared/lib/remoteApi';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
+import { DeleteIssueDialog } from '@vibe/ui/components/DeleteIssueDialog';
 import {
   IssueSubIssuesSection,
   type SubIssueData,
 } from '@vibe/ui/components/IssueSubIssuesSection';
 import type { SectionAction } from '@vibe/ui/components/CollapsibleSectionHeader';
+import {
+  classifyLinkedWorkspacesForIssues,
+  deleteWorkspacesBestEffort,
+} from '@/shared/lib/issueWorkspaceCascadeDelete';
 
 interface IssueSubIssuesSectionContainerProps {
   issueId: string;
@@ -42,6 +47,7 @@ export function IssueSubIssuesSectionContainer({
     updateIssue,
     removeIssue,
     getAssigneesForIssue,
+    getWorkspacesForIssue,
     isLoading: projectLoading,
   } = useProjectContext();
 
@@ -191,21 +197,47 @@ export function IssueSubIssuesSectionContainer({
   const handleSubIssueDelete = useCallback(
     async (subIssueId: string) => {
       const subIssue = issues.find((issue) => issue.id === subIssueId);
-      const result = await ConfirmDialog.show({
-        title: 'Delete Sub-issue',
-        message: subIssue
-          ? `Are you sure you want to delete "${subIssue.title}"? This action cannot be undone.`
-          : 'Are you sure you want to delete this sub-issue? This action cannot be undone.',
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
-        variant: 'destructive',
-      });
 
-      if (result === 'confirmed') {
-        removeIssue(subIssueId);
+      // Console-mode workspaces are always exempted from cascade deletion.
+      const { deletableWorkspaces, exemptedConsoleWorkspaceCount } =
+        await classifyLinkedWorkspacesForIssues(
+          getWorkspacesForIssue(subIssueId),
+          [subIssueId]
+        );
+
+      let shouldDeleteWorkspaces = false;
+      if (deletableWorkspaces.length > 0 || exemptedConsoleWorkspaceCount > 0) {
+        const result = await DeleteIssueDialog.show({
+          issueCount: 1,
+          deletableWorkspaces,
+          exemptedConsoleWorkspaceCount,
+        });
+        if (result.action !== 'confirmed') {
+          return;
+        }
+        shouldDeleteWorkspaces = result.deleteWorkspaces ?? false;
+      } else {
+        const result = await ConfirmDialog.show({
+          title: 'Delete Sub-issue',
+          message: subIssue
+            ? `Are you sure you want to delete "${subIssue.title}"? This action cannot be undone.`
+            : 'Are you sure you want to delete this sub-issue? This action cannot be undone.',
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          variant: 'destructive',
+        });
+        if (result !== 'confirmed') {
+          return;
+        }
       }
+
+      if (shouldDeleteWorkspaces) {
+        await deleteWorkspacesBestEffort(deletableWorkspaces);
+      }
+
+      removeIssue(subIssueId);
     },
-    [issues, removeIssue]
+    [issues, removeIssue, getWorkspacesForIssue]
   );
 
   // Actions for the section header

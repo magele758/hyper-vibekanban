@@ -168,6 +168,18 @@
       "unlinkFromIssueLabel": "Also unlink from issue"
     }
   },
+  "issues": {
+    "deleteDialog": {
+      "title": "Delete Issue",
+      "titlePlural": "Delete {{count}} Issues",
+      "description": "Are you sure you want to delete this issue? This action cannot be undone.",
+      "descriptionPlural": "Are you sure you want to delete these {{count}} issues? This action cannot be undone.",
+      "deleteWorkspaceLabel": "Also delete linked workspace and its local directory",
+      "deleteWorkspacesLabel": "Also delete {{count}} linked workspaces and their local directories",
+      "consoleExemptSingular": "1 console workspace is kept and will not be deleted (console mode).",
+      "consoleExemptPlural": "{{count}} console workspaces are kept and will not be deleted (console mode)."
+    }
+  },
   "fileTree": {
     "searchPlaceholder": "Search files...",
     "noResults": "No matching files",

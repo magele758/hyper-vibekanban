@@ -154,6 +154,18 @@
     },
     "linkError": "Failed to link workspace"
   },
+  "issues": {
+    "deleteDialog": {
+      "title": "Eliminar issue",
+      "titlePlural": "Eliminar {{count}} issues",
+      "description": "¿Estás seguro de que deseas eliminar este issue? Esta acción no se puede deshacer.",
+      "descriptionPlural": "¿Estás seguro de que deseas eliminar estos {{count}} issues? Esta acción no se puede deshacer.",
+      "deleteWorkspaceLabel": "Eliminar también el espacio de trabajo vinculado y su directorio local",
+      "deleteWorkspacesLabel": "Eliminar también {{count}} espacios de trabajo vinculados y sus directorios locales",
+      "consoleExemptSingular": "1 espacio de trabajo en modo consola se conserva y no se eliminará.",
+      "consoleExemptPlural": "{{count}} espacios de trabajo en modo consola se conservan y no se eliminarán."
+    }
+  },
   "fileTree": {
     "searchPlaceholder": "Buscar archivos...",
     "noResults": "No hay archivos coincidentes",

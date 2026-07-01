@@ -154,6 +154,18 @@
     },
     "linkError": "Failed to link workspace"
   },
+  "issues": {
+    "deleteDialog": {
+      "title": "イシューを削除",
+      "titlePlural": "{{count}} 件のイシューを削除",
+      "description": "このイシューを削除してもよろしいですか？この操作は元に戻せません。",
+      "descriptionPlural": "これら {{count}} 件のイシューを削除してもよろしいですか？この操作は元に戻せません。",
+      "deleteWorkspaceLabel": "関連するワークスペースとそのローカルディレクトリも削除する",
+      "deleteWorkspacesLabel": "関連する {{count}} 件のワークスペースとそのローカルディレクトリも削除する",
+      "consoleExemptSingular": "コンソールモードのワークスペース 1 件は削除されず保持されます。",
+      "consoleExemptPlural": "コンソールモードのワークスペース {{count}} 件は削除されず保持されます。"
+    }
+  },
   "fileTree": {
     "searchPlaceholder": "ファイルを検索...",
     "noResults": "一致するファイルがありません",

@@ -61,6 +61,11 @@ import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
 import { ChangeTargetDialog } from '@vibe/ui/components/ChangeTargetDialog';
 import { DeleteWorkspaceDialog } from '@vibe/ui/components/DeleteWorkspaceDialog';
+import { DeleteIssueDialog } from '@vibe/ui/components/DeleteIssueDialog';
+import {
+  classifyLinkedWorkspacesForIssues,
+  deleteWorkspacesBestEffort,
+} from '@/shared/lib/issueWorkspaceCascadeDelete';
 import { RebaseDialog } from '@/shared/dialogs/command-bar/RebaseDialog';
 import { ResolveConflictsDialog } from '@/shared/dialogs/tasks/ResolveConflictsDialog';
 import { RenameWorkspaceDialog } from '@vibe/ui/components/RenameWorkspaceDialog';
@@ -1421,17 +1426,45 @@ export const Actions = {
       ctx.layoutMode === 'kanban' && ctx.hasSelectedKanbanIssue,
     execute: async (ctx, _projectId, issueIds) => {
       const count = issueIds.length;
-      const result = await ConfirmDialog.show({
-        title: count === 1 ? 'Delete Issue' : `Delete ${count} Issues`,
-        message:
-          count === 1
-            ? 'Are you sure you want to delete this issue? This action cannot be undone.'
-            : `Are you sure you want to delete these ${count} issues? This action cannot be undone.`,
-        confirmText: 'Delete',
-        cancelText: 'Cancel',
-        variant: 'destructive',
-      });
-      if (result === 'confirmed' && ctx.projectMutations?.removeIssue) {
+
+      // Gather local workspaces linked to the issue(s) being deleted, so we
+      // can offer to cascade-delete them (and their local directories).
+      // Console-mode workspaces are always exempted from this cascade.
+      const { deletableWorkspaces, exemptedConsoleWorkspaceCount } =
+        await classifyLinkedWorkspacesForIssues(ctx.remoteWorkspaces, issueIds);
+
+      let shouldDeleteWorkspaces = false;
+      if (deletableWorkspaces.length > 0 || exemptedConsoleWorkspaceCount > 0) {
+        const result = await DeleteIssueDialog.show({
+          issueCount: count,
+          deletableWorkspaces,
+          exemptedConsoleWorkspaceCount,
+        });
+        if (result.action !== 'confirmed') {
+          return;
+        }
+        shouldDeleteWorkspaces = result.deleteWorkspaces ?? false;
+      } else {
+        const result = await ConfirmDialog.show({
+          title: count === 1 ? 'Delete Issue' : `Delete ${count} Issues`,
+          message:
+            count === 1
+              ? 'Are you sure you want to delete this issue? This action cannot be undone.'
+              : `Are you sure you want to delete these ${count} issues? This action cannot be undone.`,
+          confirmText: 'Delete',
+          cancelText: 'Cancel',
+          variant: 'destructive',
+        });
+        if (result !== 'confirmed') {
+          return;
+        }
+      }
+
+      if (shouldDeleteWorkspaces) {
+        await deleteWorkspacesBestEffort(deletableWorkspaces);
+      }
+
+      if (ctx.projectMutations?.removeIssue) {
         for (const issueId of issueIds) {
           ctx.projectMutations.removeIssue(issueId);
         }

@@ -154,6 +154,18 @@
     },
     "linkError": "Failed to link workspace"
   },
+  "issues": {
+    "deleteDialog": {
+      "title": "删除议题",
+      "titlePlural": "删除 {{count}} 个议题",
+      "description": "确定要删除此议题吗？此操作无法撤销。",
+      "descriptionPlural": "确定要删除这 {{count}} 个议题吗？此操作无法撤销。",
+      "deleteWorkspaceLabel": "同时删除关联的工作区及其本地目录",
+      "deleteWorkspacesLabel": "同时删除 {{count}} 个关联工作区及其本地目录",
+      "consoleExemptSingular": "1 个 Console 模式工作区将被保留，不会删除。",
+      "consoleExemptPlural": "{{count}} 个 Console 模式工作区将被保留，不会删除。"
+    }
+  },
   "fileTree": {
     "searchPlaceholder": "搜索文件...",
     "noResults": "没有匹配的文件",
