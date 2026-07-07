@@ -8,17 +8,10 @@ import {
 import { useLogStream } from '@/shared/hooks/useLogStream';
 import { useLogsPanel } from '@/shared/hooks/useLogsPanel';
 import { TerminalPanelContainer } from '@/shared/components/TerminalPanelContainer';
+import { MarkdownFilePreviewContainer } from './MarkdownFilePreviewContainer';
 import { ArrowsInSimpleIcon } from '@phosphor-icons/react';
 
-export type LogsPanelContent =
-  | { type: 'process'; processId: string }
-  | {
-      type: 'tool';
-      toolName: string;
-      content: string;
-      command: string | undefined;
-    }
-  | { type: 'terminal' };
+export type { LogsPanelContent } from '@/shared/types/actions';
 
 interface LogsContentContainerProps {
   className: string;
@@ -69,6 +62,18 @@ export function LogsContentContainer({ className }: LogsContentContainerProps) {
       <div className="w-full h-full bg-secondary flex items-center justify-center text-low">
         <p className="text-sm">{t('logs.selectProcessToView')}</p>
       </div>
+    );
+  }
+
+  // Markdown file content - render with the shared markdown renderer
+  if (content.type === 'markdown') {
+    return (
+      <MarkdownFilePreviewContainer
+        key={`${content.repoId ?? ''}:${content.path}`}
+        path={content.path}
+        repoId={content.repoId}
+        className={className}
+      />
     );
   }
 

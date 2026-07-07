@@ -484,6 +484,7 @@ function AppChatMarkdown({
   maxWidth: string | undefined;
 }) {
   const { viewFileInChanges, findMatchingDiffPath } = useChangesViewActions();
+  const { viewMarkdownFileInPanel } = useLogsPanelActions();
 
   return (
     <ChatMarkdown
@@ -500,6 +501,7 @@ function AppChatMarkdown({
           sessionId={sessionId}
           findMatchingDiffPath={findMatchingDiffPath}
           onCodeClick={viewFileInChanges}
+          onMarkdownFileClick={viewMarkdownFileInPanel}
         />
       )}
     />

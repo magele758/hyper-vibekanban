@@ -281,6 +281,11 @@
     "searchLogs": "Search logs",
     "selectProcessToView": "Select a process to view logs"
   },
+  "markdownPreview": {
+    "loadError": "Could not load {{path}}",
+    "readOnlyBadge": "Read-only",
+    "readOnlyReason": "This file contains syntax the editor can't edit safely (frontmatter, raw HTML, or footnotes), so it's shown as a preview."
+  },
   "processes": {
     "noProcesses": "No processes",
     "terminal": "Terminal"

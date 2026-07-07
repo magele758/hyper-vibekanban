@@ -17,6 +17,7 @@ export interface LogsPanelContextValue {
     content: string,
     command?: string
   ) => void;
+  viewMarkdownFileInPanel: (path: string, repoId?: string) => void;
   expandTerminal: () => void;
   collapseTerminal: () => void;
   isTerminalExpanded: boolean;
@@ -29,6 +30,7 @@ export interface LogsPanelActionsContextValue {
     content: string,
     command?: string
   ) => void;
+  viewMarkdownFileInPanel: (path: string, repoId?: string) => void;
   expandTerminal: () => void;
   collapseTerminal: () => void;
 }
@@ -44,6 +46,7 @@ const defaultValue: LogsPanelContextValue = {
   handleLogNextMatch: () => {},
   viewProcessInPanel: () => {},
   viewToolContentInPanel: () => {},
+  viewMarkdownFileInPanel: () => {},
   expandTerminal: () => {},
   collapseTerminal: () => {},
   isTerminalExpanded: false,
@@ -52,6 +55,7 @@ const defaultValue: LogsPanelContextValue = {
 const defaultActionsValue: LogsPanelActionsContextValue = {
   viewProcessInPanel: () => {},
   viewToolContentInPanel: () => {},
+  viewMarkdownFileInPanel: () => {},
   expandTerminal: () => {},
   collapseTerminal: () => {},
 };

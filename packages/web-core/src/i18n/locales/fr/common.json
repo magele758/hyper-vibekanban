@@ -267,6 +267,11 @@
     "searchLogs": "Rechercher dans les logs",
     "selectProcessToView": "Sélectionnez un processus pour voir les logs"
   },
+  "markdownPreview": {
+    "loadError": "Impossible de charger {{path}}",
+    "readOnlyBadge": "Lecture seule",
+    "readOnlyReason": "Ce fichier contient une syntaxe que l'éditeur ne peut pas modifier en toute sécurité (frontmatter, HTML brut ou notes de bas de page), il est donc affiché en aperçu."
+  },
   "processes": {
     "noProcesses": "Aucun processus",
     "terminal": "Terminal"

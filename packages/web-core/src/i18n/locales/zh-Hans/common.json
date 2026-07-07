@@ -267,6 +267,11 @@
     "searchLogs": "搜索日志",
     "selectProcessToView": "选择一个进程以查看日志"
   },
+  "markdownPreview": {
+    "loadError": "无法加载 {{path}}",
+    "readOnlyBadge": "只读",
+    "readOnlyReason": "此文件包含编辑器无法安全编辑的语法（frontmatter、原始 HTML 或脚注），因此以预览方式显示。"
+  },
   "processes": {
     "noProcesses": "无进程",
     "terminal": "终端"

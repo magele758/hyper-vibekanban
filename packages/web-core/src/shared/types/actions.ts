@@ -28,6 +28,13 @@ export type LogsPanelContent =
       content: string;
       command: string | undefined;
     }
+  | {
+      type: 'markdown';
+      /** Repo-relative path of the markdown file. */
+      path: string;
+      /** Optional repo to resolve the path against. */
+      repoId: string | undefined;
+    }
   | { type: 'terminal' };
 
 // Special icon types for ContextBar

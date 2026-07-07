@@ -34,6 +34,8 @@ import {
   ChangeTargetBranchResponse,
   RenameBranchRequest,
   RenameBranchResponse,
+  ReadFileResponse,
+  WriteFileRequest,
   CheckEditorAvailabilityResponse,
   AvailabilityInfo,
   BaseCodingAgent,
@@ -422,6 +424,32 @@ export const workspacesApi = {
   get: async (workspaceId: string): Promise<Workspace> => {
     const response = await makeRequest(`/api/workspaces/${workspaceId}`);
     return handleApiResponse<Workspace>(response);
+  },
+
+  /** Read a text file from within the workspace worktree by relative path. */
+  readFile: async (
+    workspaceId: string,
+    path: string,
+    repoId?: string
+  ): Promise<ReadFileResponse> => {
+    const params = new URLSearchParams({ path });
+    if (repoId) params.set('repo_id', repoId);
+    const response = await makeRequest(
+      `/api/workspaces/${workspaceId}/files?${params.toString()}`
+    );
+    return handleApiResponse<ReadFileResponse>(response);
+  },
+
+  /** Overwrite an existing text file within the workspace worktree. */
+  writeFile: async (
+    workspaceId: string,
+    data: WriteFileRequest
+  ): Promise<void> => {
+    const response = await makeRequest(`/api/workspaces/${workspaceId}/files`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<void>(response);
   },
 
   update: async (

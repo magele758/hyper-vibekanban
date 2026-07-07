@@ -267,6 +267,11 @@
     "searchLogs": "Buscar registros",
     "selectProcessToView": "Seleccione un proceso para ver los registros"
   },
+  "markdownPreview": {
+    "loadError": "No se pudo cargar {{path}}",
+    "readOnlyBadge": "Solo lectura",
+    "readOnlyReason": "Este archivo contiene sintaxis que el editor no puede editar de forma segura (frontmatter, HTML sin procesar o notas al pie), por lo que se muestra como vista previa."
+  },
   "processes": {
     "noProcesses": "Sin procesos",
     "terminal": "Terminal"

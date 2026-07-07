@@ -133,6 +133,8 @@ type WysiwygProps = {
   findMatchingDiffPath?: (text: string) => string | null;
   /** Callback when clickable inline code is clicked (only in read-only mode) */
   onCodeClick?: (fullPath: string) => void;
+  /** Callback when a relative markdown-file link is clicked (only in read-only mode) */
+  onMarkdownFileClick?: (path: string) => void;
   /** Hide the copy/edit/delete action buttons in read-only mode */
   hideActions?: boolean;
   /** Show a static toolbar below the editor content */
@@ -281,6 +283,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
       saveStatus,
       staticToolbarActions,
       onRequestEdit,
+      onMarkdownFileClick,
     }: WysiwygProps,
     ref: React.ForwardedRef<WYSIWYGEditorRef>
   ) {
@@ -605,7 +608,11 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
                   </>
                 )}
                 {/* Link sanitization for read-only mode */}
-                {disabled && <ReadOnlyLinkPlugin />}
+                {disabled && (
+                  <ReadOnlyLinkPlugin
+                    onMarkdownFileClick={onMarkdownFileClick}
+                  />
+                )}
                 {/* Clickable code for file paths in read-only mode */}
                 {disabled && findMatchingDiffPath && onCodeClick && (
                   <ClickableCodePlugin

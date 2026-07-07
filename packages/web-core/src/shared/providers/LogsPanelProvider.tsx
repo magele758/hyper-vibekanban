@@ -41,7 +41,9 @@ export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
       ? logsPanelContent.processId
       : logsPanelContent?.type === 'tool'
         ? logsPanelContent.toolName
-        : null;
+        : logsPanelContent?.type === 'markdown'
+          ? logsPanelContent.path
+          : null;
 
   useEffect(() => {
     setLogSearchQuery('');
@@ -96,6 +98,16 @@ export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
     [setRightMainPanelMode]
   );
 
+  const viewMarkdownFileInPanel = useCallback(
+    (path: string, repoId?: string) => {
+      if (rightMainPanelModeRef.current !== RIGHT_MAIN_PANEL_MODES.LOGS) {
+        setRightMainPanelMode(RIGHT_MAIN_PANEL_MODES.LOGS);
+      }
+      setLogsPanelContent({ type: 'markdown', path, repoId });
+    },
+    [setRightMainPanelMode]
+  );
+
   const expandTerminal = useCallback(() => {
     if (rightMainPanelModeRef.current !== RIGHT_MAIN_PANEL_MODES.LOGS) {
       setRightMainPanelMode(RIGHT_MAIN_PANEL_MODES.LOGS);
@@ -111,12 +123,14 @@ export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
     () => ({
       viewProcessInPanel,
       viewToolContentInPanel,
+      viewMarkdownFileInPanel,
       expandTerminal,
       collapseTerminal,
     }),
     [
       viewProcessInPanel,
       viewToolContentInPanel,
+      viewMarkdownFileInPanel,
       expandTerminal,
       collapseTerminal,
     ]
@@ -134,6 +148,7 @@ export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
       handleLogNextMatch,
       viewProcessInPanel,
       viewToolContentInPanel,
+      viewMarkdownFileInPanel,
       expandTerminal,
       collapseTerminal,
       isTerminalExpanded,
@@ -147,6 +162,7 @@ export function LogsPanelProvider({ children }: LogsPanelProviderProps) {
       handleLogNextMatch,
       viewProcessInPanel,
       viewToolContentInPanel,
+      viewMarkdownFileInPanel,
       expandTerminal,
       collapseTerminal,
       isTerminalExpanded,

@@ -330,6 +330,35 @@ export type RenameBranchRequest = { new_branch_name: string, };
 
 export type RenameBranchResponse = { branch: string, };
 
+export type ReadFileResponse = { 
+/**
+ * The (normalized, relative) path that was resolved.
+ */
+path: string, 
+/**
+ * Raw file contents as UTF-8 text.
+ */
+content: string, 
+/**
+ * The repo the file was resolved in. Pass this back when writing so edits
+ * land in the same repo (avoids ambiguity when multiple repos are present).
+ */
+repo_id: string, };
+
+export type WriteFileRequest = { 
+/**
+ * Path to the file, relative to the repo working directory.
+ */
+path: string, 
+/**
+ * New UTF-8 contents to write.
+ */
+content: string, 
+/**
+ * Repo to resolve the path against. Required for writes to avoid ambiguity.
+ */
+repo_id: string, };
+
 export type StartReviewRequest = { executor_config: ExecutorConfig, additional_prompt: string | null, use_all_workspace_commits: boolean, };
 
 export type ReviewError = { "type": "process_already_running" };

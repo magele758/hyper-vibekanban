@@ -267,6 +267,11 @@
     "searchLogs": "ログを検索",
     "selectProcessToView": "プロセスを選択してログを表示"
   },
+  "markdownPreview": {
+    "loadError": "{{path}} を読み込めませんでした",
+    "readOnlyBadge": "読み取り専用",
+    "readOnlyReason": "このファイルにはエディターが安全に編集できない構文（フロントマター、生の HTML、脚注）が含まれているため、プレビューとして表示しています。"
+  },
   "processes": {
     "noProcesses": "プロセスがありません",
     "terminal": "ターミナル"

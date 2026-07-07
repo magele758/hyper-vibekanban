@@ -267,6 +267,11 @@
     "searchLogs": "搜尋日誌",
     "selectProcessToView": "選擇一個程序以查看日誌"
   },
+  "markdownPreview": {
+    "loadError": "無法載入 {{path}}",
+    "readOnlyBadge": "唯讀",
+    "readOnlyReason": "此檔案包含編輯器無法安全編輯的語法（frontmatter、原始 HTML 或註腳），因此以預覽方式顯示。"
+  },
   "processes": {
     "noProcesses": "無程序",
     "terminal": "終端機"
