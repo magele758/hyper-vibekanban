@@ -74,8 +74,13 @@ export function CreateChatBoxContainer({
   // is sent to the backend (which itself rejects multi-repo console payloads).
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceKind>('worktree');
   const repoDirModeAvailable = hasSelectedRepos;
-  const effectiveMode: WorkspaceKind =
-    workspaceMode !== 'worktree' && !repoDirModeAvailable
+  // A non-git directory can only run as a Console workspace (worktree/in-place
+  // both require git). When one is selected, force console regardless of the
+  // toggle.
+  const hasNonGitRepo = repos.some((repo) => !repo.is_git);
+  const effectiveMode: WorkspaceKind = hasNonGitRepo
+    ? 'console'
+    : workspaceMode !== 'worktree' && !repoDirModeAvailable
       ? 'worktree'
       : workspaceMode;
 
@@ -184,8 +189,10 @@ export function CreateChatBoxContainer({
     [repos, targetBranches]
   );
 
+  // Non-git repos (Console-only) have no branch to select, so they are exempt
+  // from the branch requirement.
   const hasSelectedBranchesForAllRepos = repos.every(
-    (repo) => !!targetBranches[repo.id]
+    (repo) => !repo.is_git || !!targetBranches[repo.id]
   );
 
   // Determine if we can submit
@@ -361,8 +368,9 @@ export function CreateChatBoxContainer({
                       })}
                     </span>
                     <select
-                      className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high"
+                      className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high disabled:opacity-50"
                       value={effectiveMode}
+                      disabled={hasNonGitRepo}
                       onChange={(e) =>
                         setWorkspaceMode(e.target.value as WorkspaceKind)
                       }

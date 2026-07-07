@@ -135,6 +135,11 @@ impl From<WorkspaceManagerError> for ApiError {
             WorkspaceManagerError::InPlaceRequiresSingleRepo(count) => ApiError::BadRequest(
                 format!("In-place workspaces support exactly one repository (found {count})"),
             ),
+            WorkspaceManagerError::NonGitRequiresConsole { repo_name } => {
+                ApiError::BadRequest(format!(
+                    "Repository '{repo_name}' is not a git repository; only Console workspaces can use non-git directories"
+                ))
+            }
             WorkspaceManagerError::InPlaceDirtyWorkingTree { repo_name } => {
                 ApiError::Conflict(format!(
                     "Repository '{repo_name}' has uncommitted changes; commit or stash them before starting an in-place workspace"

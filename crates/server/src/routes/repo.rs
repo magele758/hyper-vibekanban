@@ -34,6 +34,12 @@ pub struct OpenEditorResponse {
 pub struct RegisterRepoRequest {
     pub path: String,
     pub display_name: Option<String>,
+    /// Allow registering a plain (non-git) directory. Used by the Console
+    /// workspace flow, which attaches to a directory's own working tree without
+    /// running git. Defaults to false so Worktree/InPlace stay git-only.
+    #[serde(default)]
+    #[ts(optional)]
+    pub allow_non_git: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -57,6 +63,7 @@ pub async fn register_repo(
             &deployment.db().pool,
             &payload.path,
             payload.display_name.as_deref(),
+            payload.allow_non_git.unwrap_or(false),
         )
         .await?;
 

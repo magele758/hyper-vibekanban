@@ -1,0 +1,12 @@
+-- Add is_git flag to repos.
+--
+-- Console workspaces (WorkspaceKind::Console) attach to a directory's own
+-- working tree without ever creating a branch, checking out, or committing, so
+-- they can operate on a plain directory that is NOT a git repository. Worktree
+-- and InPlace workspaces still require git. This flag records, per repo,
+-- whether the registered path is a real git repository so the branch/git
+-- checks can be skipped for non-git directories.
+--
+-- Every existing repo was registered through the git-repo validation, so they
+-- are all real git repositories: default TRUE backfills correctly.
+ALTER TABLE repos ADD COLUMN is_git BOOLEAN NOT NULL DEFAULT TRUE;

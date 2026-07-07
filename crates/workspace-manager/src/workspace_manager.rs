@@ -55,6 +55,10 @@ pub enum WorkspaceError {
     #[error("In-place workspaces support exactly one repository (found {0})")]
     InPlaceRequiresSingleRepo(usize),
     #[error(
+        "Repository '{repo_name}' is not a git repository; only Console workspaces can use non-git directories"
+    )]
+    NonGitRequiresConsole { repo_name: String },
+    #[error(
         "Repository '{repo_name}' has uncommitted changes; commit or stash them before starting an in-place workspace"
     )]
     InPlaceDirtyWorkingTree { repo_name: String },
@@ -144,7 +148,18 @@ impl ManagedWorkspace {
             .await?
             .ok_or(RepoError::NotFound)?;
 
-        if !git.check_branch_exists(&repo.path, &repo_ref.target_branch)? {
+        // A non-git directory has no branches and cannot host worktrees or
+        // checkouts, so only Console workspaces may attach one. Reject it for
+        // any other kind rather than failing deeper at start time.
+        if !repo.is_git && !self.workspace.kind.is_console() {
+            return Err(WorkspaceError::NonGitRequiresConsole {
+                repo_name: repo.name,
+            });
+        }
+
+        // Non-git directories (Console workspaces only) have no branches, so
+        // there is nothing to validate. Git repos must have the target branch.
+        if repo.is_git && !git.check_branch_exists(&repo.path, &repo_ref.target_branch)? {
             return Err(WorkspaceError::BranchNotFound {
                 repo_name: repo.name,
                 branch: repo_ref.target_branch.clone(),
@@ -866,6 +881,7 @@ mod in_place_tests {
             dev_server_script: None,
             default_target_branch: None,
             default_working_dir: None,
+            is_git: true,
             created_at: now,
             updated_at: now,
         }
@@ -1001,5 +1017,35 @@ mod in_place_tests {
             ),
             "expected single-repo rejection, got {result:?}"
         );
+    }
+
+    /// Console workspaces attach to a plain directory that is NOT a git
+    /// repository: creation must succeed without any git initialization, and
+    /// the workspace dir must be the directory itself (no worktree, no branch).
+    #[tokio::test]
+    async fn console_create_accepts_non_git_directory() {
+        let td = tempfile::TempDir::new().unwrap();
+        let dir_path = td.path().join("plain-dir");
+        std::fs::create_dir_all(&dir_path).unwrap();
+        // Deliberately no git init: there is no `.git` here.
+        assert!(!dir_path.join(".git").exists());
+
+        let repo = make_repo(dir_path.clone());
+        // target_branch is irrelevant for console; it is never consulted.
+        let input = RepoWorkspaceInput::new(repo, String::new());
+
+        let container = WorkspaceManager::create_workspace(
+            std::path::Path::new("/unused"),
+            std::slice::from_ref(&input),
+            "unused-branch",
+            WorkspaceKind::Console,
+        )
+        .await
+        .unwrap();
+
+        // The workspace dir resolves to the directory itself; nothing was
+        // materialized and no branch was created.
+        assert_eq!(container.workspace_dir, dir_path);
+        assert!(!dir_path.join(".git").exists());
     }
 }

@@ -138,6 +138,14 @@ export function CreateModeRepoPickerBar({
         return false;
       }
 
+      // Non-git directories have no branches and are only usable by Console
+      // workspaces. Skip branch selection and add with an empty target branch.
+      if (!repo.is_git) {
+        addRepo(repo);
+        setTargetBranch(repo.id, '');
+        return true;
+      }
+
       const selectedBranch = await pickBranchForRepo(repo);
       if (!selectedBranch) return false;
 
@@ -194,7 +202,12 @@ export function CreateModeRepoPickerBar({
         });
         if (!selectedPath) return;
 
-        const repo = await repoApi.register({ path: selectedPath });
+        // Allow non-git directories: they register with is_git=false and are
+        // usable only by Console workspaces (enforced on both ends).
+        const repo = await repoApi.register({
+          path: selectedPath,
+          allow_non_git: true,
+        });
         queryClient.invalidateQueries({ queryKey: ['repos'] });
         await addRepoWithBranchSelection(repo);
       },

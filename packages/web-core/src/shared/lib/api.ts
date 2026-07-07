@@ -907,6 +907,7 @@ export const repoApi = {
     data: {
       path: string;
       display_name?: string;
+      allow_non_git?: boolean;
     },
     hostId?: string | null
   ): Promise<Repo> => {

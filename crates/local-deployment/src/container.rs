@@ -158,6 +158,10 @@ impl LocalContainerService {
                 "In-place workspaces support exactly one repository (found {})",
                 count
             )),
+            WorkspaceError::NonGitRequiresConsole { repo_name } => ContainerError::Other(anyhow!(
+                "Repository '{}' is not a git repository; only Console workspaces can use non-git directories",
+                repo_name
+            )),
             WorkspaceError::InPlaceDirtyWorkingTree { repo_name } => {
                 ContainerError::Other(anyhow!(
                     "Repository '{}' has uncommitted changes; commit or stash them before starting an in-place workspace",

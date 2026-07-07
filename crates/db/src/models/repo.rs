@@ -47,6 +47,10 @@ pub struct Repo {
     pub dev_server_script: Option<String>,
     pub default_target_branch: Option<String>,
     pub default_working_dir: Option<String>,
+    /// Whether the registered path is a real git repository. Non-git
+    /// directories are only usable by Console workspaces (which never touch
+    /// git); Worktree/InPlace require this to be true.
+    pub is_git: bool,
     #[ts(type = "Date")]
     pub created_at: DateTime<Utc>,
     #[ts(type = "Date")]
@@ -146,6 +150,7 @@ impl Repo {
                       dev_server_script,
                       default_target_branch,
                       default_working_dir,
+                      is_git as "is_git!: bool",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
                FROM repos
@@ -187,6 +192,7 @@ impl Repo {
                       dev_server_script,
                       default_target_branch,
                       default_working_dir,
+                      is_git as "is_git!: bool",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
                FROM repos
@@ -216,6 +222,7 @@ impl Repo {
         executor: E,
         path: &Path,
         display_name: &str,
+        is_git: bool,
     ) -> Result<Self, sqlx::Error>
     where
         E: Executor<'e, Database = Sqlite>,
@@ -230,8 +237,8 @@ impl Repo {
         // Use INSERT OR IGNORE + SELECT to handle race conditions atomically
         sqlx::query_as!(
             Repo,
-            r#"INSERT INTO repos (id, path, name, display_name)
-               VALUES ($1, $2, $3, $4)
+            r#"INSERT INTO repos (id, path, name, display_name, is_git)
+               VALUES ($1, $2, $3, $4, $5)
                ON CONFLICT(path) DO UPDATE SET updated_at = updated_at
                RETURNING id as "id!: Uuid",
                          path,
@@ -245,12 +252,14 @@ impl Repo {
                          dev_server_script,
                          default_target_branch,
                          default_working_dir,
+                         is_git as "is_git!: bool",
                          created_at as "created_at!: DateTime<Utc>",
                          updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             path_str,
             repo_name,
             display_name,
+            is_git,
         )
         .fetch_one(executor)
         .await
@@ -271,6 +280,7 @@ impl Repo {
                       dev_server_script,
                       default_target_branch,
                       default_working_dir,
+                      is_git as "is_git!: bool",
                       created_at as "created_at!: DateTime<Utc>",
                       updated_at as "updated_at!: DateTime<Utc>"
                FROM repos
@@ -297,6 +307,7 @@ impl Repo {
                       r.dev_server_script,
                       r.default_target_branch,
                       r.default_working_dir,
+                      r.is_git as "is_git!: bool",
                       r.created_at as "created_at!: DateTime<Utc>",
                       r.updated_at as "updated_at!: DateTime<Utc>"
                FROM repos r
@@ -416,6 +427,7 @@ impl Repo {
                          dev_server_script,
                          default_target_branch,
                          default_working_dir,
+                         is_git as "is_git!: bool",
                          created_at as "created_at!: DateTime<Utc>",
                          updated_at as "updated_at!: DateTime<Utc>""#,
             display_name,

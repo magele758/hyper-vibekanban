@@ -4,7 +4,13 @@
 
 // If you are an AI, and you absolutely have to edit this file, please confirm with the user first.
 
-export type Repo = { id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, created_at: Date, updated_at: Date, };
+export type Repo = { id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, 
+/**
+ * Whether the registered path is a real git repository. Non-git
+ * directories are only usable by Console workspaces (which never touch
+ * git); Worktree/InPlace require this to be true.
+ */
+is_git: boolean, created_at: Date, updated_at: Date, };
 
 export type Project = { id: string, name: string, default_agent_working_dir: string | null, remote_project_id: string | null, created_at: Date, updated_at: Date, };
 
@@ -22,7 +28,13 @@ export type WorkspaceRepo = { id: string, workspace_id: string, repo_id: string,
 
 export type CreateWorkspaceRepo = { repo_id: string, target_branch: string, };
 
-export type RepoWithTargetBranch = { target_branch: string, id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, created_at: Date, updated_at: Date, };
+export type RepoWithTargetBranch = { target_branch: string, id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, 
+/**
+ * Whether the registered path is a real git repository. Non-git
+ * directories are only usable by Console workspaces (which never touch
+ * git); Worktree/InPlace require this to be true.
+ */
+is_git: boolean, created_at: Date, updated_at: Date, };
 
 export type Tag = { id: string, tag_name: string, content: string, created_at: string, updated_at: string, };
 
@@ -260,7 +272,13 @@ export type UpdateMemberRoleRequest = { role: MemberRole, };
 
 export type UpdateMemberRoleResponse = { user_id: string, role: MemberRole, };
 
-export type RegisterRepoRequest = { path: string, display_name: string | null, };
+export type RegisterRepoRequest = { path: string, display_name: string | null, 
+/**
+ * Allow registering a plain (non-git) directory. Used by the Console
+ * workspace flow, which attaches to a directory's own working tree without
+ * running git. Defaults to false so Worktree/InPlace stay git-only.
+ */
+allow_non_git?: boolean, };
 
 export type InitRepoRequest = { parent_path: string, folder_name: string, };
 
