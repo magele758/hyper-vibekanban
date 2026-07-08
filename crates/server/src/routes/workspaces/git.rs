@@ -400,6 +400,36 @@ pub async fn get_workspace_branch_status(
         };
 
         let repo_merges = merges_by_repo.get(&repo.id).cloned().unwrap_or_default();
+
+        // Non-git directories (Console workspaces) have no branches, commits, or
+        // worktree status. Running git against them fails with a repository
+        // NotFound error, which previously blocked flows that preflight the
+        // branch status (e.g. the delete dialog). Emit a git-free status so the
+        // workspace stays operable and deletable.
+        if !repo.is_git {
+            results.push(RepoBranchStatus {
+                repo_id: repo.id,
+                repo_name: repo.name,
+                status: BranchStatus {
+                    commits_ahead: None,
+                    commits_behind: None,
+                    has_uncommitted_changes: None,
+                    head_oid: None,
+                    uncommitted_count: None,
+                    untracked_count: None,
+                    remote_commits_ahead: None,
+                    remote_commits_behind: None,
+                    merges: repo_merges,
+                    target_branch_name: target_branch,
+                    is_rebase_in_progress: false,
+                    conflict_op: None,
+                    conflicted_files: Vec::new(),
+                    is_target_remote: false,
+                },
+            });
+            continue;
+        }
+
         let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
 
         let head_oid = deployment
