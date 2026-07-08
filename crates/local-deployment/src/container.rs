@@ -37,7 +37,7 @@ use executors::{
     logs::{NormalizedEntryType, utils::patch::extract_normalized_entry_from_patch},
 };
 use futures::{FutureExt, TryStreamExt, stream::select};
-use git::GitService;
+use git::{CommitOutcome, GitService};
 use serde_json::json;
 use services::services::{
     analytics::AnalyticsContext,
@@ -538,6 +538,12 @@ impl LocalContainerService {
     }
 
     /// Commit changes to each repo. Logs failures but continues with other repos.
+    ///
+    /// Rebase-aware: if a repo is mid-rebase (detached HEAD after a conflict),
+    /// this stages the resolution and runs `git rebase --continue` instead of a
+    /// plain commit, which would otherwise strand the resolution on the detached
+    /// HEAD and leave the rebase unfinished. Returns true if any repo made
+    /// committed progress (a new commit or a completed rebase).
     fn commit_repos(&self, repos_with_changes: Vec<(Repo, PathBuf)>, message: &str) -> bool {
         let mut any_committed = false;
 
@@ -548,13 +554,30 @@ impl LocalContainerService {
                 &worktree_path
             );
 
-            match self.git().commit(&worktree_path, message) {
-                Ok(true) => {
-                    any_committed = true;
-                    tracing::info!("Committed changes in repo '{}'", repo.name);
-                }
-                Ok(false) => {
-                    tracing::warn!("No changes committed in repo '{}' (unexpected)", repo.name);
+            match self
+                .git()
+                .commit_or_continue_rebase(&worktree_path, message)
+            {
+                Ok(outcome) => {
+                    if outcome.made_progress() {
+                        any_committed = true;
+                    }
+                    match outcome {
+                        CommitOutcome::Committed => {
+                            tracing::info!("Committed changes in repo '{}'", repo.name)
+                        }
+                        CommitOutcome::RebaseCompleted => {
+                            tracing::info!("Continued and completed rebase in repo '{}'", repo.name)
+                        }
+                        CommitOutcome::ConflictsRemain => tracing::warn!(
+                            "Repo '{}' still has unresolved rebase conflicts; left in progress",
+                            repo.name
+                        ),
+                        CommitOutcome::NothingToCommit => tracing::warn!(
+                            "No changes committed in repo '{}' (unexpected)",
+                            repo.name
+                        ),
+                    }
                 }
                 Err(e) => {
                     tracing::warn!("Failed to commit in repo '{}': {}", repo.name, e);

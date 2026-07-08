@@ -141,6 +141,31 @@ pub struct WorktreeResetOutcome {
     pub applied: bool,
 }
 
+/// Result of [`GitService::commit_or_continue_rebase`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommitOutcome {
+    /// A new commit was created on the current branch (normal, non-rebase path).
+    Committed,
+    /// There was nothing to commit.
+    NothingToCommit,
+    /// A rebase was in progress and `git rebase --continue` finished it.
+    RebaseCompleted,
+    /// A rebase is (still) in progress with unresolved conflicts. The caller
+    /// should surface this rather than treating it as success.
+    ConflictsRemain,
+}
+
+impl CommitOutcome {
+    /// Whether this outcome means new committed work landed on the branch
+    /// (used to decide e.g. whether to run the next action / cleanup step).
+    pub fn made_progress(self) -> bool {
+        matches!(
+            self,
+            CommitOutcome::Committed | CommitOutcome::RebaseCompleted
+        )
+    }
+}
+
 impl Default for GitService {
     fn default() -> Self {
         Self::new()
@@ -321,6 +346,90 @@ impl GitService {
         git.commit(path, message)
             .map_err(|e| GitServiceError::InvalidRepository(format!("git commit failed: {e}")))?;
         Ok(true)
+    }
+
+    /// Commit changes produced by an execution, correctly handling a worktree
+    /// that is mid-rebase.
+    ///
+    /// During a conflicted rebase git leaves the worktree on a **detached
+    /// HEAD**. A plain `git commit` there lands the resolution on the detached
+    /// HEAD without advancing the `vk/...` branch and leaves the rebase in
+    /// progress, so a subsequent rebase replays the same commit and reproduces
+    /// the exact same conflict (the resolution appears to have been lost). This
+    /// bites multi-repo workspaces in particular, where the coding agent's cwd
+    /// is the workspace root rather than the repo worktree, so it often does not
+    /// run `git rebase --continue` itself.
+    ///
+    /// Behavior:
+    /// - No rebase in progress: identical to [`Self::commit`].
+    /// - Rebase in progress with leftover conflict markers: do nothing and
+    ///   report [`CommitOutcome::ConflictsRemain`] so the UI keeps surfacing the
+    ///   conflict for the user/agent to finish resolving.
+    /// - Rebase in progress and conflicts resolved: stage the resolution and run
+    ///   `git rebase --continue`. If that advances past every remaining commit
+    ///   the rebase finishes ([`CommitOutcome::RebaseCompleted`]); if a later
+    ///   commit in the sequence conflicts, git stops again and we report
+    ///   [`CommitOutcome::ConflictsRemain`].
+    pub fn commit_or_continue_rebase(
+        &self,
+        path: &Path,
+        message: &str,
+    ) -> Result<CommitOutcome, GitServiceError> {
+        let git = GitCli::new();
+
+        let rebase_in_progress = git.is_rebase_in_progress(path).map_err(|e| {
+            GitServiceError::InvalidRepository(format!("git rebase state check failed: {e}"))
+        })?;
+
+        if !rebase_in_progress {
+            return Ok(if self.commit(path, message)? {
+                CommitOutcome::Committed
+            } else {
+                CommitOutcome::NothingToCommit
+            });
+        }
+
+        // Mid-rebase: never plain-commit onto the detached HEAD. If the
+        // resolution is incomplete, leave the rebase untouched so the conflict
+        // stays visible instead of being silently swallowed.
+        let has_markers = git.has_conflict_markers(path).map_err(|e| {
+            GitServiceError::InvalidRepository(format!("git conflict-marker check failed: {e}"))
+        })?;
+        if has_markers {
+            tracing::warn!(
+                "Rebase in progress at {:?} still has conflict markers; not continuing",
+                path
+            );
+            return Ok(CommitOutcome::ConflictsRemain);
+        }
+
+        // Stage the resolved files and let the rebase machinery create/advance
+        // the commit (this reuses the original commit message and moves the
+        // branch ref forward, unlike a plain commit on detached HEAD).
+        self.ensure_cli_commit_identity(path)?;
+        git.add_all(path)
+            .map_err(|e| GitServiceError::InvalidRepository(format!("git add failed: {e}")))?;
+
+        match git.continue_rebase(path) {
+            Ok(()) => Ok(CommitOutcome::RebaseCompleted),
+            Err(e) => {
+                // `git rebase --continue` stops with a non-zero status when a
+                // later commit in the sequence hits its own conflict. That is an
+                // expected state, not a hard failure: report it so the conflict
+                // is surfaced rather than propagating an error.
+                if git.is_rebase_in_progress(path).unwrap_or(false) {
+                    tracing::info!(
+                        "git rebase --continue at {:?} stopped on a further conflict",
+                        path
+                    );
+                    Ok(CommitOutcome::ConflictsRemain)
+                } else {
+                    Err(GitServiceError::InvalidRepository(format!(
+                        "git rebase --continue failed: {e}"
+                    )))
+                }
+            }
+        }
     }
 
     /// Get worktree diffs against a base commit

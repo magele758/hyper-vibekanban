@@ -609,14 +609,43 @@ impl GitCli {
 
     /// Continue an in-progress rebase. Returns error if no rebase is in progress
     /// or if there are unresolved conflicts.
+    ///
+    /// Runs with `GIT_EDITOR`/`GIT_SEQUENCE_EDITOR` forced to `true` so that git
+    /// never blocks waiting on an interactive editor (e.g. to confirm the reused
+    /// commit message), which would otherwise hang the server indefinitely.
     pub fn continue_rebase(&self, worktree_path: &Path) -> Result<(), GitCliError> {
         if !self.is_rebase_in_progress(worktree_path)? {
             return Err(GitCliError::CommandFailed(
                 "No rebase in progress".to_string(),
             ));
         }
-        self.git(worktree_path, ["rebase", "--continue"])
+        let envs = vec![
+            (OsString::from("GIT_EDITOR"), OsString::from("true")),
+            (
+                OsString::from("GIT_SEQUENCE_EDITOR"),
+                OsString::from("true"),
+            ),
+        ];
+        self.git_with_env(worktree_path, ["rebase", "--continue"], &envs)
             .map(|_| ())
+    }
+
+    /// Return true if there are still leftover conflict markers
+    /// (`<<<<<<<`, `=======`, `>>>>>>>`) relative to HEAD.
+    ///
+    /// Uses `git diff HEAD --check`, which inspects both staged and unstaged
+    /// content (so it catches markers whether or not the agent already ran
+    /// `git add`) and exits non-zero, printing "leftover conflict marker" lines
+    /// when markers are present. `--check` also flags whitespace errors with a
+    /// different exit code, so we match on the message text rather than the exit
+    /// status. This works *before* staging, unlike unmerged-index checks which
+    /// `git add` silently clears.
+    pub fn has_conflict_markers(&self, worktree_path: &Path) -> Result<bool, GitCliError> {
+        match self.git(worktree_path, ["diff", "HEAD", "--check"]) {
+            Ok(_) => Ok(false),
+            Err(GitCliError::CommandFailed(msg)) => Ok(msg.contains("conflict marker")),
+            Err(e) => Err(e),
+        }
     }
 
     /// Return true if there are staged changes (index differs from HEAD)

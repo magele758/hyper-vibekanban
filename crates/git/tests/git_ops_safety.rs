@@ -1347,3 +1347,167 @@ fn merge_base_ahead_of_task_should_error() {
         "Merge should error when base branch is ahead of task branch"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Rebase-aware auto-commit (commit_or_continue_rebase)
+//
+// Regression coverage for the multi-repo rebase bug: after a conflicted rebase
+// the worktree is on a detached HEAD, so a plain `git commit` stranded the
+// resolution and left the rebase in progress, reproducing the same conflict on
+// the next rebase. `commit_or_continue_rebase` must instead run
+// `git rebase --continue` so the branch actually advances.
+// ---------------------------------------------------------------------------
+
+/// Read the file contents at a path (helper for assertions).
+fn read_file<P: AsRef<Path>>(base: P, rel: &str) -> String {
+    fs::read_to_string(base.as_ref().join(rel)).unwrap()
+}
+
+#[test]
+fn commit_or_continue_rebase_completes_after_conflict_resolution() {
+    use git::CommitOutcome;
+
+    let td = TempDir::new().unwrap();
+    let (repo_path, worktree_path) = setup_conflict_repo_with_worktree(&td);
+    let svc = GitService::new();
+
+    // Start the rebase; it conflicts and leaves the worktree mid-rebase.
+    let _ = svc
+        .rebase_branch(
+            &repo_path,
+            &worktree_path,
+            "new-base",
+            "old-base",
+            "feature",
+        )
+        .expect_err("rebase should conflict");
+    assert!(svc.is_rebase_in_progress(&worktree_path).unwrap());
+
+    let feature_oid_before = svc.get_branch_oid(&repo_path, "feature").unwrap();
+
+    // Agent resolves the conflict (no leftover markers) but does NOT continue.
+    write_file(&worktree_path, "conflict.txt", "resolved version\n");
+
+    let outcome = svc
+        .commit_or_continue_rebase(&worktree_path, "resolve conflicts")
+        .expect("continue should succeed");
+
+    assert_eq!(outcome, CommitOutcome::RebaseCompleted);
+    assert!(outcome.made_progress());
+    assert!(
+        !svc.is_rebase_in_progress(&worktree_path).unwrap(),
+        "rebase must be finished, not left in progress"
+    );
+
+    // The feature branch ref must have advanced (the whole point of the fix).
+    let feature_oid_after = svc.get_branch_oid(&repo_path, "feature").unwrap();
+    assert_ne!(
+        feature_oid_before, feature_oid_after,
+        "feature branch must move forward after continue"
+    );
+
+    // Worktree HEAD is back on the feature branch with the resolved content.
+    let head = svc.get_head_info(&worktree_path).unwrap();
+    assert_eq!(head.branch, "feature");
+    assert_eq!(
+        read_file(&worktree_path, "conflict.txt"),
+        "resolved version\n"
+    );
+}
+
+#[test]
+fn commit_or_continue_rebase_rerebase_is_clean_after_resolution() {
+    let td = TempDir::new().unwrap();
+    let (repo_path, worktree_path) = setup_conflict_repo_with_worktree(&td);
+    let svc = GitService::new();
+
+    let _ = svc
+        .rebase_branch(
+            &repo_path,
+            &worktree_path,
+            "new-base",
+            "old-base",
+            "feature",
+        )
+        .expect_err("rebase should conflict");
+    write_file(&worktree_path, "conflict.txt", "resolved version\n");
+    svc.commit_or_continue_rebase(&worktree_path, "resolve conflicts")
+        .expect("continue should succeed");
+
+    // Re-rebasing onto the same base must NOT reproduce the conflict. Before the
+    // fix, the resolution lived on a detached HEAD and this replayed the same
+    // conflict.
+    let res = svc.rebase_branch(
+        &repo_path,
+        &worktree_path,
+        "new-base",
+        "new-base",
+        "feature",
+    );
+    assert!(
+        res.is_ok(),
+        "re-rebase after resolution should be clean, got: {res:?}"
+    );
+    assert!(!svc.is_rebase_in_progress(&worktree_path).unwrap());
+}
+
+#[test]
+fn commit_or_continue_rebase_leaves_rebase_when_markers_remain() {
+    use git::CommitOutcome;
+
+    let td = TempDir::new().unwrap();
+    let (repo_path, worktree_path) = setup_conflict_repo_with_worktree(&td);
+    let svc = GitService::new();
+
+    let _ = svc
+        .rebase_branch(
+            &repo_path,
+            &worktree_path,
+            "new-base",
+            "old-base",
+            "feature",
+        )
+        .expect_err("rebase should conflict");
+    assert!(svc.is_rebase_in_progress(&worktree_path).unwrap());
+
+    // Agent "fails": leaves the conflicted file with markers untouched.
+    // (setup writes standard conflict markers into conflict.txt)
+    let outcome = svc
+        .commit_or_continue_rebase(&worktree_path, "resolve conflicts")
+        .expect("call should not hard-error");
+
+    assert_eq!(outcome, CommitOutcome::ConflictsRemain);
+    assert!(!outcome.made_progress());
+    assert!(
+        svc.is_rebase_in_progress(&worktree_path).unwrap(),
+        "rebase must remain in progress so the conflict stays visible"
+    );
+    assert!(
+        !svc.get_conflicted_files(&worktree_path).unwrap().is_empty(),
+        "conflicted files should still be reported"
+    );
+}
+
+#[test]
+fn commit_or_continue_rebase_plain_commit_when_no_rebase() {
+    use git::CommitOutcome;
+
+    let td = TempDir::new().unwrap();
+    let (_repo_path, worktree_path) = setup_repo_with_worktree(&td);
+    let svc = GitService::new();
+
+    // No rebase in progress: behaves like a normal commit.
+    write_file(&worktree_path, "new_file.txt", "hello\n");
+    let outcome = svc
+        .commit_or_continue_rebase(&worktree_path, "add new file")
+        .expect("commit should succeed");
+    assert_eq!(outcome, CommitOutcome::Committed);
+    assert!(outcome.made_progress());
+
+    // Nothing left to commit now.
+    let outcome = svc
+        .commit_or_continue_rebase(&worktree_path, "noop")
+        .expect("noop commit should succeed");
+    assert_eq!(outcome, CommitOutcome::NothingToCommit);
+    assert!(!outcome.made_progress());
+}
