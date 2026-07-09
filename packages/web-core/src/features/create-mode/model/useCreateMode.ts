@@ -17,7 +17,7 @@ export interface CreateModeContextValue {
   repos: Repo[];
   addRepo: (repo: Repo) => void;
   removeRepo: (repoId: string) => void;
-  clearRepos: () => void;
+  clearRepos: () => Promise<void>;
   targetBranches: Record<string, string | null>;
   setTargetBranch: (repoId: string, branch: string) => void;
   hasResolvedInitialRepoDefaults: boolean;

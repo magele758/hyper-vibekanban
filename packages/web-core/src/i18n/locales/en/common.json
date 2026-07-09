@@ -537,6 +537,12 @@
       "inPlace": "In repo directory, new branch",
       "console": "Main directory console (current branch)"
     },
+    "hostPicker": {
+      "label": "Run on",
+      "thisMachine": "This machine",
+      "offlineHost": "{{name}} (offline)",
+      "offlineHint": "Selected host is offline. Choose this machine or another online host."
+    },
     "console": {
       "warning": "The agent runs directly in your repo's current directory and branch. It will not create a branch or commit for you — you stay in control of commits.",
       "repoLabel": "Open console on"

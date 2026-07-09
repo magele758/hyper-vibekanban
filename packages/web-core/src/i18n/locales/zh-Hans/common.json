@@ -523,6 +523,12 @@
       "inPlace": "在仓库目录中，新建分支",
       "console": "主目录控制台（当前分支）"
     },
+    "hostPicker": {
+      "label": "运行在",
+      "thisMachine": "本机",
+      "offlineHost": "{{name}}（离线）",
+      "offlineHint": "所选 Host 已离线。请改选本机或其他在线 Host。"
+    },
     "console": {
       "warning": "智能体直接在你仓库的当前目录和当前分支上运行。它不会替你新建分支或提交——是否提交由你决定。",
       "repoLabel": "在哪个仓库开控制台"

@@ -22,8 +22,13 @@ export async function getProjectRepoDefaults(
     }
     return null;
   } catch (error) {
-    // 404 means no defaults saved yet — not an error
-    if (error instanceof ApiError && error.status === 404) {
+    // No defaults saved yet — backend returns 400 "Scratch not found"
+    // (or historically 404). Treat as a normal miss, not a failure.
+    if (
+      error instanceof ApiError &&
+      (error.status === 404 ||
+        (error.status === 400 && error.message === 'Scratch not found'))
+    ) {
       return null;
     }
     console.error('[useProjectRepoDefaults] Failed to read defaults:', error);

@@ -18,7 +18,11 @@ import type { BaseCodingAgent, Repo, WorkspaceKind } from 'shared/types';
 import { CreateChatBox } from '@vibe/ui/components/CreateChatBox';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { CreateModeRepoPickerBar } from './CreateModeRepoPickerBar';
+import { CreateModeHostPicker } from '@/shared/components/CreateModeHostPicker';
 import { ModelSelectorContainer } from '@/shared/components/ModelSelectorContainer';
+import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
+import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
+import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
 
 function getRepoDisplayName(repo: Repo) {
   return repo.display_name || repo.name;
@@ -40,7 +44,10 @@ export function CreateChatBoxContainer({
   onWorkspaceCreated,
 }: CreateChatBoxContainerProps) {
   const { t } = useTranslation('common');
+  const runtime = useAppRuntime();
   const { profiles, config } = useUserSystem();
+  const { hosts: remoteHosts } = useRemoteCloudHostsAppBarModel();
+  const { executionHostId } = useExecutionHostId();
   const {
     repos,
     targetBranches,
@@ -57,6 +64,15 @@ export function CreateChatBoxContainer({
     attachments: draftAttachments,
     setAttachments: setDraftAttachments,
   } = useCreateMode();
+
+  const isExecutionHostOffline = useMemo(() => {
+    if (runtime !== 'local' || !executionHostId) {
+      return false;
+    }
+
+    const host = remoteHosts.find((item) => item.id === executionHostId);
+    return !host || host.status === 'offline';
+  }, [executionHostId, remoteHosts, runtime]);
 
   const { createWorkspace } = useCreateWorkspace();
   const hasSelectedRepos = repos.length > 0;
@@ -200,7 +216,8 @@ export function CreateChatBoxContainer({
     hasSelectedRepos &&
     hasSelectedBranchesForAllRepos &&
     message.trim().length > 0 &&
-    effectiveExecutor !== null;
+    effectiveExecutor !== null &&
+    !isExecutionHostOffline;
 
   const handlePresetSelect = (presetId: string | null) => {
     if (!effectiveExecutor) return;
@@ -321,8 +338,12 @@ export function CreateChatBoxContainer({
   ]);
 
   // Determine error to display
-  const displayError =
-    hasAttemptedSubmit && repos.length === 0
+  const displayError = isExecutionHostOffline
+    ? t('createMode.hostPicker.offlineHint', {
+        defaultValue:
+          'Selected host is offline. Choose this machine or another online host.',
+      })
+    : hasAttemptedSubmit && repos.length === 0
       ? 'Add at least one repository to create a workspace'
       : hasAttemptedSubmit && !hasSelectedBranchesForAllRepos
         ? 'Select a branch for every repository before creating a workspace'
@@ -338,6 +359,68 @@ export function CreateChatBoxContainer({
     return null;
   }
 
+  // Keep worktree/console next to the host picker on both steps. Switching host
+  // clears repos and returns to the repo-picker step; the mode control must not
+  // disappear with the chat step.
+  const workspaceModePicker = (
+    <div className="mb-base flex flex-col items-center gap-half">
+      <label className="flex items-center gap-half text-sm text-mid">
+        <span>
+          {t('createMode.mode.label', {
+            defaultValue: 'Where should the agent run?',
+          })}
+        </span>
+        <select
+          className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high disabled:opacity-50"
+          value={effectiveMode}
+          disabled={hasNonGitRepo}
+          onChange={(e) => setWorkspaceMode(e.target.value as WorkspaceKind)}
+        >
+          <option value="worktree">
+            {t('createMode.mode.worktree', {
+              defaultValue: 'Isolated worktree (default)',
+            })}
+          </option>
+          <option value="console">
+            {t('createMode.mode.console', {
+              defaultValue: 'Main directory console (current branch)',
+            })}
+          </option>
+        </select>
+      </label>
+      {effectiveMode === 'console' && (
+        <>
+          {repoDirModeAvailable && repos.length > 1 && (
+            <label className="flex items-center gap-half text-sm text-mid">
+              <span>
+                {t('createMode.console.repoLabel', {
+                  defaultValue: 'Open console on',
+                })}
+              </span>
+              <select
+                className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high"
+                value={effectiveConsoleRepoId ?? ''}
+                onChange={(e) => setConsoleRepoId(e.target.value)}
+              >
+                {repos.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.display_name || repo.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <p className="text-center text-xs text-low">
+            {t('createMode.console.warning', {
+              defaultValue:
+                'The agent runs directly in your repo’s current directory and branch. It will not create a branch or commit for you — you stay in control of commits.',
+            })}
+          </p>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative flex flex-1 flex-col bg-primary h-full">
       <div className="flex flex-1 items-center justify-center px-base">
@@ -347,6 +430,8 @@ export function CreateChatBoxContainer({
               <h2 className="mb-double text-center text-4xl font-medium tracking-tight text-high">
                 {t('createMode.headings.repoStep')}
               </h2>
+              <CreateModeHostPicker />
+              {workspaceModePicker}
               <CreateModeRepoPickerBar
                 onContinueToPrompt={() => setIsSelectingRepos(false)}
               />
@@ -358,68 +443,8 @@ export function CreateChatBoxContainer({
               <h2 className="mb-double text-center text-4xl font-medium tracking-tight text-high">
                 {t('createMode.headings.chatStep')}
               </h2>
-
-              {repoDirModeAvailable && (
-                <div className="mb-base flex flex-col items-center gap-half">
-                  <label className="flex items-center gap-half text-sm text-mid">
-                    <span>
-                      {t('createMode.mode.label', {
-                        defaultValue: 'Where should the agent run?',
-                      })}
-                    </span>
-                    <select
-                      className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high disabled:opacity-50"
-                      value={effectiveMode}
-                      disabled={hasNonGitRepo}
-                      onChange={(e) =>
-                        setWorkspaceMode(e.target.value as WorkspaceKind)
-                      }
-                    >
-                      <option value="worktree">
-                        {t('createMode.mode.worktree', {
-                          defaultValue: 'Isolated worktree (default)',
-                        })}
-                      </option>
-                      <option value="console">
-                        {t('createMode.mode.console', {
-                          defaultValue:
-                            'Main directory console (current branch)',
-                        })}
-                      </option>
-                    </select>
-                  </label>
-                  {effectiveMode === 'console' && (
-                    <>
-                      {repos.length > 1 && (
-                        <label className="flex items-center gap-half text-sm text-mid">
-                          <span>
-                            {t('createMode.console.repoLabel', {
-                              defaultValue: 'Open console on',
-                            })}
-                          </span>
-                          <select
-                            className="rounded border border-low bg-transparent px-1 py-0.5 text-sm text-high"
-                            value={effectiveConsoleRepoId ?? ''}
-                            onChange={(e) => setConsoleRepoId(e.target.value)}
-                          >
-                            {repos.map((repo) => (
-                              <option key={repo.id} value={repo.id}>
-                                {repo.display_name || repo.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      )}
-                      <p className="text-center text-xs text-low">
-                        {t('createMode.console.warning', {
-                          defaultValue:
-                            'The agent runs directly in your repo’s current directory and branch. It will not create a branch or commit for you — you stay in control of commits.',
-                        })}
-                      </p>
-                    </>
-                  )}
-                </div>
-              )}
+              <CreateModeHostPicker />
+              {workspaceModePicker}
 
               <div className="flex justify-center @container">
                 <CreateChatBox
@@ -462,7 +487,7 @@ export function CreateChatBoxContainer({
                   }
                   onSend={handleSubmit}
                   isSending={createWorkspace.isPending}
-                  disabled={!hasSelectedRepos}
+                  disabled={!hasSelectedRepos || isExecutionHostOffline}
                   executor={{
                     selected: effectiveExecutor,
                     options: executorOptions,

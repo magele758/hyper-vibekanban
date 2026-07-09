@@ -236,7 +236,7 @@ interface UseCreateModeStateResult {
   setMessage: (message: string) => void;
   addRepo: (repo: Repo) => void;
   removeRepo: (repoId: string) => void;
-  clearRepos: () => void;
+  clearRepos: () => Promise<void>;
   setTargetBranch: (repoId: string, branch: string) => void;
   clearDraft: () => Promise<void>;
   clearLinkedIssue: () => void;
@@ -495,8 +495,8 @@ export function useCreateModeState({
   // ============================================================================
   // Persistence to scratch (debounced)
   // ============================================================================
-  const { debounced: debouncedSave } = useDebouncedCallback(
-    async (data: DraftWorkspaceData) => {
+  const { debounced: debouncedSave, cancel: cancelDebouncedSave } =
+    useDebouncedCallback(async (data: DraftWorkspaceData) => {
       const isEmpty =
         !data.message.trim() &&
         data.repos.length === 0 &&
@@ -512,9 +512,7 @@ export function useCreateModeState({
       } catch (e) {
         console.error('[useCreateModeState] Failed to save:', e);
       }
-    },
-    500
-  );
+    }, 500);
 
   useEffect(() => {
     if (state.phase !== 'ready') return;
@@ -606,9 +604,40 @@ export function useCreateModeState({
     dispatch({ type: 'REMOVE_REPO', repoId });
   }, []);
 
-  const clearRepos = useCallback(() => {
+  const clearRepos = useCallback(async () => {
+    cancelDebouncedSave();
     dispatch({ type: 'CLEAR_REPOS' });
-  }, []);
+    try {
+      await updateScratch({
+        payload: {
+          type: 'DRAFT_WORKSPACE',
+          data: {
+            message: state.message,
+            repos: [],
+            executor_config: state.executorConfig ?? null,
+            linked_issue: state.linkedIssue
+              ? {
+                  issue_id: state.linkedIssue.issueId,
+                  simple_id: state.linkedIssue.simpleId ?? '',
+                  title: state.linkedIssue.title ?? '',
+                  remote_project_id: state.linkedIssue.remoteProjectId,
+                }
+              : null,
+            attachments: state.attachments,
+          },
+        },
+      });
+    } catch (e) {
+      console.error('[useCreateModeState] Failed to clear repos:', e);
+    }
+  }, [
+    cancelDebouncedSave,
+    state.attachments,
+    state.executorConfig,
+    state.linkedIssue,
+    state.message,
+    updateScratch,
+  ]);
 
   const setTargetBranch = useCallback((repoId: string, branch: string) => {
     dispatch({ type: 'SET_TARGET_BRANCH', repoId, branch });
