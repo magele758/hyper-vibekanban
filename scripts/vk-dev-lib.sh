@@ -31,7 +31,7 @@ vk_configure_asset_dir() {
 }
 
 vk_dev_pgrep_pattern() {
-  echo "vibe-kanban.*concurrently.*local-web:dev|vibe-kanban.*concurrently.*backend:dev:watch"
+  echo "(hyper-vibekanban|vibe-kanban).*concurrently.*backend:dev:watch"
 }
 
 vk_kill_port_listeners() {
@@ -276,8 +276,9 @@ vk_stop_local_dev() {
     rm -f "${pid_dir}/dev.pid"
   fi
 
-  pkill -f "vibe-kanban.*concurrently.*local-web:dev" 2>/dev/null || true
-  pkill -f "vibe-kanban.*concurrently.*backend:dev:watch" 2>/dev/null || true
+  pkill -f "(hyper-vibekanban|vibe-kanban).*concurrently.*local-web:dev" 2>/dev/null || true
+  pkill -f "(hyper-vibekanban|vibe-kanban).*vite-dev-supervisor" 2>/dev/null || true
+  pkill -f "(hyper-vibekanban|vibe-kanban).*concurrently.*backend:dev:watch" 2>/dev/null || true
   pkill -f "${root}/packages/local-web.*vite" 2>/dev/null || true
   pkill -f "${root}/target/debug/server" 2>/dev/null || true
   sleep 2
@@ -296,10 +297,18 @@ vk_dev_running() {
   pgrep -f "$(vk_dev_pgrep_pattern)" >/dev/null 2>&1
 }
 
-# True when concurrently is up AND the local Rust API responds.
+vk_frontend_healthy() {
+  local frontend_port="${1:?frontend port required}"
+  vk_http_ok "$(vk_local_url "${frontend_port}")"
+}
+
+# True when concurrently is up AND both Vite + local Rust API respond.
 vk_local_dev_healthy() {
   local backend_port="${1:?backend port required}"
-  vk_dev_running && vk_http_ok "http://127.0.0.1:${backend_port}/health"
+  local frontend_port="${2:-${VK_FRONTEND_PORT}}"
+  vk_dev_running \
+    && vk_http_ok "http://127.0.0.1:${backend_port}/health" \
+    && vk_frontend_healthy "${frontend_port}"
 }
 
 vk_launch_dev_background() {

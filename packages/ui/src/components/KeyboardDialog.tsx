@@ -25,8 +25,9 @@ const Dialog = React.forwardRef<
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     uncloseable?: boolean;
+    size?: 'default' | 'fullscreen';
   }
->(({ className, open, onOpenChange, children, uncloseable, ...props }, ref) => {
+>(({ className, open, onOpenChange, children, uncloseable, size = 'default', ...props }, ref) => {
   const { enableScope, disableScope } = useHotkeysContext();
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -133,8 +134,17 @@ const Dialog = React.forwardRef<
 
   if (!open) return null;
 
+  const isFullscreen = size === 'fullscreen';
+
   return createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-start justify-center p-4 overflow-y-auto">
+    <div
+      className={cn(
+        'fixed inset-0 z-[10000] flex justify-center p-4',
+        isFullscreen
+          ? 'items-center overflow-hidden'
+          : 'items-start overflow-y-auto'
+      )}
+    >
       <div
         data-tauri-drag-region
         className="fixed inset-0 bg-black/50"
@@ -143,7 +153,10 @@ const Dialog = React.forwardRef<
       <div
         ref={setDialogRef}
         className={cn(
-          'relative z-[10000] flex flex-col w-full max-w-xl gap-4 bg-primary p-6 shadow-lg duration-200 sm:rounded-lg my-8',
+          'relative z-[10000] flex flex-col bg-primary shadow-lg duration-200 sm:rounded-lg',
+          isFullscreen
+            ? 'h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden'
+            : 'my-8 w-full max-w-xl gap-4 p-6',
           className
         )}
         {...props}

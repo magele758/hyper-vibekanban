@@ -68,10 +68,23 @@ else
   echo "  --  Docker remote stack"
 fi
 
+fe_ok=0
+be_ok=0
+vk_http_ok "$(vk_local_url "${FE}")" && fe_ok=1
+vk_http_ok "http://127.0.0.1:${BE}/health" && be_ok=1
+
 if vk_dev_running; then
-  echo "  OK  local dev (concurrently)"
+  if [[ "${fe_ok}" -eq 1 && "${be_ok}" -eq 1 ]]; then
+    echo "  OK  local dev (concurrently)"
+  elif [[ "${fe_ok}" -eq 0 && "${be_ok}" -eq 1 ]]; then
+    echo "  !!  local dev DEGRADED — Vite 已挂但 supervisor 仍在 (vk-stop && vk-start 修复)"
+  elif [[ "${fe_ok}" -eq 1 && "${be_ok}" -eq 0 ]]; then
+    echo "  !!  local dev DEGRADED — API 未响应但 supervisor 仍在 (vk-stop && vk-start 修复)"
+  else
+    echo "  !!  local dev DEGRADED — supervisor 在跑但 13001+13002 均不可用"
+  fi
 elif [[ -f "${STATE_DIR}/pids/dev.pid" ]] && kill -0 "$(cat "${STATE_DIR}/pids/dev.pid")" 2>/dev/null; then
-  echo "  OK  local dev pid $(cat "${STATE_DIR}/pids/dev.pid")"
+  echo "  !!  local dev pid $(cat "${STATE_DIR}/pids/dev.pid") 存活但 concurrently 未检测到"
 else
   echo "  --  local dev not running (Relay 配对 / 打开 workspace 需要本机 13001+13002)"
 fi

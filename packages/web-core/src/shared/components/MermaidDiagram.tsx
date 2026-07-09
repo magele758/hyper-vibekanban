@@ -18,12 +18,9 @@ export function MermaidDiagram({ chart, theme }: MermaidDiagramProps) {
 
   if (error) {
     return (
-      <div className="rounded-sm border border-error/20 bg-error/5 p-base">
-        <p className="text-xs text-error mb-2">Mermaid diagram error</p>
-        <pre className="text-xs text-low overflow-auto">
-          <code>{chart}</code>
-        </pre>
-      </div>
+      <pre className="text-xs p-base rounded-sm bg-panel overflow-auto mb-3 font-ibm-plex-mono my-3">
+        <code>{chart}</code>
+      </pre>
     );
   }
 

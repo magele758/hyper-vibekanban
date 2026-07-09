@@ -227,7 +227,7 @@ fi
 
 # Docker --force-recreate drops in-memory relay tunnels; backend must reconnect.
 if vk_dev_running; then
-  if vk_local_dev_healthy "${BACKEND_PORT}"; then
+  if vk_local_dev_healthy "${BACKEND_PORT}" "${FRONTEND_PORT}"; then
     echo "==> 重启 local dev（Remote/Relay 容器已重建，需重连 relay 隧道）..."
     vk_stop_local_dev "${ROOT}" "${PID_DIR}"
   else
@@ -236,13 +236,16 @@ if vk_dev_running; then
   fi
 fi
 
-if vk_local_dev_healthy "${BACKEND_PORT}"; then
+if vk_local_dev_healthy "${BACKEND_PORT}" "${FRONTEND_PORT}"; then
   echo "==> dev 已在运行"
   if [[ "${MOBILE}" -eq 1 && "${CADDY_STARTED}" -eq 1 ]]; then
     echo "WARN: 手机 HTTPS 已启用。若刚改过环境变量，请 vk-stop 后重新 vk-start 以重启 dev/backend。"
   fi
 else
   echo "==> Starting dev (log: ${LOG_DIR}/dev.log)..."
+  if [[ -s "${LOG_DIR}/dev.log" ]]; then
+    cp "${LOG_DIR}/dev.log" "${LOG_DIR}/dev.log.prev" 2>/dev/null || true
+  fi
   : > "${LOG_DIR}/dev.log"
   export FRONTEND_PORT BACKEND_PORT PREVIEW_PROXY_PORT
   unset PORT
