@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { isTauriApp } from '@/shared/lib/platform';
 import { router } from '@web/app/router';
+import { navigateLocalPathWithHostFallback } from '@web/app/navigation/AppNavigation';
 
 /**
  * Listens for `notification-clicked` events emitted by the macOS native
@@ -21,7 +22,12 @@ export function useTauriNotificationNavigation() {
         (event) => {
           const path = event.payload.deeplinkPath;
           if (path) {
-            router.navigate({ to: path as '/' });
+            // Resolve host-capable deeplinks against the selected execution
+            // host so notifications don't always drop back to this machine.
+            // Falls back to a raw navigation for unrecognized paths.
+            if (!navigateLocalPathWithHostFallback(path)) {
+              router.navigate({ to: path as '/' });
+            }
           }
         }
       );

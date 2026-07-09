@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
-import { Outlet, useNavigate, useParams } from '@tanstack/react-router';
+import { Outlet, useNavigate } from '@tanstack/react-router';
 import { siDiscord, siGithub } from 'simple-icons';
 import {
   XIcon,
@@ -27,7 +27,9 @@ import { useGitHubStars } from '@/shared/hooks/useGitHubStars';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useAppUpdateStore } from '@/shared/stores/useAppUpdateStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
 import {
   getDestinationHostId,
   getProjectDestination,
@@ -61,6 +63,7 @@ import {
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();
   const currentDestination = useCurrentAppDestination();
+  const runtime = useAppRuntime();
   const isMobile = useIsMobile();
   const mobileFontScale = useUiPreferencesStore((s) => s.mobileFontScale);
   const isLeftSidebarVisible = useUiPreferencesStore(
@@ -75,7 +78,7 @@ export function SharedAppLayout() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAppBarHovered, setIsAppBarHovered] = useState(false);
   const { hosts: remoteCloudHosts } = useRemoteCloudHostsAppBarModel();
-  const { hostId: routeHostId } = useParams({ strict: false });
+  const { executionHostId, setExecutionHostId } = useExecutionHostId();
   const navigate = useNavigate();
 
   // Register CMD+K shortcut globally for all routes under SharedAppLayout
@@ -173,17 +176,52 @@ export function SharedAppLayout() {
     () => getProjectDestination(currentDestination),
     [currentDestination]
   );
-  const isWorkspacesActive = isLocalWorkspacesDestination(currentDestination);
+  // AppBar Local button = "this machine": only lit on local workspaces
+  // routes. Remote hosts are highlighted via their own host buttons.
+  const isLocalWorkspacesActive =
+    isLocalWorkspacesDestination(currentDestination);
   const isExportActive = currentDestination?.kind === 'export';
   const isWorkspaceSidebarPreviewEnabled =
-    !isMobile && isWorkspacesActive && !isLeftSidebarVisible;
+    !isMobile && isLocalWorkspacesActive && !isLeftSidebarVisible;
   const activeProjectId = projectDestination?.projectId ?? null;
+  // Prefer resolved destination host over useParams: strict:false params can
+  // retain a stale hostId after navigating from /hosts/{id}/... create back to
+  // the local create URL, which made the picker appear stuck on the remote host.
   const activeHostId =
-    getDestinationHostId(currentDestination) ?? routeHostId ?? null;
+    getDestinationHostId(currentDestination) ??
+    (runtime === 'local' ? executionHostId : null);
   const sidebarPreview = useWorkspaceSidebarPreviewController({
     enabled: isWorkspaceSidebarPreviewEnabled,
     isAppBarHovered,
   });
+
+  // Keep Desktop execution host in sync with non-create destinations.
+  // Workspace-create routes are owned by CreateModeHostPicker (explicit host
+  // arg on navigate) — syncing URL→executionHostId here races mid-switch and
+  // snaps the picker back to the previous /hosts/{id}/... create URL.
+  useEffect(() => {
+    if (runtime !== 'local') {
+      return;
+    }
+
+    const isCreateDestination =
+      currentDestination?.kind === 'workspaces-create' ||
+      currentDestination?.kind === 'project-workspace-create' ||
+      currentDestination?.kind === 'project-issue-workspace-create';
+    if (isCreateDestination) {
+      return;
+    }
+
+    const destinationHostId = getDestinationHostId(currentDestination);
+    if (destinationHostId) {
+      setExecutionHostId(destinationHostId);
+      return;
+    }
+
+    if (isLocalWorkspacesDestination(currentDestination)) {
+      setExecutionHostId(null);
+    }
+  }, [currentDestination, runtime, setExecutionHostId]);
 
   // Persist last selected project to scratch store
   const setSelectedProjectId = useUiPreferencesStore(
@@ -202,6 +240,8 @@ export function SharedAppLayout() {
   // only holds slots briefly right before a switch.
 
   const handleWorkspacesClick = useCallback(() => {
+    // Local button always means "this machine". Navigate first; the route sync
+    // effect clears executionHostId once /workspaces is active.
     void navigate({ to: '/workspaces' });
   }, [navigate]);
 
@@ -302,12 +342,16 @@ export function SharedAppLayout() {
         return;
       }
 
+      if (runtime === 'local') {
+        setExecutionHostId(hostId);
+      }
+
       void navigate({
         to: '/hosts/$hostId/workspaces',
         params: { hostId },
       });
     },
-    [navigate]
+    [navigate, runtime, setExecutionHostId]
   );
 
   const handlePairHostClick = useCallback(() => {
@@ -351,7 +395,7 @@ export function SharedAppLayout() {
               onProjectHover={handleProjectHover}
               onProjectsDragEnd={handleProjectsDragEnd}
               isSavingProjectOrder={isSavingProjectOrder}
-              isWorkspacesActive={isWorkspacesActive}
+              isWorkspacesActive={isLocalWorkspacesActive}
               isExportActive={isExportActive}
               activeProjectId={activeProjectId}
               isSignedIn={isSignedIn}

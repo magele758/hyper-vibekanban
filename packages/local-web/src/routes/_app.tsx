@@ -1,9 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
-import {
-  createFileRoute,
-  useParams,
-  useLocation,
-} from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { Provider as NiceModalProvider } from '@ebay/nice-modal-react';
 import { SequenceTrackerProvider } from '@/shared/keyboard/SequenceTracker';
 import { SequenceIndicator } from '@/shared/keyboard/SequenceIndicator';
@@ -14,6 +10,13 @@ import { KeyboardShortcutsDialog } from '@/shared/dialogs/shared/KeyboardShortcu
 import { ReleaseNotesDialog } from '@/shared/dialogs/global/ReleaseNotesDialog';
 import { TerminalProvider } from '@/shared/providers/TerminalProvider';
 import { HostIdProvider } from '@/shared/providers/HostIdProvider';
+import { setRelayHostFallback } from '@/shared/lib/relayHostFallback';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
+import {
+  getDestinationHostId,
+  isLocalWorkspacesDestination,
+} from '@/shared/lib/routes/appNavigation';
 import { WorkspaceProvider } from '@/shared/providers/WorkspaceProvider';
 import { ExecutionProcessesProvider } from '@/shared/providers/ExecutionProcessesProvider';
 import { LogsPanelProvider } from '@/shared/providers/LogsPanelProvider';
@@ -102,10 +105,31 @@ function AppRouteProviders({ children }: { children: ReactNode }) {
 }
 
 function AppLayoutRouteComponent() {
-  const { hostId } = useParams({ strict: false });
+  const destination = useCurrentAppDestination();
+  const { executionHostId } = useExecutionHostId();
+  // Resolve host from the destination, not useParams — stale hostId params
+  // after leaving /hosts/{id}/... would remount providers under the wrong key.
+  const destinationHostId = getDestinationHostId(destination);
+  const providerHostKey = destinationHostId ?? 'local';
+
+  // Desktop: routes without an explicit /hosts/{id} segment (e.g. kanban
+  // boards) inherit the selected execution host so HostIdProvider + the local
+  // API transport target /api/host/{id}/... (mirrors remote-web's
+  // setRelayHostFallback). Force local on explicit local workspaces/create
+  // routes so this-machine flows are never proxied to a remote host.
+  const isLocalCreateDestination =
+    destination?.kind === 'workspaces-create' ||
+    destination?.kind === 'project-workspace-create' ||
+    destination?.kind === 'project-issue-workspace-create';
+  const fallbackHostId =
+    isLocalWorkspacesDestination(destination) ||
+    (isLocalCreateDestination && !destinationHostId)
+      ? null
+      : executionHostId;
+  setRelayHostFallback(fallbackHostId);
 
   return (
-    <AppRouteProviders key={hostId ?? 'local'}>
+    <AppRouteProviders key={providerHostKey}>
       <ReleaseNotesHandler />
       <SequenceTrackerProvider>
         <SequenceIndicator />

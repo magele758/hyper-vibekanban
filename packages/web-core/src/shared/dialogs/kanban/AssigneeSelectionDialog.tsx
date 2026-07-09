@@ -17,6 +17,7 @@ import { useProjectContext } from '@/shared/hooks/useProjectContext';
 import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useOrganizationProjects } from '@/shared/hooks/useOrganizationProjects';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { getExecutionHostId } from '@/shared/lib/executionHostContext';
 import {
   getDestinationHostId,
   getProjectDestination,
@@ -74,7 +75,8 @@ function AssigneeSelectionContent({
   const resolvedProjectId = projectId || projectDestination?.projectId || null;
   const issueComposerKey = useMemo(() => {
     if (!resolvedProjectId) return null;
-    const hostId = getDestinationHostId(projectDestination);
+    const hostId =
+      getDestinationHostId(projectDestination) ?? getExecutionHostId();
     return buildKanbanIssueComposerKey(hostId, resolvedProjectId);
   }, [resolvedProjectId, projectDestination]);
   const issueComposer = useKanbanIssueComposer(issueComposerKey);

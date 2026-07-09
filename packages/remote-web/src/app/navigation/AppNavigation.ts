@@ -246,7 +246,7 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
       navigateTo({ kind: "onboarding-sign-in" }, transition),
     goToWorkspaces: (transition) =>
       navigateTo({ kind: "workspaces", hostId }, transition),
-    goToWorkspacesCreate: (transition) =>
+    goToWorkspacesCreate: (transition, _hostId) =>
       navigateTo({ kind: "workspaces-create", hostId }, transition),
     goToWorkspace: (workspaceId, transition) =>
       navigateTo({ kind: "workspace", hostId, workspaceId }, transition),
@@ -273,6 +273,7 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
       issueId,
       draftId,
       transition,
+      _hostId,
     ) =>
       navigateTo(
         {
@@ -284,7 +285,7 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
         },
         transition,
       ),
-    goToProjectWorkspaceCreate: (projectId, draftId, transition) =>
+    goToProjectWorkspaceCreate: (projectId, draftId, transition, _hostId) =>
       navigateTo(
         { kind: "project-workspace-create", hostId, projectId, draftId },
         transition,
@@ -318,7 +319,7 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
       navigateTo({ kind: "onboarding-sign-in" }, transition),
     goToWorkspaces: (transition) =>
       navigateTo({ kind: "workspaces" }, transition),
-    goToWorkspacesCreate: (transition) =>
+    goToWorkspacesCreate: (transition, _hostId) =>
       navigateTo({ kind: "workspaces-create" }, transition),
     goToWorkspace: (workspaceId, transition) =>
       navigateTo({ kind: "workspace", workspaceId }, transition),
@@ -339,12 +340,13 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
       issueId,
       draftId,
       transition,
+      _hostId,
     ) =>
       navigateTo(
         { kind: "project-issue-workspace-create", projectId, issueId, draftId },
         transition,
       ),
-    goToProjectWorkspaceCreate: (projectId, draftId, transition) =>
+    goToProjectWorkspaceCreate: (projectId, draftId, transition, _hostId) =>
       navigateTo(
         { kind: "project-workspace-create", projectId, draftId },
         transition,

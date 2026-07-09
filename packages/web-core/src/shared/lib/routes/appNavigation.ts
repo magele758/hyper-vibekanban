@@ -44,7 +44,10 @@ export interface AppNavigation {
   goToOnboarding(transition?: NavigationTransition): void;
   goToOnboardingSignIn(transition?: NavigationTransition): void;
   goToWorkspaces(transition?: NavigationTransition): void;
-  goToWorkspacesCreate(transition?: NavigationTransition): void;
+  goToWorkspacesCreate(
+    transition?: NavigationTransition,
+    hostId?: string | null
+  ): void;
   goToWorkspace(workspaceId: string, transition?: NavigationTransition): void;
   goToWorkspaceVsCode(
     workspaceId: string,
@@ -67,12 +70,14 @@ export interface AppNavigation {
     projectId: string,
     issueId: string,
     draftId: string,
-    transition?: NavigationTransition
+    transition?: NavigationTransition,
+    hostId?: string | null
   ): void;
   goToProjectWorkspaceCreate(
     projectId: string,
     draftId: string,
-    transition?: NavigationTransition
+    transition?: NavigationTransition,
+    hostId?: string | null
   ): void;
 }
 

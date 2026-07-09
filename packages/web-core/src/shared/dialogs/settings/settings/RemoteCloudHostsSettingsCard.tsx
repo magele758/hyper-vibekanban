@@ -17,6 +17,8 @@ import {
 import { PairingCodeInput } from './PairingCodeInput';
 import { normalizeEnrollmentCode } from '@/shared/lib/relayPake';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
+import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
 import {
   usePairRelayHostMutation,
   useRelayRemoteHostsQuery,
@@ -36,6 +38,8 @@ export function RemoteCloudHostsSettingsCardContent({
 }) {
   const { t } = useTranslation(['settings', 'common']);
   const navigate = useNavigate();
+  const runtime = useAppRuntime();
+  const { setExecutionHostId } = useExecutionHostId();
   const { hostId: routeHostId } = useParams({ strict: false });
   const [hostName, setHostName] = useState('');
   const [selectedHostId, setSelectedHostId] = useState<string | undefined>();
@@ -253,6 +257,12 @@ export function RemoteCloudHostsSettingsCardContent({
   const handleGoToHostWorkspaces = (hostId: string, status?: string) => {
     if (status === 'offline') {
       return;
+    }
+
+    // Desktop: opening a host's workspaces from Settings should also make it the
+    // active execution host so the AppBar/create flows inherit it afterwards.
+    if (runtime === 'local') {
+      setExecutionHostId(hostId);
     }
 
     onClose?.();

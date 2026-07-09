@@ -1,5 +1,6 @@
 import { router } from '@web/app/router';
 import type { FileRouteTypes } from '@web/routeTree.gen';
+import { getExecutionHostId } from '@/shared/lib/executionHostContext';
 import {
   type AppDestination,
   type AppNavigation,
@@ -176,9 +177,21 @@ function destinationToLocalTarget(
   destination: AppDestination,
   options: { currentHostId: string | null }
 ) {
+  // Create destinations always carry an explicit hostId key from navigation
+  // helpers (undefined = this machine). Other destinations inherit URL/fallback.
+  const isCreateDestination =
+    destination.kind === 'workspaces-create' ||
+    destination.kind === 'project-issue-workspace-create' ||
+    destination.kind === 'project-workspace-create';
   const destinationHostId =
     'hostId' in destination ? (destination.hostId ?? null) : null;
-  const effectiveHostId = destinationHostId ?? options.currentHostId;
+  // Open/list destinations inherit host priority: explicit destination host >
+  // current URL host > selected Desktop execution host. This keeps opening an
+  // existing workspace (or navigating from a kanban board) on the same host the
+  // user is operating on instead of silently falling back to this machine.
+  const effectiveHostId = isCreateDestination
+    ? destinationHostId
+    : (destinationHostId ?? options.currentHostId ?? getExecutionHostId());
 
   switch (destination.kind) {
     case 'root':
@@ -334,8 +347,17 @@ export function createLocalAppNavigation(): AppNavigation {
       navigateTo({ kind: 'onboarding-sign-in' }, transition),
     goToWorkspaces: (transition) =>
       navigateTo({ kind: 'workspaces' }, transition),
-    goToWorkspacesCreate: (transition) =>
-      navigateTo({ kind: 'workspaces-create' }, transition),
+    goToWorkspacesCreate: (transition, hostId) =>
+      navigateTo(
+        {
+          kind: 'workspaces-create',
+          hostId:
+            hostId !== undefined
+              ? (hostId ?? undefined)
+              : (getExecutionHostId() ?? undefined),
+        },
+        transition
+      ),
     goToWorkspace: (workspaceId, transition) =>
       navigateTo({ kind: 'workspace', workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
@@ -354,15 +376,36 @@ export function createLocalAppNavigation(): AppNavigation {
       projectId,
       issueId,
       draftId,
-      transition
+      transition,
+      hostId
     ) =>
       navigateTo(
-        { kind: 'project-issue-workspace-create', projectId, issueId, draftId },
+        {
+          kind: 'project-issue-workspace-create',
+          projectId,
+          issueId,
+          draftId,
+          // Explicit override (including null = this machine) wins over the
+          // stored execution host so create-mode host switching can't race the
+          // AppBar URL sync effect.
+          hostId:
+            hostId !== undefined
+              ? (hostId ?? undefined)
+              : (getExecutionHostId() ?? undefined),
+        },
         transition
       ),
-    goToProjectWorkspaceCreate: (projectId, draftId, transition) =>
+    goToProjectWorkspaceCreate: (projectId, draftId, transition, hostId) =>
       navigateTo(
-        { kind: 'project-workspace-create', projectId, draftId },
+        {
+          kind: 'project-workspace-create',
+          projectId,
+          draftId,
+          hostId:
+            hostId !== undefined
+              ? (hostId ?? undefined)
+              : (getExecutionHostId() ?? undefined),
+        },
         transition
       ),
   };
@@ -371,3 +414,22 @@ export function createLocalAppNavigation(): AppNavigation {
 }
 
 export const localAppNavigation = createLocalAppNavigation();
+
+/**
+ * Navigate to a raw deeplink path (e.g. from a system notification) while
+ * applying the same host resolution as regular navigation. Host-capable
+ * destinations without an explicit /hosts/{id} segment inherit the selected
+ * Desktop execution host so notifications don't always drop back to this
+ * machine. Returns false when the path can't be resolved to a known route.
+ */
+export function navigateLocalPathWithHostFallback(path: string): boolean {
+  const destination = resolveLocalDestinationFromPath(path);
+  if (!destination) {
+    return false;
+  }
+
+  void router.navigate(
+    destinationToLocalTarget(destination, { currentHostId: null })
+  );
+  return true;
+}
