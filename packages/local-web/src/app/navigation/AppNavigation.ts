@@ -183,15 +183,21 @@ function destinationToLocalTarget(
     destination.kind === 'workspaces-create' ||
     destination.kind === 'project-issue-workspace-create' ||
     destination.kind === 'project-workspace-create';
+  // Opening an existing workspace must not inherit the Desktop execution-host
+  // selection: that id is for create/list targeting, and applying it here sends
+  // a this-machine workspace id to /hosts/{remote}/... (404). Stay on the
+  // explicit destination host or the current URL host (sidebar within a host).
+  const isOpenExistingWorkspace =
+    destination.kind === 'workspace' ||
+    destination.kind === 'workspace-vscode' ||
+    destination.kind === 'project-issue-workspace';
   const destinationHostId =
     'hostId' in destination ? (destination.hostId ?? null) : null;
-  // Open/list destinations inherit host priority: explicit destination host >
-  // current URL host > selected Desktop execution host. This keeps opening an
-  // existing workspace (or navigating from a kanban board) on the same host the
-  // user is operating on instead of silently falling back to this machine.
   const effectiveHostId = isCreateDestination
     ? destinationHostId
-    : (destinationHostId ?? options.currentHostId ?? getExecutionHostId());
+    : isOpenExistingWorkspace
+      ? (destinationHostId ?? options.currentHostId)
+      : (destinationHostId ?? options.currentHostId ?? getExecutionHostId());
 
   switch (destination.kind) {
     case 'root':

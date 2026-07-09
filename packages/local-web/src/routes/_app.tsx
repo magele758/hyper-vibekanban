@@ -117,13 +117,22 @@ function AppLayoutRouteComponent() {
   // API transport target /api/host/{id}/... (mirrors remote-web's
   // setRelayHostFallback). Force local on explicit local workspaces/create
   // routes so this-machine flows are never proxied to a remote host.
+  // Also force local when opening an existing workspace without a host
+  // segment — otherwise a leftover executionHostId proxies local workspace
+  // APIs to the remote host and they 404.
   const isLocalCreateDestination =
     destination?.kind === 'workspaces-create' ||
     destination?.kind === 'project-workspace-create' ||
     destination?.kind === 'project-issue-workspace-create';
+  const isOpenExistingLocalWorkspace =
+    (destination?.kind === 'workspace' ||
+      destination?.kind === 'workspace-vscode' ||
+      destination?.kind === 'project-issue-workspace') &&
+    !destinationHostId;
   const fallbackHostId =
     isLocalWorkspacesDestination(destination) ||
-    (isLocalCreateDestination && !destinationHostId)
+    (isLocalCreateDestination && !destinationHostId) ||
+    isOpenExistingLocalWorkspace
       ? null
       : executionHostId;
   setRelayHostFallback(fallbackHostId);
