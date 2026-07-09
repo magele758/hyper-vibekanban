@@ -135,7 +135,7 @@ npx vibe-kanban --version
 
 ## コントリビュート
 
-PR を提出する前に、[GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) または [Discord](https://discord.gg/AC4nwVtJM3) でコアチームと実装方針・ロードマップの整合性について事前に相談してください。
+PR を提出する前に、[GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) でコアチームと実装方針・ロードマップの整合性について事前に相談してください。
 
 ---
 

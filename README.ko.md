@@ -135,7 +135,7 @@ npx vibe-kanban --version
 
 ## 기여
 
-PR을 제출하기 전에 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) 또는 [Discord](https://discord.gg/AC4nwVtJM3)에서 구현 방향과 로드맵 적합성에 대해 핵심 팀과 먼저 논의해 주세요.
+PR을 제출하기 전에 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions)에서 구현 방향과 로드맵 적합성에 대해 핵심 팀과 먼저 논의해 주세요.
 
 ---
 

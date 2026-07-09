@@ -135,7 +135,7 @@ Usa [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussio
 
 ## Contribuciones
 
-Por favor, abre un [GitHub Discussion](https://github.com/magele758/hyper-vibekanban/discussions) o únete a [Discord](https://discord.gg/AC4nwVtJM3) antes de enviar una PR para alinear los detalles de implementación con el roadmap existente.
+Por favor, abre un [GitHub Discussion](https://github.com/magele758/hyper-vibekanban/discussions) antes de enviar una PR para alinear los detalles de implementación con el roadmap existente.
 
 ---
 
