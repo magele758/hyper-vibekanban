@@ -8,6 +8,7 @@ import {
   LayoutIcon,
   KanbanIcon,
   DownloadSimpleIcon,
+  LinkIcon,
 } from '@phosphor-icons/react';
 import { SyncErrorProvider } from '@/shared/providers/SyncErrorProvider';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
@@ -57,6 +58,16 @@ import {
   prefetchProjectKanbanShapes,
   prefetchProjectKanbanShapesOnHover,
 } from '@/shared/lib/electric/prefetchProjectShapes';
+
+function getHostInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '??';
+  const words = trimmed.split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0].charAt(0) + words[1].charAt(0)).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
 
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();
@@ -334,20 +345,23 @@ export function SharedAppLayout() {
 
   const handleHostClick = useCallback(
     (hostId: string, status: AppBarHostStatus) => {
-      if (status === 'offline') {
+      if (status === 'online') {
+        if (runtime === 'local') {
+          setExecutionHostId(hostId);
+        }
+
+        void navigate({
+          to: '/hosts/$hostId/workspaces',
+          params: { hostId },
+        });
         return;
       }
 
-      if (runtime === 'local') {
-        setExecutionHostId(hostId);
+      if (status === 'unpaired') {
+        openRelaySettings(hostId);
       }
-
-      void navigate({
-        to: '/hosts/$hostId/workspaces',
-        params: { hostId },
-      });
     },
-    [navigate, runtime, setExecutionHostId]
+    [navigate, openRelaySettings, runtime, setExecutionHostId]
   );
 
   const handlePairHostClick = useCallback(() => {
@@ -483,18 +497,90 @@ export function SharedAppLayout() {
               </button>
             </div>
 
-            {/* Workspaces link */}
+            {/* Local workspaces link */}
             <button
               type="button"
               onClick={() => {
-                void navigate({ to: '/workspaces' });
+                handleWorkspacesClick();
                 setIsDrawerOpen(false);
               }}
-              className="flex items-center gap-2 px-4 py-3 text-sm text-normal hover:bg-secondary cursor-pointer"
+              className={cn(
+                'flex items-center gap-2 px-4 py-3 text-sm hover:bg-secondary cursor-pointer',
+                isLocalWorkspacesActive && !activeHostId
+                  ? 'bg-brand/10 text-high'
+                  : 'text-normal'
+              )}
             >
               <LayoutIcon className="h-4 w-4" />
-              Workspaces
+              Local workspaces
             </button>
+
+            {/* Remote hosts — mirrors desktop AppBar Remote section */}
+            {(remoteCloudHosts.length > 0 || isSignedIn) && (
+              <>
+                <div className="border-t border-border mx-4" />
+                <p className="px-4 pt-3 pb-1 text-xs font-medium uppercase tracking-wide text-low">
+                  Remote
+                </p>
+                <div className="px-2">
+                  {remoteCloudHosts.map((host) => {
+                    const isOnline = host.status === 'online';
+                    const isUnpaired = host.status === 'unpaired';
+                    const isClickable = isOnline || isUnpaired;
+                    const isActive = host.id === activeHostId;
+
+                    return (
+                      <button
+                        key={host.id}
+                        type="button"
+                        disabled={!isClickable}
+                        onClick={() => {
+                          handleHostClick(host.id, host.status);
+                          setIsDrawerOpen(false);
+                        }}
+                        className={cn(
+                          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left transition-colors',
+                          isClickable
+                            ? 'cursor-pointer hover:bg-secondary'
+                            : 'opacity-50 cursor-not-allowed',
+                          isActive && 'bg-brand/10 text-high'
+                        )}
+                      >
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand">
+                          {getHostInitials(host.name)}
+                        </div>
+                        <span className="min-w-0 flex-1 truncate text-normal">
+                          {host.name}
+                        </span>
+                        <span
+                          className={cn(
+                            'h-2 w-2 shrink-0 rounded-full',
+                            isOnline
+                              ? 'bg-success'
+                              : isUnpaired
+                                ? 'border border-warning bg-white'
+                                : 'bg-low'
+                          )}
+                        />
+                      </button>
+                    );
+                  })}
+                  {isSignedIn && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handlePairHostClick();
+                        setIsDrawerOpen(false);
+                      }}
+                      className="flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-low hover:text-normal hover:bg-secondary cursor-pointer"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                      Pair a remote device
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Divider */}
             <div className="border-t border-border mx-4" />
