@@ -247,10 +247,12 @@ export function SharedAppLayout() {
   // only holds slots briefly right before a switch.
 
   const handleWorkspacesClick = useCallback(() => {
-    // Local button always means "this machine". Navigate first; the route sync
-    // effect clears executionHostId once /workspaces is active.
+    // Local button always means "this machine". Clear the stored execution host
+    // immediately so create-mode picker / API fallback can't briefly keep the
+    // previous remote host while /workspaces redirects into create.
+    setExecutionHostId(null);
     void navigate({ to: '/workspaces' });
-  }, [navigate]);
+  }, [navigate, setExecutionHostId]);
 
   const handleExportClick = useCallback(() => {
     appNavigation.goToExport();
