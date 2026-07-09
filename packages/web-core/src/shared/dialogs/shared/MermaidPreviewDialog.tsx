@@ -41,7 +41,10 @@ function clampZoom(value: number): number {
 function parseSvgDimensions(svg: string): SvgDimensions | null {
   const viewBoxMatch = svg.match(/viewBox=["']([^"']+)["']/i);
   if (viewBoxMatch) {
-    const values = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number);
+    const values = viewBoxMatch[1]
+      .trim()
+      .split(/[\s,]+/)
+      .map(Number);
     if (values.length === 4 && values[2] > 0 && values[3] > 0) {
       return { width: values[2], height: values[3] };
     }
