@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://vibekanban.com">
+  <a href="https://github.com/magele758/hyper-vibekanban">
     <picture>
       <source srcset="packages/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
@@ -11,8 +11,7 @@
 <p align="center">让 Claude Code、Gemini CLI、Codex、Amp 等 AI 编程 Agent 的效率提升 10 倍...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/BloopAI/vibe-kanban/blob/main/.github/workflows/publish.yml"><img alt="构建状态" src="https://img.shields.io/github/actions/workflow/status/BloopAI/vibe-kanban/.github%2Fworkflows%2Fpublish.yml" /></a>
-  <a href="https://deepwiki.com/BloopAI/vibe-kanban"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="构建状态" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +23,7 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **注意：** Vibe Kanban 已宣布停服。[查看公告](https://www.vibekanban.com/blog/shutdown)。项目仍保持开源，本地自托管完全可用。
+> **注意：** 官方 Vibe Kanban 云服务已停服。本仓库仍保持开源，本地自托管完全可用。
 
 ![](packages/public/vibe-kanban-screenshot-overview.png)
 
@@ -86,7 +85,7 @@ npx vibe-kanban
 | Claude Code Router (CCR) | 社区 |
 | Qwen Code | 阿里巴巴 |
 
-各 Agent 的安装与认证方法见[官方文档](https://vibekanban.com/docs/supported-coding-agents)。
+各 Agent 的安装与认证方法见[文档](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx)。
 
 ## MCP 服务器
 
@@ -122,19 +121,21 @@ npx vibe-kanban --version
 
 ## 文档
 
-完整文档和使用指南请访问[官方网站](https://vibekanban.com/docs)。
+完整文档和使用指南请查看本仓库的 [`docs/`](docs/) 目录。
+
 
 ## 自托管
 
-想部署自己的 Vibe Kanban Cloud 实例？参见[自托管指南](https://vibekanban.com/docs/self-hosting/deploy-docker)。
+想部署自己的 Vibe Kanban Cloud 实例？参见[自托管指南](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx)。
+
 
 ## 支持与反馈
 
-功能建议请使用 [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions)，Bug 报告请提交 [GitHub Issues](https://github.com/BloopAI/vibe-kanban/issues)。
+功能建议请使用 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions)，Bug 报告请提交 [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues)。
 
 ## 参与贡献
 
-提交 PR 前请先在 [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) 或 [Discord](https://discord.gg/AC4nwVtJM3) 与核心团队讨论实现方案和路线图契合度。
+提交 PR 前请先在 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) 或 [Discord](https://discord.gg/AC4nwVtJM3) 与核心团队讨论实现方案和路线图契合度。
 
 ---
 

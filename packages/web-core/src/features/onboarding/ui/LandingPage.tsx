@@ -7,7 +7,6 @@ import {
   useState,
 } from 'react';
 import {
-  BookOpenIcon,
   BirdIcon,
   CheckIcon,
   CowIcon,
@@ -115,13 +114,8 @@ const SOCIAL_LINKS = [
   },
   {
     label: 'GitHub',
-    href: 'https://github.com/BloopAI/vibe-kanban',
+    href: 'https://github.com/magele758/hyper-vibekanban',
     icon: GithubLogoIcon,
-  },
-  {
-    label: 'Docs',
-    href: 'https://www.vibekanban.com/docs',
-    icon: BookOpenIcon,
   },
 ];
 
@@ -368,16 +362,7 @@ export function LandingPage() {
                 Vibe Kanban runs AI coding agents with{' '}
                 <code>--dangerously-skip-permissions</code> /{' '}
                 <code>--yolo</code> by default. Always review what agents are
-                doing.{' '}
-                <a
-                  href="https://www.vibekanban.com/docs/getting-started#safety-notice"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-brand hover:underline"
-                >
-                  Learn more
-                </a>
-                .
+                doing.
               </p>
             </div>
           </div>
@@ -558,25 +543,7 @@ export function LandingPage() {
         {/* Footer */}
         <div className="shrink-0 border-t border-border p-double pt-base flex items-center justify-between gap-base">
           <p className="text-xs text-low">
-            By continuing you agree to the{' '}
-            <a
-              href="https://www.vibekanban.com/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand hover:underline"
-            >
-              terms and conditions
-            </a>{' '}
-            and{' '}
-            <a
-              href="https://www.vibekanban.com/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand hover:underline"
-            >
-              privacy policy
-            </a>
-            .
+            Self-hosted open source. No cloud terms apply.
           </p>
           <PrimaryButton
             value={saving ? 'Saving...' : 'Continue'}

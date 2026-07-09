@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://vibekanban.com">
+  <a href="https://github.com/magele758/hyper-vibekanban">
     <picture>
       <source srcset="packages/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
@@ -11,8 +11,7 @@
 <p align="center">Tirez 10 fois plus parti de Claude Code, Gemini CLI, Codex, Amp et autres agents de code...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/BloopAI/vibe-kanban/blob/main/.github/workflows/publish.yml"><img alt="État du build" src="https://img.shields.io/github/actions/workflow/status/BloopAI/vibe-kanban/.github%2Fworkflows%2Fpublish.yml" /></a>
-  <a href="https://deepwiki.com/BloopAI/vibe-kanban"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="État du build" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +23,7 @@
   <a href="README.es.md">Español</a>
 </p>
 
-> **Remarque :** Vibe Kanban a annoncé sa fermeture. [Lire l'annonce](https://www.vibekanban.com/blog/shutdown). Le projet reste open source et entièrement fonctionnel pour l'auto-hébergement local.
+> **Remarque :** Le service cloud officiel de Vibe Kanban a été arrêté. Ce dépôt reste open source et entièrement fonctionnel pour l'auto-hébergement local.
 
 ![](packages/public/vibe-kanban-screenshot-overview.png)
 
@@ -86,7 +85,7 @@ C'est tout. Vibe Kanban démarre un serveur local et ouvre automatiquement votre
 | Claude Code Router (CCR) | Communauté |
 | Qwen Code | Alibaba |
 
-Consultez la [documentation officielle](https://vibekanban.com/docs/supported-coding-agents) pour les instructions d'installation et d'authentification de chaque agent.
+Consultez la [documentation](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx) pour les instructions d'installation et d'authentification de chaque agent.
 
 ## Serveur MCP
 
@@ -122,19 +121,21 @@ npx vibe-kanban --version
 
 ## Documentation
 
-Consultez le [site officiel](https://vibekanban.com/docs) pour la documentation complète et les guides utilisateur.
+Consultez le répertoire [`docs/`](docs/) de ce dépôt pour la documentation complète et les guides utilisateur.
+
 
 ## Auto-hébergement
 
-Vous souhaitez héberger votre propre instance Vibe Kanban Cloud ? Consultez le [guide d'auto-hébergement](https://vibekanban.com/docs/self-hosting/deploy-docker).
+Vous souhaitez héberger votre propre instance Vibe Kanban Cloud ? Consultez le [guide d'auto-hébergement](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx).
+
 
 ## Support
 
-Utilisez [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) pour les demandes de fonctionnalités et [GitHub Issues](https://github.com/BloopAI/vibe-kanban/issues) pour les bugs.
+Utilisez [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) pour les demandes de fonctionnalités et [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues) pour les bugs.
 
 ## Contributions
 
-Veuillez ouvrir une [GitHub Discussion](https://github.com/BloopAI/vibe-kanban/discussions) ou rejoindre [Discord](https://discord.gg/AC4nwVtJM3) avant de soumettre une PR afin d'aligner les détails d'implémentation avec la feuille de route existante.
+Veuillez ouvrir une [GitHub Discussion](https://github.com/magele758/hyper-vibekanban/discussions) ou rejoindre [Discord](https://discord.gg/AC4nwVtJM3) avant de soumettre une PR afin d'aligner les détails d'implémentation avec la feuille de route existante.
 
 ---
 

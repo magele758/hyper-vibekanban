@@ -42,9 +42,11 @@ fi
 echo "🔍 Detected platform: $PLATFORM"
 echo "🔧 Using target directory: $CARGO_TARGET_DIR"
 
-# Set API base URL for remote features
-export VK_SHARED_API_BASE="https://api.vibekanban.com"
-export VITE_VK_SHARED_API_BASE="https://api.vibekanban.com"
+# Remote/cloud features are opt-in for self-hosted builds.
+# Leave unset to disable remote features, or point at your own Remote API:
+#   export VK_SHARED_API_BASE="http://localhost:13000"
+#   export VITE_VK_SHARED_API_BASE="http://localhost:13000"
+# Do not hardcode the retired vibekanban.com cloud endpoints.
 
 echo "🧹 Cleaning previous builds..."
 rm -rf npx-cli/dist

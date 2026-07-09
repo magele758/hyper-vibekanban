@@ -96,7 +96,7 @@ export default function InvitationCompletePage() {
           Your invitation is confirmed. You can now close this page.
         </p>
         <a
-          href="https://www.vibekanban.com/docs/getting-started"
+          href="https://github.com/magele758/hyper-vibekanban/blob/main/docs/getting-started.mdx"
           target="_blank"
           rel="noopener noreferrer"
           className="mt-double block w-full rounded-sm bg-brand px-base py-half text-center text-sm font-medium text-on-brand transition-colors hover:bg-brand-hover"

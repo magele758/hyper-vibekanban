@@ -134,13 +134,13 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/BloopAI/vibe-kanban"
+        "href": "https://github.com/magele758/hyper-vibekanban"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "https://vibekanban.com/docs"
+      "href": "https://github.com/magele758/hyper-vibekanban/blob/main/docs/getting-started.mdx"
     }
   },
   "contextual": {
@@ -173,7 +173,7 @@
   ],
   "footer": {
     "socials": {
-      "github": "https://github.com/BloopAI/vibe-kanban",
+      "github": "https://github.com/magele758/hyper-vibekanban",
       "x": "https://x.com/vibekanban"
     }
   }

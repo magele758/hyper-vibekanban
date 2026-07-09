@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { ArrowSquareOutIcon, DownloadSimpleIcon } from '@phosphor-icons/react';
+import { DownloadSimpleIcon } from '@phosphor-icons/react';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { usePageTitle } from '@/shared/hooks/usePageTitle';
 
@@ -33,7 +33,9 @@ export function ProjectSunsetPage({ projectName }: ProjectSunsetPageProps) {
                   ? `"${projectName}" is now export-only.`
                   : 'This project is now export-only.'}{' '}
                 You can still download your project and issue data, but kanban,
-                issue, and workspace flows are no longer available here.
+                issue, and workspace flows are no longer available here. The
+                official Vibe Kanban cloud service has been discontinued; use
+                local self-hosting instead.
               </p>
             </div>
             <div className="flex flex-col gap-half sm:flex-row">
@@ -45,15 +47,6 @@ export function ProjectSunsetPage({ projectName }: ProjectSunsetPageProps) {
                 <DownloadSimpleIcon className="size-icon-base" weight="bold" />
                 Export data
               </button>
-              <a
-                href="https://vibekanban.com/shutdown"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-sm border border-border bg-primary px-base py-half text-sm font-medium text-normal transition-colors hover:bg-tertiary"
-              >
-                <ArrowSquareOutIcon className="size-icon-base" weight="bold" />
-                Read about the shutdown
-              </a>
             </div>
           </div>
         </div>

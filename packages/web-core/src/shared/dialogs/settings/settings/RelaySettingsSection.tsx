@@ -34,7 +34,7 @@ import { RemoteCloudHostsSettingsCardContent } from './RemoteCloudHostsSettingsC
 
 const RELAY_PAIRED_CLIENTS_QUERY_KEY = ['relay', 'paired-clients'] as const;
 const RELAY_REMOTE_CONTROL_DOCS_URL =
-  'https://www.vibekanban.com/docs/remote-control';
+  'https://github.com/magele758/hyper-vibekanban/blob/main/docs/remote-access.mdx';
 
 interface RelaySettingsSectionInitialState {
   hostId?: string;

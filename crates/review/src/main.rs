@@ -18,7 +18,6 @@ use tempfile::TempDir;
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 
-const DEFAULT_API_URL: &str = "https://api.vibekanban.com";
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 const TIMEOUT: Duration = Duration::from_secs(600); // 10 minutes
 
@@ -46,8 +45,8 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    /// API base URL
-    #[arg(long, env = "REVIEW_API_URL", default_value = DEFAULT_API_URL)]
+    /// API base URL for your self-hosted review backend (required; official cloud is retired)
+    #[arg(long, env = "REVIEW_API_URL")]
     api_url: String,
 }
 

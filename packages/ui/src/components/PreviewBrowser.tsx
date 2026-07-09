@@ -612,7 +612,7 @@ export function PreviewBrowser({
                     />
                   </div>
                   <a
-                    href="https://www.vibekanban.com/docs/core-features/testing-your-application"
+                    href="https://github.com/magele758/hyper-vibekanban/blob/main/docs/browser-testing.mdx"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-brand hover:text-brand-hover underline"

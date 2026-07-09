@@ -177,15 +177,9 @@ export default function LoginPage() {
           </section>
 
           <p className="text-center text-sm text-low">
-            Need help getting started?{" "}
-            <a
-              href="https://www.vibekanban.com/docs"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-normal underline decoration-border underline-offset-4 transition-colors hover:text-high"
-            >
-              Read the docs
-            </a>
+            Need help getting started? See the{" "}
+            <code className="text-normal">docs/</code> folder in this
+            repository.
           </p>
         </div>
       </div>

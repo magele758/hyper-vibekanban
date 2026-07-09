@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://vibekanban.com">
+  <a href="https://github.com/magele758/hyper-vibekanban">
     <picture>
       <source srcset="packages/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
@@ -11,8 +11,7 @@
 <p align="center">Claude Code, Gemini CLI, Codex, Amp 등 AI 코딩 에이전트의 생산성을 10배로 높이세요...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/BloopAI/vibe-kanban/blob/main/.github/workflows/publish.yml"><img alt="빌드 상태" src="https://img.shields.io/github/actions/workflow/status/BloopAI/vibe-kanban/.github%2Fworkflows%2Fpublish.yml" /></a>
-  <a href="https://deepwiki.com/BloopAI/vibe-kanban"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="빌드 상태" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +23,7 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **알림:** Vibe Kanban은 서비스 종료를 발표했습니다. [공지사항을 확인하세요](https://www.vibekanban.com/blog/shutdown). 프로젝트는 오픈소스로 유지되며 로컬 셀프 호스팅은 완전히 사용 가능합니다.
+> **알림:** 공식 Vibe Kanban 클라우드 서비스는 종료되었습니다. 이 저장소는 오픈소스로 유지되며 로컬 셀프 호스팅은 완전히 사용 가능합니다.
 
 ![](packages/public/vibe-kanban-screenshot-overview.png)
 
@@ -86,7 +85,7 @@ npx vibe-kanban
 | Claude Code Router (CCR) | 커뮤니티 |
 | Qwen Code | Alibaba |
 
-각 에이전트의 설치 및 인증 방법은 [공식 문서](https://vibekanban.com/docs/supported-coding-agents)를 참조하세요.
+각 에이전트의 설치 및 인증 단계는 [문서](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx)를 참조하세요.
 
 ## MCP 서버
 
@@ -122,19 +121,21 @@ npx vibe-kanban --version
 
 ## 문서
 
-전체 문서와 사용자 가이드는 [공식 웹사이트](https://vibekanban.com/docs)를 방문하세요.
+전체 문서와 사용자 가이드는 이 저장소의 [`docs/`](docs/) 디렉터리를 참조하세요.
+
 
 ## 셀프 호스팅
 
-자체 Vibe Kanban Cloud 인스턴스를 배포하려면 [셀프 호스팅 가이드](https://vibekanban.com/docs/self-hosting/deploy-docker)를 참조하세요.
+자체 Vibe Kanban Cloud 인스턴스를 배포하려면 [셀프 호스팅 가이드](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx)를 참조하세요.
+
 
 ## 지원
 
-기능 요청은 [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions), 버그 보고는 [GitHub Issues](https://github.com/BloopAI/vibe-kanban/issues)를 이용해 주세요.
+기능 요청은 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions), 버그 보고는 [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues)를 이용해 주세요.
 
 ## 기여
 
-PR을 제출하기 전에 [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) 또는 [Discord](https://discord.gg/AC4nwVtJM3)에서 구현 방향과 로드맵 적합성에 대해 핵심 팀과 먼저 논의해 주세요.
+PR을 제출하기 전에 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) 또는 [Discord](https://discord.gg/AC4nwVtJM3)에서 구현 방향과 로드맵 적합성에 대해 핵심 팀과 먼저 논의해 주세요.
 
 ---
 
