@@ -36,6 +36,8 @@ interface AppBarUserPopoverProps {
   onSignIn: () => void;
   onLogout: () => void;
   onAvatarError: () => void;
+  /** Match AppBar expand/collapse layout (injected by AppBar). */
+  expanded?: boolean;
 }
 
 export function AppBarUserPopover({
@@ -52,11 +54,26 @@ export function AppBarUserPopover({
   onSignIn,
   onLogout,
   onAvatarError,
+  expanded = false,
 }: AppBarUserPopoverProps) {
   const { t } = useTranslation();
   const settingsLabel = t('settings:settings.layout.nav.title', {
     defaultValue: 'Settings',
   });
+  const selectedOrgName =
+    organizations.find((org) => org.id === selectedOrgId)?.name ?? null;
+
+  const triggerClassName = cn(
+    'flex items-center rounded-md sm:rounded-lg',
+    'transition-colors cursor-pointer',
+    'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+    expanded
+      ? 'h-9 w-full justify-start gap-2 px-2.5'
+      : 'w-7 h-7 sm:w-10 sm:h-10 justify-center overflow-hidden',
+    (!avatarUrl || avatarError || !isSignedIn) &&
+      'bg-panel text-normal font-medium text-sm',
+    (!avatarUrl || avatarError || !isSignedIn) && 'hover:bg-panel/70'
+  );
 
   if (!isSignedIn) {
     return (
@@ -64,16 +81,16 @@ export function AppBarUserPopover({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className={cn(
-              'flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-md sm:rounded-lg',
-              'bg-panel text-normal font-medium text-sm',
-              'transition-colors cursor-pointer',
-              'hover:bg-panel/70',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
-            )}
+            className={triggerClassName}
             aria-label="Sign in"
+            title={expanded ? 'Sign in' : undefined}
           >
-            <UserIcon className="size-icon-sm" weight="bold" />
+            <UserIcon className="size-icon-sm shrink-0" weight="bold" />
+            {expanded && (
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                Sign in
+              </span>
+            )}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="right" align="end" className="min-w-[200px]">
@@ -98,25 +115,27 @@ export function AppBarUserPopover({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className={cn(
-            'flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-md sm:rounded-lg',
-            'transition-colors cursor-pointer overflow-hidden',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand',
-            (!avatarUrl || avatarError) &&
-              'bg-panel text-normal font-medium text-sm',
-            (!avatarUrl || avatarError) && 'hover:bg-panel/70'
-          )}
+          className={triggerClassName}
           aria-label="Account"
+          title={expanded ? (selectedOrgName ?? 'Account') : undefined}
         >
           {avatarUrl && !avatarError ? (
             <img
               src={avatarUrl}
               alt="User avatar"
-              className="w-full h-full object-cover"
+              className={cn(
+                'object-cover shrink-0',
+                expanded ? 'size-5 rounded' : 'w-full h-full'
+              )}
               onError={onAvatarError}
             />
           ) : (
-            <UserIcon className="size-icon-sm" weight="bold" />
+            <UserIcon className="size-icon-sm shrink-0" weight="bold" />
+          )}
+          {expanded && (
+            <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+              {selectedOrgName ?? 'Account'}
+            </span>
           )}
         </button>
       </DropdownMenuTrigger>

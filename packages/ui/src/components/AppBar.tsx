@@ -4,7 +4,12 @@ import {
   Droppable,
   type DropResult,
 } from '@hello-pangea/dnd';
-import type { ReactNode } from 'react';
+import {
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {
   LayoutIcon,
   DownloadSimpleIcon,
@@ -746,8 +751,17 @@ export function AppBar({
           expanded ? 'items-stretch' : 'items-center'
         )}
       >
-        {notificationBell}
-        {userPopover}
+        {isValidElement(notificationBell)
+          ? cloneElement(
+              notificationBell as ReactElement<{ expanded?: boolean }>,
+              { expanded }
+            )
+          : notificationBell}
+        {isValidElement(userPopover)
+          ? cloneElement(userPopover as ReactElement<{ expanded?: boolean }>, {
+              expanded,
+            })
+          : userPopover}
         <AppBarSocialLink
           href="https://github.com/magele758/hyper-vibekanban"
           label="Star on GitHub"

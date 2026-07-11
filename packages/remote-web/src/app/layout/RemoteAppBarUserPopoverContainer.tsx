@@ -11,6 +11,8 @@ interface RemoteAppBarUserPopoverContainerProps {
   organizations: OrganizationWithRole[];
   selectedOrgId: string;
   onOrgSelect: (orgId: string) => void;
+  /** Match AppBar expand/collapse layout (injected by AppBar). */
+  expanded?: boolean;
 }
 
 function toNextPath({
@@ -25,6 +27,7 @@ export function RemoteAppBarUserPopoverContainer({
   organizations,
   selectedOrgId,
   onOrgSelect,
+  expanded = false,
 }: RemoteAppBarUserPopoverContainerProps) {
   const { isSignedIn } = useAuth();
   const { loginStatus } = useUserSystem();
@@ -98,6 +101,7 @@ export function RemoteAppBarUserPopoverContainer({
       onSettings={() => {
         void handleSettings();
       }}
+      expanded={expanded}
     />
   );
 }

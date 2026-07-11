@@ -12,12 +12,15 @@ interface AppBarUserPopoverContainerProps {
   organizations: OrganizationWithRole[];
   selectedOrgId: string;
   onOrgSelect: (orgId: string) => void;
+  /** Match AppBar expand/collapse layout (injected by AppBar). */
+  expanded?: boolean;
 }
 
 export function AppBarUserPopoverContainer({
   organizations,
   selectedOrgId,
   onOrgSelect,
+  expanded = false,
 }: AppBarUserPopoverContainerProps) {
   const { executeAction } = useActions();
   const { isSignedIn } = useAuth();
@@ -65,6 +68,7 @@ export function AppBarUserPopoverContainer({
       onLogout={handleLogout}
       onAvatarError={() => setAvatarError(true)}
       onSettings={handleSettings}
+      expanded={expanded}
     />
   );
 }
