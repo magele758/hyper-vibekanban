@@ -1,9 +1,10 @@
 //! All shape constant instances for realtime streaming.
 
 use api_types::{
-    Issue, IssueAssignee, IssueComment, IssueCommentReaction, IssueFollower, IssueRelationship,
-    IssueTag, Notification, OrganizationMember, Project, ProjectStatus, PullRequest,
-    PullRequestIssue, Tag, User, Workspace,
+    Agent, AgentTask, Autopilot, InboxItem, Issue, IssueAssignee, IssueComment,
+    IssueCommentReaction, IssueFollower, IssueRelationship, IssueTag, Notification,
+    OrganizationMember, Project, ProjectStatus, PullRequest, PullRequestIssue, Squad, SquadMember,
+    Tag, User, Workspace,
 };
 
 use crate::shape_definition::ShapeDefinition;
@@ -54,6 +55,54 @@ pub const PROJECT_TAGS_SHAPE: ShapeDefinition<Tag> = crate::define_shape!(
     where_clause: r#""project_id" = $1"#,
     url: "/shape/project/{project_id}/tags",
     params: ["project_id"],
+);
+
+pub const PROJECT_AGENTS_SHAPE: ShapeDefinition<Agent> = crate::define_shape!(
+    name: "PROJECT_AGENTS_SHAPE",
+    table: "agents",
+    where_clause: r#""project_id" = $1"#,
+    url: "/shape/project/{project_id}/agents",
+    params: ["project_id"],
+);
+
+pub const PROJECT_AGENT_TASKS_SHAPE: ShapeDefinition<AgentTask> = crate::define_shape!(
+    name: "PROJECT_AGENT_TASKS_SHAPE",
+    table: "agent_tasks",
+    where_clause: r#""issue_id" IN (SELECT id FROM issues WHERE "project_id" = $1)"#,
+    url: "/shape/project/{project_id}/agent_tasks",
+    params: ["project_id"],
+);
+
+pub const PROJECT_AUTOPILOTS_SHAPE: ShapeDefinition<Autopilot> = crate::define_shape!(
+    name: "PROJECT_AUTOPILOTS_SHAPE",
+    table: "autopilots",
+    where_clause: r#""project_id" = $1"#,
+    url: "/shape/project/{project_id}/autopilots",
+    params: ["project_id"],
+);
+
+pub const PROJECT_SQUADS_SHAPE: ShapeDefinition<Squad> = crate::define_shape!(
+    name: "PROJECT_SQUADS_SHAPE",
+    table: "squads",
+    where_clause: r#""project_id" = $1"#,
+    url: "/shape/project/{project_id}/squads",
+    params: ["project_id"],
+);
+
+pub const PROJECT_SQUAD_MEMBERS_SHAPE: ShapeDefinition<SquadMember> = crate::define_shape!(
+    name: "PROJECT_SQUAD_MEMBERS_SHAPE",
+    table: "squad_members",
+    where_clause: r#""squad_id" IN (SELECT id FROM squads WHERE "project_id" = $1)"#,
+    url: "/shape/project/{project_id}/squad_members",
+    params: ["project_id"],
+);
+
+pub const USER_INBOX_SHAPE: ShapeDefinition<InboxItem> = crate::define_shape!(
+    name: "USER_INBOX_SHAPE",
+    table: "inbox_items",
+    where_clause: r#""recipient_user_id" = $1"#,
+    url: "/shape/user/inbox",
+    params: ["recipient_user_id"],
 );
 
 pub const PROJECT_PROJECT_STATUSES_SHAPE: ShapeDefinition<ProjectStatus> = crate::define_shape!(

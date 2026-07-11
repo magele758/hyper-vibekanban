@@ -157,13 +157,13 @@ impl ExportRepository {
         pool: &PgPool,
         project_ids: &[Uuid],
     ) -> Result<Vec<IssueAssignee>, ExportError> {
-        let records = sqlx::query_as!(
-            IssueAssignee,
+        let records = sqlx::query!(
             r#"
             SELECT
                 ia.id          AS "id!: Uuid",
                 ia.issue_id    AS "issue_id!: Uuid",
-                ia.user_id     AS "user_id!: Uuid",
+                ia.user_id,
+                ia.agent_id,
                 ia.assigned_at AS "assigned_at!: DateTime<Utc>"
             FROM issue_assignees ia
             INNER JOIN issues i ON i.id = ia.issue_id
@@ -175,7 +175,17 @@ impl ExportRepository {
         .fetch_all(pool)
         .await?;
 
-        Ok(records)
+        Ok(records
+            .into_iter()
+            .map(|r| IssueAssignee {
+                id: r.id,
+                issue_id: r.issue_id,
+                user_id: r.user_id,
+                agent_id: r.agent_id,
+                squad_id: None,
+                assigned_at: r.assigned_at,
+            })
+            .collect())
     }
 
     /// Fetch all attachments (with blob metadata) for issues in the given project IDs.

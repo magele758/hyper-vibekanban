@@ -1,0 +1,201 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_tasks\n            SET\n                status = COALESCE($2, status),\n                failure_reason = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::text IS NOT NULL THEN $4\n                    ELSE failure_reason\n                END,\n                local_workspace_id = CASE\n                    WHEN $5 THEN NULL\n                    WHEN $6::uuid IS NOT NULL THEN $6\n                    ELSE local_workspace_id\n                END,\n                local_session_id = CASE\n                    WHEN $7 THEN NULL\n                    WHEN $8::uuid IS NOT NULL THEN $8\n                    ELSE local_session_id\n                END,\n                claimed_by_host = CASE\n                    WHEN $9 THEN NULL\n                    WHEN $10::text IS NOT NULL THEN $10\n                    ELSE claimed_by_host\n                END,\n                attempt = COALESCE($11, attempt),\n                started_at = CASE WHEN $12 THEN COALESCE(started_at, NOW()) ELSE started_at END,\n                completed_at = CASE WHEN $13 THEN NOW() ELSE completed_at END,\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "issue_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!: AgentTaskStatus",
+        "type_info": {
+          "Custom": {
+            "name": "agent_task_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "dispatched",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "trigger!: AgentTaskTrigger",
+        "type_info": {
+          "Custom": {
+            "name": "agent_task_trigger",
+            "kind": {
+              "Enum": [
+                "assign",
+                "mention",
+                "manual",
+                "copilot",
+                "autopilot"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "priority!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "attempt!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "max_attempts!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "failure_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "local_workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "local_session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "claimed_by_host",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "claimed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "force_fresh_session!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "resume_session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 17,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 18,
+        "name": "is_leader_task!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "preferred_repo_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "updated_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "agent_task_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "dispatched",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Text",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "34a9fa34813b1562b1d8c17f33624b5e68bd9c336afbc5ea067b2f3aca152732"
+}

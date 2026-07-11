@@ -8,6 +8,10 @@ export type AppDestination =
   | { kind: 'workspace-vscode'; workspaceId: string; hostId?: string }
   | { kind: 'export' }
   | { kind: 'project'; projectId: string }
+  | { kind: 'project-agents'; projectId: string }
+  | { kind: 'project-agent'; projectId: string; agentId: string }
+  | { kind: 'project-copilot'; projectId: string }
+  | { kind: 'project-inbox'; projectId: string }
   | {
       kind: 'project-issue';
       projectId: string;
@@ -55,6 +59,20 @@ export interface AppNavigation {
   ): void;
   goToExport(transition?: NavigationTransition): void;
   goToProject(projectId: string, transition?: NavigationTransition): void;
+  goToProjectAgents(projectId: string, transition?: NavigationTransition): void;
+  goToProjectAgent(
+    projectId: string,
+    agentId: string,
+    transition?: NavigationTransition
+  ): void;
+  goToProjectCopilot(
+    projectId: string,
+    transition?: NavigationTransition
+  ): void;
+  goToProjectInbox(
+    projectId: string,
+    transition?: NavigationTransition
+  ): void;
   goToProjectIssue(
     projectId: string,
     issueId: string,
@@ -83,6 +101,10 @@ export interface AppNavigation {
 
 type ProjectDestinationKind =
   | 'project'
+  | 'project-agents'
+  | 'project-agent'
+  | 'project-copilot'
+  | 'project-inbox'
   | 'project-issue'
   | 'project-issue-workspace'
   | 'project-issue-workspace-create'
@@ -142,6 +164,10 @@ export function isProjectDestination(
 
   switch (destination.kind) {
     case 'project':
+    case 'project-agents':
+    case 'project-agent':
+    case 'project-copilot':
+    case 'project-inbox':
     case 'project-issue':
     case 'project-issue-workspace':
     case 'project-issue-workspace-create':
@@ -252,6 +278,10 @@ export function resolveKanbanRouteState(
 
     switch (projectDestination.kind) {
       case 'project':
+      case 'project-agents':
+      case 'project-agent':
+      case 'project-copilot':
+      case 'project-inbox':
         return 'closed';
       case 'project-issue':
         return 'issue';
@@ -262,6 +292,14 @@ export function resolveKanbanRouteState(
         return 'workspace-create';
     }
   })();
+
+  const isFullPageProjectView =
+    !!projectDestination &&
+    (projectDestination.kind === 'project' ||
+      projectDestination.kind === 'project-agents' ||
+      projectDestination.kind === 'project-agent' ||
+      projectDestination.kind === 'project-copilot' ||
+      projectDestination.kind === 'project-inbox');
 
   return {
     hostId,
@@ -274,6 +312,6 @@ export function resolveKanbanRouteState(
     isCreateMode: false,
     isWorkspaceCreateMode,
     hasInvalidWorkspaceCreateDraftId,
-    isPanelOpen: !!projectDestination && projectDestination.kind !== 'project',
+    isPanelOpen: !!projectDestination && !isFullPageProjectView,
   };
 }

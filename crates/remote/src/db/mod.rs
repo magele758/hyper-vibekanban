@@ -1,12 +1,17 @@
+pub mod agent_tasks;
+pub mod agents;
 pub mod attachments;
 pub mod auth;
+pub mod autopilots;
 pub mod blobs;
+pub mod copilot;
 pub mod digest;
 pub mod electric_publications;
 pub mod export;
 pub mod github_app;
 pub mod hosts;
 pub mod identity_errors;
+pub mod inbox;
 pub mod invitations;
 pub mod issue_assignees;
 pub mod issue_comment_reactions;
@@ -27,9 +32,11 @@ pub mod projects;
 pub mod pull_request_issues;
 pub mod pull_requests;
 pub mod reviews;
+pub mod squads;
 pub mod tags;
 pub mod types;
 pub mod users;
+pub mod webhooks;
 pub mod workspaces;
 
 use sqlx::{

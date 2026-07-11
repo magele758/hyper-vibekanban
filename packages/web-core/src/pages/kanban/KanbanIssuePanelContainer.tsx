@@ -8,7 +8,6 @@ import {
 } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
-import type { OrganizationMemberWithProfile } from 'shared/types';
 import type { IssuePriority } from 'shared/remote-types';
 import { useDebouncedCallback } from '@/shared/hooks/useDebouncedCallback';
 import { useProjectContext } from '@/shared/hooks/useProjectContext';
@@ -20,6 +19,7 @@ import { IssueCommentsSectionContainer } from './IssueCommentsSectionContainer';
 import { IssueSubIssuesSectionContainer } from './IssueSubIssuesSectionContainer';
 import { IssueRelationshipsSectionContainer } from './IssueRelationshipsSectionContainer';
 import { IssueWorkspacesSectionContainer } from './IssueWorkspacesSectionContainer';
+import { IssueAgentTasksSectionContainer } from './IssueAgentTasksSectionContainer';
 import {
   KanbanIssuePanel,
   type IssueFormData,
@@ -104,6 +104,7 @@ export function KanbanIssuePanelContainer({
     tags,
     issueAssignees,
     issueTags,
+    agents,
     insertIssue,
     updateIssue,
     insertIssueAssignee,
@@ -217,12 +218,16 @@ export function KanbanIssuePanelContainer({
     });
   }, [selectedKanbanIssueId, selectedIssue?.parent_issue_id, updateIssue]);
 
-  // Get all current assignees from issue_assignees
+  // Get all current assignees from issue_assignees (users + agents)
   const currentAssigneeIds = useMemo(() => {
     if (!selectedKanbanIssueId) return [];
     return issueAssignees
       .filter((a) => a.issue_id === selectedKanbanIssueId)
-      .map((a) => a.user_id);
+      .flatMap((a) => {
+        if (a.user_id) return [a.user_id];
+        if (a.agent_id) return [`agent:${a.agent_id}`];
+        return [];
+      });
   }, [issueAssignees, selectedKanbanIssueId]);
 
   // Get current tag IDs from issue_tags junction table
@@ -347,12 +352,46 @@ export function KanbanIssuePanelContainer({
     });
   }, [formState, mode, createModeDefaults]);
 
-  // Resolve assignee IDs to full profiles for avatar display
+  // Resolve assignee IDs to profiles (humans), agent placeholders, or squad placeholders
   const displayAssigneeUsers = useMemo(() => {
-    return displayData.assigneeIds
-      .map((id) => membersWithProfilesById.get(id))
-      .filter((m): m is OrganizationMemberWithProfile => m != null);
-  }, [displayData.assigneeIds, membersWithProfilesById]);
+    const agentsById = new Map(agents.map((a) => [a.id, a]));
+    return displayData.assigneeIds.flatMap((id) => {
+      if (id.startsWith('agent:')) {
+        const agent = agentsById.get(id.slice('agent:'.length));
+        if (!agent) return [];
+        return [
+          {
+            user_id: id,
+            role: 'member' as const,
+            joined_at: '',
+            first_name: agent.name,
+            last_name: null,
+            username: agent.name,
+            email: null,
+            avatar_url: null,
+            is_agent: true,
+          },
+        ];
+      }
+      if (id.startsWith('squad:')) {
+        return [
+          {
+            user_id: id,
+            role: 'member' as const,
+            joined_at: '',
+            first_name: 'Squad',
+            last_name: null,
+            username: id,
+            email: null,
+            avatar_url: null,
+            is_agent: true,
+          },
+        ];
+      }
+      const member = membersWithProfilesById.get(id);
+      return member ? [member] : [];
+    });
+  }, [displayData.assigneeIds, membersWithProfilesById, agents]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -874,11 +913,23 @@ export function KanbanIssuePanelContainer({
             clearAttachments();
           }
 
-          displayData.assigneeIds.forEach((userId) => {
-            insertIssueAssignee({
-              issue_id: syncedIssue.id,
-              user_id: userId,
-            });
+          displayData.assigneeIds.forEach((assigneeId) => {
+            if (assigneeId.startsWith('agent:')) {
+              insertIssueAssignee({
+                issue_id: syncedIssue.id,
+                agent_id: assigneeId.slice('agent:'.length),
+              });
+            } else if (assigneeId.startsWith('squad:')) {
+              insertIssueAssignee({
+                issue_id: syncedIssue.id,
+                squad_id: assigneeId.slice('squad:'.length),
+              });
+            } else {
+              insertIssueAssignee({
+                issue_id: syncedIssue.id,
+                user_id: assigneeId,
+              });
+            }
           });
 
           for (const tagId of displayData.tagIds) {
@@ -964,11 +1015,23 @@ export function KanbanIssuePanelContainer({
               clearAttachments();
             }
 
-            displayData.assigneeIds.forEach((userId) => {
-              insertIssueAssignee({
-                issue_id: syncedIssue.id,
-                user_id: userId,
-              });
+            displayData.assigneeIds.forEach((assigneeId) => {
+              if (assigneeId.startsWith('agent:')) {
+                insertIssueAssignee({
+                  issue_id: syncedIssue.id,
+                  agent_id: assigneeId.slice('agent:'.length),
+                });
+              } else if (assigneeId.startsWith('squad:')) {
+                insertIssueAssignee({
+                  issue_id: syncedIssue.id,
+                  squad_id: assigneeId.slice('squad:'.length),
+                });
+              } else {
+                insertIssueAssignee({
+                  issue_id: syncedIssue.id,
+                  user_id: assigneeId,
+                });
+              }
             });
 
             for (const tagId of displayData.tagIds) {
@@ -1149,6 +1212,9 @@ export function KanbanIssuePanelContainer({
       )}
       renderWorkspacesSection={(issueId) => (
         <IssueWorkspacesSectionContainer issueId={issueId} />
+      )}
+      renderAgentTasksSection={(issueId) => (
+        <IssueAgentTasksSectionContainer issueId={issueId} />
       )}
       renderRelationshipsSection={(issueId) => (
         <IssueRelationshipsSectionContainer issueId={issueId} />

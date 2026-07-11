@@ -1,7 +1,7 @@
 use api_types::{
-    CreateIssueCommentRequest, DeleteResponse, IssueComment, ListIssueCommentsQuery,
-    ListIssueCommentsResponse, MemberRole, MutationResponse, NotificationPayload, NotificationType,
-    UpdateIssueCommentRequest,
+    AgentTaskTrigger, CreateIssueCommentRequest, DeleteResponse, IssueComment,
+    ListIssueCommentsQuery, ListIssueCommentsResponse, MemberRole, MutationResponse,
+    NotificationPayload, NotificationType, UpdateIssueCommentRequest,
 };
 use axum::{
     Json,
@@ -19,8 +19,8 @@ use crate::{
     AppState,
     auth::RequestContext,
     db::{
-        issue_comments::IssueCommentRepository, issues::IssueRepository,
-        organization_members::check_user_role,
+        agent_tasks::AgentTaskRepository, issue_comments::IssueCommentRepository,
+        issues::IssueRepository, organization_members::check_user_role,
     },
     mutation_definition::MutationBuilder,
     notifications::notify_issue_subscribers,
@@ -151,6 +151,9 @@ async fn create_issue_comment(
         .await;
     }
 
+    // Parse [@Name](mention://agent/<uuid>) to enqueue agent tasks.
+    enqueue_mention_tasks(state.pool(), &response.data.message, response.data.issue_id).await;
+
     Ok(Json(response))
 }
 
@@ -259,4 +262,37 @@ async fn delete_issue_comment(
         })?;
 
     Ok(Json(response))
+}
+
+/// Parse `[@Name](mention://agent/<uuid>)` patterns and enqueue a Mention task for each agent.
+async fn enqueue_mention_tasks(pool: &sqlx::PgPool, message: &str, issue_id: uuid::Uuid) {
+    // Find all mention://agent/<uuid> hrefs in the message.
+    let mut search = message;
+    while let Some(pos) = search.find("mention://agent/") {
+        let after = &search[pos + "mention://agent/".len()..];
+        let end = after
+            .find(|c: char| !c.is_ascii_hexdigit() && c != '-')
+            .unwrap_or(after.len());
+        let uuid_str = &after[..end];
+        if let Ok(agent_id) = uuid_str.parse::<uuid::Uuid>() {
+            if let Err(e) = AgentTaskRepository::enqueue(
+                pool,
+                None,
+                agent_id,
+                issue_id,
+                AgentTaskTrigger::Mention,
+                0,
+                false,
+                None,
+                false,
+                None,
+            )
+            .await
+            {
+                tracing::warn!(?e, %agent_id, %issue_id, "failed to enqueue mention task");
+            }
+        }
+        // Advance past this mention to find more.
+        search = &search[pos + 1..];
+    }
 }

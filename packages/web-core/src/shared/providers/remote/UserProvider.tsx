@@ -1,6 +1,9 @@
 import { useMemo, useCallback, type ReactNode } from 'react';
 import { useShape } from '@/shared/integrations/electric/hooks';
-import { USER_WORKSPACES_SHAPE } from 'shared/remote-types';
+import {
+  USER_WORKSPACES_SHAPE,
+  USER_INBOX_SHAPE,
+} from 'shared/remote-types';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import {
   UserContext,
@@ -20,6 +23,7 @@ export function UserProvider({ children }: UserProviderProps) {
 
   // Shape subscriptions
   const workspacesResult = useShape(USER_WORKSPACES_SHAPE, params, { enabled });
+  const inboxResult = useShape(USER_INBOX_SHAPE, params, { enabled });
 
   // Lookup helpers
   const getWorkspacesForIssue = useCallback(
@@ -33,16 +37,20 @@ export function UserProvider({ children }: UserProviderProps) {
     () => ({
       // Data
       workspaces: workspacesResult.data,
+      inboxItems: inboxResult.data,
 
       // Loading/error
-      isLoading: workspacesResult.isLoading,
-      error: workspacesResult.error,
-      retry: workspacesResult.retry,
+      isLoading: workspacesResult.isLoading || inboxResult.isLoading,
+      error: workspacesResult.error || inboxResult.error,
+      retry: () => {
+        workspacesResult.retry();
+        inboxResult.retry();
+      },
 
       // Lookup helpers
       getWorkspacesForIssue,
     }),
-    [workspacesResult, getWorkspacesForIssue]
+    [workspacesResult, inboxResult, getWorkspacesForIssue]
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

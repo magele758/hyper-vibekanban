@@ -84,6 +84,10 @@ export function SharedAppLayout() {
   const restartForUpdate = useAppUpdateStore((s) => s.restart);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isAppBarHovered, setIsAppBarHovered] = useState(false);
+  const [isAppBarExpanded, setIsAppBarExpanded] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('vk-appbar-expanded') === '1';
+  });
   const { hosts: remoteCloudHosts } = useRemoteCloudHostsAppBarModel();
   const { executionHostId, setExecutionHostId } = useExecutionHostId();
   const navigate = useNavigate();
@@ -191,6 +195,26 @@ export function SharedAppLayout() {
   const isWorkspaceSidebarPreviewEnabled =
     !isMobile && isLocalWorkspacesActive && !isLeftSidebarVisible;
   const activeProjectId = projectDestination?.projectId ?? null;
+  const activeProjectSubNav = useMemo(() => {
+    if (!projectDestination) return null;
+    switch (projectDestination.kind) {
+      case 'project-agents':
+      case 'project-agent':
+        return 'agents' as const;
+      case 'project-copilot':
+        return 'copilot' as const;
+      case 'project-inbox':
+        return 'inbox' as const;
+      case 'project':
+      case 'project-issue':
+      case 'project-issue-workspace':
+      case 'project-issue-workspace-create':
+      case 'project-workspace-create':
+        return 'board' as const;
+      default:
+        return null;
+    }
+  }, [projectDestination]);
   // Prefer resolved destination host over useParams: strict:false params can
   // retain a stale hostId after navigating from /hosts/{id}/... create back to
   // the local create URL, which made the picker appear stuck on the remote host.
@@ -415,6 +439,42 @@ export function SharedAppLayout() {
               onSignIn={handleSignIn}
               onHoverStart={() => setIsAppBarHovered(true)}
               onHoverEnd={() => setIsAppBarHovered(false)}
+              expanded={isAppBarExpanded}
+              onToggleExpanded={() => {
+                setIsAppBarExpanded((v) => {
+                  const next = !v;
+                  window.localStorage.setItem(
+                    'vk-appbar-expanded',
+                    next ? '1' : '0'
+                  );
+                  return next;
+                });
+              }}
+              activeProjectSubNav={activeProjectSubNav}
+              onNavigateBoard={(projectId) => {
+                void navigate({
+                  to: '/projects/$projectId',
+                  params: { projectId },
+                });
+              }}
+              onNavigateAgents={(projectId) => {
+                void navigate({
+                  to: '/projects/$projectId/agents',
+                  params: { projectId },
+                });
+              }}
+              onNavigateCopilot={(projectId) => {
+                void navigate({
+                  to: '/projects/$projectId/copilot',
+                  params: { projectId },
+                });
+              }}
+              onNavigateInbox={(projectId) => {
+                void navigate({
+                  to: '/projects/$projectId/inbox',
+                  params: { projectId },
+                });
+              }}
               notificationBell={
                 isSignedIn ? <AppBarNotificationBellContainer /> : undefined
               }

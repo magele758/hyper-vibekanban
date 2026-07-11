@@ -10,6 +10,11 @@ import {
   PROJECT_ISSUES_SHAPE,
   PROJECT_PROJECT_STATUSES_SHAPE,
   PROJECT_TAGS_SHAPE,
+  PROJECT_AGENTS_SHAPE,
+  PROJECT_AGENT_TASKS_SHAPE,
+  PROJECT_AUTOPILOTS_SHAPE,
+  PROJECT_SQUADS_SHAPE,
+  PROJECT_SQUAD_MEMBERS_SHAPE,
   PROJECT_ISSUE_ASSIGNEES_SHAPE,
   PROJECT_ISSUE_FOLLOWERS_SHAPE,
   PROJECT_ISSUE_TAGS_SHAPE,
@@ -20,6 +25,7 @@ import {
   ISSUE_MUTATION,
   PROJECT_STATUS_MUTATION,
   TAG_MUTATION,
+  AGENT_MUTATION,
   ISSUE_ASSIGNEE_MUTATION,
   ISSUE_FOLLOWER_MUTATION,
   ISSUE_TAG_MUTATION,
@@ -80,8 +86,27 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
     enabled: secondaryEnabled,
     mutation: TAG_MUTATION,
   });
-  const issueAssigneesResult = useShape(PROJECT_ISSUE_ASSIGNEES_SHAPE, params, {
+  // Agents + assignees must be available immediately — deferred secondary
+  // hydration can make insertIssueAssignee silently no-op (same class of bug
+  // as agents create "假成功").
+  const agentsResult = useShape(PROJECT_AGENTS_SHAPE, params, {
+    enabled,
+    mutation: AGENT_MUTATION,
+  });
+  const agentTasksResult = useShape(PROJECT_AGENT_TASKS_SHAPE, params, {
+    enabled,
+  });
+  const autopilotsResult = useShape(PROJECT_AUTOPILOTS_SHAPE, params, {
     enabled: secondaryEnabled,
+  });
+  const squadsResult = useShape(PROJECT_SQUADS_SHAPE, params, {
+    enabled: secondaryEnabled,
+  });
+  const squadMembersResult = useShape(PROJECT_SQUAD_MEMBERS_SHAPE, params, {
+    enabled: secondaryEnabled,
+  });
+  const issueAssigneesResult = useShape(PROJECT_ISSUE_ASSIGNEES_SHAPE, params, {
+    enabled,
     mutation: ISSUE_ASSIGNEE_MUTATION,
   });
   const issueFollowersResult = useShape(PROJECT_ISSUE_FOLLOWERS_SHAPE, params, {
@@ -261,6 +286,11 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       issues: issuesResult.data,
       statuses: statusesResult.data,
       tags: tagsResult.data,
+      agents: agentsResult.data,
+      agentTasks: agentTasksResult.data,
+      autopilots: autopilotsResult.data,
+      squads: squadsResult.data,
+      squadMembers: squadMembersResult.data,
       issueAssignees: issueAssigneesResult.data,
       issueFollowers: issueFollowersResult.data,
       issueTags: issueTagsResult.data,
@@ -289,6 +319,11 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       insertTag: tagsResult.insert,
       updateTag: tagsResult.update,
       removeTag: tagsResult.remove,
+
+      // Agent mutations
+      insertAgent: agentsResult.insert,
+      updateAgent: agentsResult.update,
+      removeAgent: agentsResult.remove,
 
       // IssueAssignee mutations
       insertIssueAssignee: issueAssigneesResult.insert,
@@ -333,6 +368,11 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       issuesResult,
       statusesResult,
       tagsResult,
+      agentsResult,
+      agentTasksResult,
+      autopilotsResult,
+      squadsResult,
+      squadMembersResult,
       issueAssigneesResult,
       issueFollowersResult,
       issueTagsResult,

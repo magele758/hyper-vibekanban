@@ -25,13 +25,18 @@ mod billing {
         Router::new()
     }
 }
+pub mod agent_tasks;
+pub mod agents;
 pub mod attachments;
+pub mod autopilots;
+pub mod copilot;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;
 mod export;
 mod github_app;
 pub mod hosts;
 mod identity;
+pub mod inbox;
 pub mod issue_assignees;
 pub mod issue_comment_reactions;
 pub mod issue_comments;
@@ -48,8 +53,10 @@ pub mod projects;
 pub mod pull_request_issues;
 mod pull_requests;
 mod review;
+pub mod squads;
 pub mod tags;
 mod tokens;
+pub mod webhooks;
 mod workspaces;
 
 pub fn router(state: AppState) -> Router {
@@ -107,6 +114,7 @@ pub fn router(state: AppState) -> Router {
         .merge(tokens::public_router())
         .merge(review::public_router())
         .merge(github_app::public_router())
+        .merge(webhooks::public_router())
         .merge(billing::public_router());
 
     let v1_protected = Router::<AppState>::new()
@@ -120,6 +128,13 @@ pub fn router(state: AppState) -> Router {
         .merge(github_app::protected_router())
         .merge(project_statuses::router())
         .merge(tags::router())
+        .merge(agents::router())
+        .merge(agent_tasks::router())
+        .merge(autopilots::router())
+        .merge(squads::router())
+        .merge(inbox::router())
+        .merge(webhooks::router())
+        .merge(copilot::router())
         .merge(issue_comments::router())
         .merge(issue_comment_reactions::router())
         .merge(issues::router())
@@ -188,6 +203,8 @@ pub fn all_mutation_definitions() -> Vec<crate::mutation_definition::MutationDef
         projects::mutation().definition(),
         notifications::mutation().definition(),
         tags::mutation().definition(),
+        agents::mutation().definition(),
+        agent_tasks::mutation().definition(),
         project_statuses::mutation().definition(),
         issues::mutation().definition(),
         issue_assignees::mutation().definition(),

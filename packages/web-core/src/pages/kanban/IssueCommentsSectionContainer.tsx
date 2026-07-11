@@ -58,7 +58,7 @@ export function IssueCommentsSectionContainer({
 function IssueCommentsSectionContent() {
   const { t } = useTranslation('common');
   const { membersWithProfilesById } = useOrgContext();
-  const { projectId } = useProjectContext();
+  const { projectId, agents } = useProjectContext();
   const issueContext = useIssueContext();
   const { data: currentUser } = useCurrentUser();
   const currentUserId = currentUser?.user_id ?? '';
@@ -419,6 +419,19 @@ function IssueCommentsSectionContent() {
     [issueContext, currentUserId]
   );
 
+  const handleMentionAgent = useCallback(
+    (agentId: string, agentName: string) => {
+      const mention = `[@${agentName}](mention://agent/${agentId})`;
+      setCommentInput((prev) =>
+        prev.trim() ? `${prev} ${mention}` : mention
+      );
+      setTimeout(() => {
+        commentEditorRef.current?.focus();
+      }, 0);
+    },
+    []
+  );
+
   const handleReply = useCallback(
     (authorName: string, message: string) => {
       // Get first line of the message for the quote
@@ -464,6 +477,28 @@ function IssueCommentsSectionContent() {
     []
   );
 
+  const mentionAgentToolbar =
+    agents.length > 0 ? (
+      <select
+        className="h-[22px] rounded border border-border bg-panel px-1 text-[10px] text-low hover:text-normal"
+        value=""
+        onChange={(e) => {
+          const val = e.target.value;
+          if (!val) return;
+          const agent = agents.find((a) => a.id === val);
+          if (agent) handleMentionAgent(agent.id, agent.name);
+        }}
+        title="Mention Agent"
+      >
+        <option value="">@Agent</option>
+        {agents.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </select>
+    ) : undefined;
+
   return (
     <IssueCommentsSection
       comments={commentsData}
@@ -490,6 +525,7 @@ function IssueCommentsSectionContent() {
       attachmentError={uploadError}
       onDismissAttachmentError={clearUploadError}
       renderEditor={renderEditor}
+      composerToolbar={mentionAgentToolbar}
     />
   );
 }

@@ -167,7 +167,8 @@ function navigateToCreateSubIssue(
 ) {
   const assigneeIds = ctx.projectMutations
     ?.getAssigneesForIssue(parentIssueId)
-    .map((a) => a.user_id);
+    .map((a) => a.user_id)
+    .filter((id): id is string => Boolean(id));
   ctx.navigateToCreateIssue({
     statusId: ctx.defaultCreateStatusId,
     parentIssueId,

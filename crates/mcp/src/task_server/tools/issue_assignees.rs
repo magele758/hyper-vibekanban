@@ -85,7 +85,10 @@ impl McpServer {
             .map(|assignee| IssueAssigneeSummary {
                 id: assignee.id.to_string(),
                 issue_id: assignee.issue_id.to_string(),
-                user_id: assignee.user_id.to_string(),
+                user_id: assignee
+                    .user_id
+                    .map(|id| id.to_string())
+                    .unwrap_or_default(),
                 assigned_at: assignee.assigned_at.to_rfc3339(),
             })
             .collect::<Vec<_>>();
@@ -105,7 +108,8 @@ impl McpServer {
         let payload = CreateIssueAssigneeRequest {
             id: None,
             issue_id,
-            user_id,
+            user_id: Some(user_id),
+            agent_id: None,
         };
 
         let url = self.url("/api/remote/issue-assignees");

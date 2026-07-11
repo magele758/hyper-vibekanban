@@ -140,7 +140,9 @@ async fn export_data(
     // Build assignee map: issue_id -> comma-separated names
     let mut assignee_map: HashMap<Uuid, Vec<&str>> = HashMap::new();
     for a in &assignees {
-        if let Some(name) = user_map.get(&a.user_id) {
+        if let Some(user_id) = a.user_id
+            && let Some(name) = user_map.get(&user_id)
+        {
             assignee_map
                 .entry(a.issue_id)
                 .or_default()

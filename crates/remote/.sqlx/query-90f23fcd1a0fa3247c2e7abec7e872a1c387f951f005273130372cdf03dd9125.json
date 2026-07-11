@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO issue_subscribers (issue_id, user_id, reason)\n        VALUES ($1, $2, 'assignee')\n        ON CONFLICT (issue_id, user_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "90f23fcd1a0fa3247c2e7abec7e872a1c387f951f005273130372cdf03dd9125"
+}

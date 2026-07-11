@@ -1,11 +1,12 @@
 //! All shape route declarations with authorization scope and REST fallback.
 
 use api_types::{
-    ListIssueAssigneesResponse, ListIssueCommentReactionsResponse, ListIssueCommentsResponse,
-    ListIssueFollowersResponse, ListIssueRelationshipsResponse, ListIssueTagsResponse,
-    ListIssuesResponse, ListProjectStatusesResponse, ListProjectsResponse,
-    ListPullRequestIssuesResponse, ListPullRequestsResponse, ListTagsResponse, Notification,
-    OrganizationMember, SearchIssuesRequest, User, Workspace,
+    ListAgentTasksResponse, ListAgentsResponse, ListAutopilotResponse, ListIssueAssigneesResponse,
+    ListIssueCommentReactionsResponse, ListIssueCommentsResponse, ListIssueFollowersResponse,
+    ListIssueRelationshipsResponse, ListIssueTagsResponse, ListIssuesResponse,
+    ListProjectStatusesResponse, ListProjectsResponse, ListPullRequestIssuesResponse,
+    ListPullRequestsResponse, ListSquadMembersResponse, ListSquadsResponse, ListTagsResponse,
+    Notification, OrganizationMember, SearchIssuesRequest, User, Workspace,
 };
 use axum::{
     Json,
@@ -18,14 +19,15 @@ use crate::{
     AppState,
     auth::RequestContext,
     db::{
-        issue_assignees::IssueAssigneeRepository,
+        agent_tasks::AgentTaskRepository, agents::AgentRepository, autopilots::AutopilotRepository,
+        inbox::InboxRepository, issue_assignees::IssueAssigneeRepository,
         issue_comment_reactions::IssueCommentReactionRepository,
         issue_comments::IssueCommentRepository, issue_followers::IssueFollowerRepository,
         issue_relationships::IssueRelationshipRepository, issue_tags::IssueTagRepository,
         issues::IssueRepository, notifications::NotificationRepository, organization_members,
         project_statuses::ProjectStatusRepository, projects::ProjectRepository,
         pull_request_issues::PullRequestIssueRepository, pull_requests::PullRequestRepository,
-        tags::TagRepository, workspaces::WorkspaceRepository,
+        squads::SquadRepository, tags::TagRepository, workspaces::WorkspaceRepository,
     },
     routes::{
         error::ErrorResponse,
@@ -60,6 +62,11 @@ struct ListUsersResponse {
 #[derive(Debug, Serialize)]
 struct ListWorkspacesResponse {
     workspaces: Vec<Workspace>,
+}
+
+#[derive(Debug, Serialize)]
+struct ListInboxItemsResponse {
+    inbox_items: Vec<api_types::InboxItem>,
 }
 
 // =============================================================================
@@ -104,6 +111,36 @@ pub fn all_shape_routes() -> Vec<ShapeRoute> {
             fallback_list_tags,
         ),
         ShapeRoute::new(
+            &shapes::PROJECT_AGENTS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/agents",
+            fallback_list_agents,
+        ),
+        ShapeRoute::new(
+            &shapes::PROJECT_AGENT_TASKS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/agent_tasks",
+            fallback_list_agent_tasks,
+        ),
+        ShapeRoute::new(
+            &shapes::PROJECT_AUTOPILOTS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/autopilots",
+            fallback_list_autopilots,
+        ),
+        ShapeRoute::new(
+            &shapes::PROJECT_SQUADS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/squads",
+            fallback_list_squads,
+        ),
+        ShapeRoute::new(
+            &shapes::PROJECT_SQUAD_MEMBERS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/squad_members",
+            fallback_list_squad_members,
+        ),
+        ShapeRoute::new(
             &shapes::PROJECT_PROJECT_STATUSES_SHAPE,
             ShapeScope::Project,
             "/fallback/project_statuses",
@@ -120,6 +157,12 @@ pub fn all_shape_routes() -> Vec<ShapeRoute> {
             ShapeScope::User,
             "/fallback/user_workspaces",
             fallback_list_user_workspaces,
+        ),
+        ShapeRoute::new(
+            &shapes::USER_INBOX_SHAPE,
+            ShapeScope::User,
+            "/fallback/inbox",
+            fallback_list_inbox,
         ),
         ShapeRoute::new(
             &shapes::PROJECT_WORKSPACES_SHAPE,
@@ -304,6 +347,43 @@ async fn fallback_list_project_statuses(
             })?;
 
     Ok(Json(ListProjectStatusesResponse { project_statuses }))
+}
+
+async fn fallback_list_agents(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListAgentsResponse>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    let agents = AgentRepository::list_by_project(state.pool(), query.project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, project_id = %query.project_id, "failed to list agents (fallback)");
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list agents")
+        })?;
+
+    Ok(Json(ListAgentsResponse { agents }))
+}
+
+async fn fallback_list_agent_tasks(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListAgentTasksResponse>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    let agent_tasks = AgentTaskRepository::list_by_project(state.pool(), query.project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, project_id = %query.project_id, "failed to list agent tasks (fallback)");
+            ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to list agent tasks",
+            )
+        })?;
+
+    Ok(Json(ListAgentTasksResponse { agent_tasks }))
 }
 
 async fn fallback_list_issues(
@@ -506,6 +586,88 @@ async fn fallback_list_user_workspaces(
         })?;
 
     Ok(Json(ListWorkspacesResponse { workspaces }))
+}
+
+async fn fallback_list_inbox(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(_): Query<NoQueryParams>,
+) -> Result<Json<ListInboxItemsResponse>, ErrorResponse> {
+    let inbox_items = InboxRepository::list(state.pool(), ctx.user.id, false, 200)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, user_id = %ctx.user.id, "failed to list inbox (fallback)");
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list inbox")
+        })?;
+
+    Ok(Json(ListInboxItemsResponse { inbox_items }))
+}
+
+async fn fallback_list_autopilots(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListAutopilotResponse>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    let autopilots = AutopilotRepository::list_by_project(state.pool(), query.project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, project_id = %query.project_id, "failed to list autopilots (fallback)");
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list autopilots")
+        })?;
+
+    Ok(Json(ListAutopilotResponse { autopilots }))
+}
+
+async fn fallback_list_squads(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListSquadsResponse>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    let squads = SquadRepository::list_by_project(state.pool(), query.project_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, project_id = %query.project_id, "failed to list squads (fallback)");
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list squads")
+        })?;
+
+    Ok(Json(ListSquadsResponse { squads }))
+}
+
+async fn fallback_list_squad_members(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListSquadMembersResponse>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    // List all squad members for the project by joining through squads.
+    let members: Vec<api_types::SquadMember> = sqlx::query_as(
+        r#"
+        SELECT
+            sm.id,
+            sm.squad_id,
+            sm.agent_id,
+            sm.user_id,
+            sm.created_at
+        FROM squad_members sm
+        JOIN squads s ON s.id = sm.squad_id
+        WHERE s.project_id = $1
+        ORDER BY sm.created_at ASC
+        "#,
+    )
+    .bind(query.project_id)
+    .fetch_all(state.pool())
+    .await
+    .map_err(|error| {
+        tracing::error!(?error, project_id = %query.project_id, "failed to list squad members (fallback)");
+        ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list squad members")
+    })?;
+
+    Ok(Json(ListSquadMembersResponse { members }))
 }
 
 // =============================================================================

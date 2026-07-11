@@ -41,7 +41,8 @@ import {
   type ProjectIssueCreateOptions,
   useKanbanIssueComposer,
 } from '@/shared/stores/useKanbanIssueComposerStore';
-import type { OrganizationMemberWithProfile } from 'shared/types';
+import type { KanbanAssigneeUser } from '@vibe/ui/components/KanbanAssignee';
+import type { AgentTaskStatus } from 'shared/remote-types';
 import {
   KanbanProvider,
   KanbanBoard,
@@ -143,6 +144,8 @@ export function KanbanContainer() {
     getWorkspacesForIssue,
     getRelationshipsForIssue,
     issuesById,
+    agents,
+    agentTasks,
     insertIssueTag,
     removeIssueTag,
     insertTag,
@@ -539,20 +542,52 @@ export function KanbanContainer() {
     return map;
   }, [issues]);
 
-  // Create a lookup map for issue assignees (issue_id -> OrganizationMemberWithProfile[])
+  // Create a lookup map for issue assignees (users + agents)
   const issueAssigneesMap = useMemo(() => {
-    const map: Record<string, OrganizationMemberWithProfile[]> = {};
+    const map: Record<string, KanbanAssigneeUser[]> = {};
+    const agentsById = new Map(agents.map((a) => [a.id, a]));
     for (const assignee of issueAssignees) {
-      const member = membersWithProfilesById.get(assignee.user_id);
-      if (member) {
-        if (!map[assignee.issue_id]) {
-          map[assignee.issue_id] = [];
+      if (!map[assignee.issue_id]) {
+        map[assignee.issue_id] = [];
+      }
+      if (assignee.user_id) {
+        const member = membersWithProfilesById.get(assignee.user_id);
+        if (member) {
+          map[assignee.issue_id].push(member);
         }
-        map[assignee.issue_id].push(member);
+      } else if (assignee.agent_id) {
+        const agent = agentsById.get(assignee.agent_id);
+        if (agent) {
+          map[assignee.issue_id].push({
+            user_id: `agent:${agent.id}`,
+            first_name: agent.name,
+            username: agent.name,
+            is_agent: true,
+          });
+        }
       }
     }
     return map;
-  }, [issueAssignees, membersWithProfilesById]);
+  }, [issueAssignees, membersWithProfilesById, agents]);
+
+  // Active agent task status per issue (for card badge)
+  const agentTaskStatusByIssueId = useMemo(() => {
+    const map = new Map<string, AgentTaskStatus>();
+    const active: AgentTaskStatus[] = ['queued', 'dispatched', 'running'];
+    for (const task of agentTasks) {
+      if (!active.includes(task.status)) continue;
+      const existing = map.get(task.issue_id);
+      // Prefer running > dispatched > queued
+      if (
+        !existing ||
+        (task.status === 'running' && existing !== 'running') ||
+        (task.status === 'dispatched' && existing === 'queued')
+      ) {
+        map.set(task.issue_id, task.status);
+      }
+    }
+    return map;
+  }, [agentTasks]);
 
   const membersWithProfiles = useMemo(
     () => [...membersWithProfilesById.values()],
@@ -1057,6 +1092,9 @@ export function KanbanContainer() {
                               )}
                               isSubIssue={!!issue.parent_issue_id}
                               isMobile={isMobile}
+                              agentTaskStatus={
+                                agentTaskStatusByIssueId.get(issue.id) ?? null
+                              }
                               onPriorityClick={(e) => {
                                 e.stopPropagation();
                                 handleCardPriorityClick(issue.id);

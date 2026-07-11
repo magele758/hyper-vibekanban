@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE autopilot_runs\n            SET\n                status = $2,\n                issue_id = COALESCE($3, issue_id),\n                agent_task_id = COALESCE($4, agent_task_id),\n                error_message = COALESCE($5, error_message),\n                started_at = CASE WHEN $6 THEN COALESCE(started_at, NOW()) ELSE started_at END,\n                completed_at = CASE WHEN $7 THEN NOW() ELSE completed_at END\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "autopilot_run_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "running",
+                "completed",
+                "failed",
+                "skipped"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "61bca3df2777518ad439757b938a9e2c1c29ae29dc0581bf76ffcd3bf5db5875"
+}

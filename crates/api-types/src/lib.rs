@@ -7,10 +7,15 @@
 
 use serde::{Deserialize, Deserializer};
 
+pub mod agent;
+pub mod agent_task;
 pub mod attachment;
 pub mod auth;
+pub mod autopilot;
 pub mod blob;
+pub mod copilot;
 pub mod export;
+pub mod inbox;
 pub mod issue;
 pub mod issue_assignee;
 pub mod issue_comment;
@@ -27,15 +32,22 @@ pub mod project_status;
 pub mod pull_request;
 pub mod pull_requests_local;
 pub mod response;
+pub mod squad;
 pub mod tag;
 pub mod user;
+pub mod webhook;
 pub mod workspace;
 pub mod workspaces;
 
+pub use agent::*;
+pub use agent_task::*;
 pub use attachment::*;
 pub use auth::*;
+pub use autopilot::*;
 pub use blob::*;
+pub use copilot::*;
 pub use export::*;
+pub use inbox::*;
 pub use issue::*;
 pub use issue_assignee::*;
 pub use issue_comment::*;
@@ -52,8 +64,10 @@ pub use project_status::*;
 pub use pull_request::*;
 pub use pull_requests_local::*;
 pub use response::*;
+pub use squad::*;
 pub use tag::*;
 pub use user::*;
+pub use webhook::*;
 pub use workspace::*;
 pub use workspaces::*;
 

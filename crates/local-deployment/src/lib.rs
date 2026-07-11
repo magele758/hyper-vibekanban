@@ -43,6 +43,7 @@ use workspace_manager::WorkspaceManager;
 use worktree_manager::WorktreeManager;
 
 use crate::{container::LocalContainerService, pty::PtyService};
+mod agent_task_watcher;
 mod command;
 pub mod container;
 mod copy;
@@ -261,6 +262,18 @@ impl Deployment for LocalDeployment {
             let container = container.clone();
             let rc = remote_client.clone().ok();
             PrMonitorService::spawn(db, analytics, container, rc, pr_sync_notify.clone()).await;
+        }
+
+        if let Ok(remote_client) = remote_client.clone() {
+            let host_id = std::env::var("HOSTNAME")
+                .or_else(|_| std::env::var("HOST"))
+                .unwrap_or_else(|_| user_id.clone());
+            crate::agent_task_watcher::AgentTaskWatcher::spawn(
+                db.clone(),
+                container.clone(),
+                remote_client,
+                host_id,
+            );
         }
 
         let deployment = Self {

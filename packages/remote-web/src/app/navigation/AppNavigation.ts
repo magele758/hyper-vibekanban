@@ -173,6 +173,14 @@ function destinationToRemoteTarget(
         to: "/projects/$projectId",
         params: { projectId: destination.projectId },
       } as const;
+    case "project-agents":
+    case "project-agent":
+    case "project-copilot":
+      // Remote-web does not host Agents/Copilot pages yet; fall back to board.
+      return {
+        to: "/projects/$projectId",
+        params: { projectId: destination.projectId },
+      } as const;
     case "project-issue":
       return {
         to: "/projects/$projectId/issues/$issueId",
@@ -255,6 +263,12 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProject: (projectId, transition) =>
       navigateTo({ kind: "project", projectId }, transition),
+    goToProjectAgents: (projectId, transition) =>
+      navigateTo({ kind: "project-agents", projectId }, transition),
+    goToProjectAgent: (projectId, agentId, transition) =>
+      navigateTo({ kind: "project-agent", projectId, agentId }, transition),
+    goToProjectCopilot: (projectId, transition) =>
+      navigateTo({ kind: "project-copilot", projectId }, transition),
     goToProjectIssue: (projectId, issueId, transition) =>
       navigateTo({ kind: "project-issue", projectId, issueId }, transition),
     goToProjectIssueWorkspace: (projectId, issueId, workspaceId, transition) =>
@@ -328,6 +342,12 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProject: (projectId, transition) =>
       navigateTo({ kind: "project", projectId }, transition),
+    goToProjectAgents: (projectId, transition) =>
+      navigateTo({ kind: "project-agents", projectId }, transition),
+    goToProjectAgent: (projectId, agentId, transition) =>
+      navigateTo({ kind: "project-agent", projectId, agentId }, transition),
+    goToProjectCopilot: (projectId, transition) =>
+      navigateTo({ kind: "project-copilot", projectId }, transition),
     goToProjectIssue: (projectId, issueId, transition) =>
       navigateTo({ kind: "project-issue", projectId, issueId }, transition),
     goToProjectIssueWorkspace: (projectId, issueId, workspaceId, transition) =>

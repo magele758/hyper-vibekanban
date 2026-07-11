@@ -684,7 +684,8 @@ impl IssueRepository {
         // Assignee sync: add creator if no assignees exist
         let assignees = IssueAssigneeRepository::list_by_issue(pool, issue_id).await?;
         if assignees.is_empty() {
-            IssueAssigneeRepository::create(pool, None, issue_id, user_id).await?;
+            IssueAssigneeRepository::create(pool, None, issue_id, Some(user_id), None, None)
+                .await?;
         }
 
         Ok(())

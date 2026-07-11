@@ -1,6 +1,6 @@
 import { useContext } from 'react';
 import { createHmrContext } from '@/shared/lib/hmrContext';
-import type { Workspace } from 'shared/remote-types';
+import type { InboxItem, Workspace } from 'shared/remote-types';
 import type { SyncError } from '@/shared/lib/electric/types';
 
 /**
@@ -8,10 +8,12 @@ import type { SyncError } from '@/shared/lib/electric/types';
  *
  * Shapes synced at user scope:
  * - Workspaces (data only, scoped by owner_user_id)
+ * - Inbox items (data only, scoped by recipient_user_id)
  */
 export interface UserContextValue {
   // Data
   workspaces: Workspace[];
+  inboxItems: InboxItem[];
 
   // Loading/error state
   isLoading: boolean;

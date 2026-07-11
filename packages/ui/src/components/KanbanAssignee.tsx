@@ -12,6 +12,8 @@ export type KanbanAssigneeUser = {
   last_name?: string | null;
   username?: string | null;
   avatar_url?: string | null;
+  /** When true, render as an agent avatar (not a human). */
+  is_agent?: boolean;
 };
 
 export type KanbanAssigneeProps = {
@@ -34,6 +36,9 @@ const buildOptimizedImageUrl = (rawUrl: string): string => {
 };
 
 const buildInitials = (user: KanbanAssigneeUser): string => {
+  if (user.is_agent) {
+    return 'A';
+  }
   const first = user.first_name?.trim().charAt(0)?.toUpperCase() ?? '';
   const last = user.last_name?.trim().charAt(0)?.toUpperCase() ?? '';
 
@@ -52,7 +57,7 @@ const buildLabel = (user: KanbanAssigneeUser): string => {
 
   if (name) return name;
   if (user.username?.trim()) return user.username;
-  return 'User';
+  return user.is_agent ? 'Agent' : 'User';
 };
 
 const handleImageError = (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -76,7 +81,8 @@ const AssigneeAvatar = ({ user }: { user: KanbanAssigneeUser }) => {
       <div
         className={cn(
           'flex size-icon-base shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-secondary text-xs font-medium text-low',
-          'h-5 w-5 text-[10px] ring-1 ring-background'
+          'h-5 w-5 text-[10px] ring-1 ring-background',
+          user.is_agent && 'bg-brand/15 text-brand border-brand/30'
         )}
         aria-label={label}
       >

@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO webhook_deliveries (\n                webhook_endpoint_id, dedupe_key, request_body, response_summary, status\n            )\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                webhook_endpoint_id     AS \"webhook_endpoint_id!: Uuid\",\n                dedupe_key,\n                status                  AS \"status!\",\n                request_body            AS \"request_body!\",\n                response_summary,\n                created_at              AS \"created_at!: DateTime<Utc>\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "webhook_endpoint_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "dedupe_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "request_body!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "response_summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e6ec514e51f4ed64a8751055340342ddefb0b63e64522404a257a3bd70d3356d"
+}

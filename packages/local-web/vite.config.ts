@@ -137,6 +137,13 @@ export default defineConfig({
         changeOrigin: false,
         ws: true,
       },
+      // Same-origin proxy for Cursor SDK sidecar (avoids browser PNA/CORS to 127.0.0.1).
+      '/agent-sidecar': {
+        target:
+          process.env.AGENT_SIDECAR_PROXY_TARGET || 'http://127.0.0.1:13110',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/agent-sidecar/, ''),
+      },
     },
     fs: {
       allow: [path.resolve(__dirname, '.'), path.resolve(__dirname, '../..')],

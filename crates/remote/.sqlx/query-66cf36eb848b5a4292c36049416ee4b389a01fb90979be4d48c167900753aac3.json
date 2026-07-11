@@ -1,0 +1,135 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agents\n            SET\n                name = COALESCE($1, name),\n                instructions = COALESCE($2, instructions),\n                default_executor = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::text IS NOT NULL THEN $4\n                    ELSE default_executor\n                END,\n                max_concurrent_tasks = COALESCE($5, max_concurrent_tasks),\n                status = COALESCE($6, status),\n                chat_runtime = COALESCE($7, chat_runtime),\n                updated_at = NOW()\n            WHERE id = $8\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "instructions!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "default_executor",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "max_concurrent_tasks!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "status!: AgentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "agent_status",
+            "kind": {
+              "Enum": [
+                "idle",
+                "working",
+                "offline",
+                "error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "chat_runtime!: AgentChatRuntime",
+        "type_info": {
+          "Custom": {
+            "name": "agent_chat_runtime",
+            "kind": {
+              "Enum": [
+                "cursor",
+                "pi",
+                "opencode"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_by_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "updated_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bool",
+        "Text",
+        "Int4",
+        {
+          "Custom": {
+            "name": "agent_status",
+            "kind": {
+              "Enum": [
+                "idle",
+                "working",
+                "offline",
+                "error"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "agent_chat_runtime",
+            "kind": {
+              "Enum": [
+                "cursor",
+                "pi",
+                "opencode"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "66cf36eb848b5a4292c36049416ee4b389a01fb90979be4d48c167900753aac3"
+}

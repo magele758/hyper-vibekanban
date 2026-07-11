@@ -19,7 +19,7 @@ use crate::{
     github_app::GitHubAppService,
     mail::{LoopsMailer, Mailer, NoopMailer},
     r2::R2Service,
-    routes,
+    routes, scheduler,
 };
 
 pub struct Server;
@@ -188,6 +188,9 @@ impl Server {
         let digest_enabled = std::env::var("DIGEST_ENABLED")
             .map(|v| matches!(v.as_str(), "true" | "1"))
             .unwrap_or(false);
+
+        // Spawn autopilot scheduler
+        scheduler::spawn_scheduler(pool.clone());
 
         if loops_email_api_key.is_some() && digest_enabled {
             digest::task::spawn_digest_task(

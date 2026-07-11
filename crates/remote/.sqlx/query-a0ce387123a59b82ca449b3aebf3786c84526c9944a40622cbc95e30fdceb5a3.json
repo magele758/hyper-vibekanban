@@ -1,0 +1,126 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            FROM autopilots\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "execution_mode!: AutopilotExecutionMode",
+        "type_info": {
+          "Custom": {
+            "name": "autopilot_execution_mode",
+            "kind": {
+              "Enum": [
+                "create_issue",
+                "run_only"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cron_expression!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "timezone!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "concurrency_policy!: AutopilotConcurrencyPolicy",
+        "type_info": {
+          "Custom": {
+            "name": "autopilot_concurrency_policy",
+            "kind": {
+              "Enum": [
+                "skip",
+                "queue"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "issue_title_template!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "issue_description_template!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "next_run_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "last_run_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "updated_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a0ce387123a59b82ca449b3aebf3786c84526c9944a40622cbc95e30fdceb5a3"
+}

@@ -12,6 +12,9 @@ import {
   PlusIcon,
   KanbanIcon,
   SpinnerIcon,
+  RobotIcon,
+  ChatCircleIcon,
+  TrayIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
@@ -64,6 +67,14 @@ interface AppBarProps {
   updateVersion?: string | null;
   onUpdateClick?: () => void;
   githubIconPath: string;
+  /** Expanded nav tree mode (labels + project sub-nav). */
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+  onNavigateBoard?: (projectId: string) => void;
+  onNavigateAgents?: (projectId: string) => void;
+  onNavigateCopilot?: (projectId: string) => void;
+  onNavigateInbox?: (projectId: string) => void;
+  activeProjectSubNav?: 'board' | 'agents' | 'copilot' | 'inbox' | null;
 }
 
 export interface AppBarProject {
@@ -92,16 +103,43 @@ function getHostStatusIndicatorClass(status: AppBarHostStatus): string {
   return 'bg-white border-warning';
 }
 
-function AppBarSectionLabel({ children }: { children: ReactNode }) {
+function AppBarSectionLabel({
+  children,
+  expanded,
+}: {
+  children: ReactNode;
+  expanded?: boolean;
+}) {
   return (
-    <p className="w-10 text-center text-[9px] font-medium leading-none tracking-wide text-low">
+    <p
+      className={cn(
+        'font-medium leading-none tracking-wide text-low',
+        expanded
+          ? 'px-2 text-[10px] text-left'
+          : 'w-10 text-center text-[9px]'
+      )}
+    >
       {children}
     </p>
   );
 }
 
 const appBarItemBaseClassName =
-  'flex items-center justify-center w-10 h-10 rounded-lg text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
+  'flex items-center rounded-lg text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand';
+
+function getAppBarItemLayoutClassName(expanded: boolean) {
+  return expanded
+    ? 'w-full h-9 justify-start gap-2 px-2.5'
+    : 'w-10 h-10 justify-center';
+}
+
+function AppBarItemLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+      {children}
+    </span>
+  );
+}
 
 type AppBarSection = {
   key: 'local' | 'remote' | 'projects' | 'export';
@@ -152,12 +190,15 @@ type AppBarSectionItem =
 function getStandardAppBarButtonClassName({
   isActive = false,
   className,
+  expanded = false,
 }: {
   isActive?: boolean;
   className?: string;
+  expanded?: boolean;
 }) {
   return cn(
     appBarItemBaseClassName,
+    getAppBarItemLayoutClassName(expanded),
     'cursor-pointer',
     isActive
       ? 'bg-brand/20 text-brand hover:bg-brand/20'
@@ -169,14 +210,17 @@ function getStandardAppBarButtonClassName({
 function getHostButtonClassName({
   host,
   isActive,
+  expanded = false,
 }: {
   host: AppBarHost;
   isActive: boolean;
+  expanded?: boolean;
 }) {
   const isOffline = host.status === 'offline';
 
   return cn(
     appBarItemBaseClassName,
+    getAppBarItemLayoutClassName(expanded),
     isOffline
       ? 'bg-primary text-low opacity-50 cursor-not-allowed'
       : isActive
@@ -215,6 +259,13 @@ export function AppBar({
   updateVersion,
   onUpdateClick,
   githubIconPath,
+  expanded = false,
+  onToggleExpanded,
+  onNavigateBoard,
+  onNavigateAgents,
+  onNavigateCopilot,
+  onNavigateInbox,
+  activeProjectSubNav = null,
 }: AppBarProps) {
   const { t } = useTranslation('common');
   const sections: AppBarSection[] = [];
@@ -338,69 +389,111 @@ export function AppBar({
 
   function renderSectionItem(item: AppBarSectionItem): ReactNode {
     switch (item.kind) {
-      case 'icon-button':
-        return (
+      case 'icon-button': {
+        const button = (
+          <button
+            type="button"
+            onClick={item.onClick}
+            className={getStandardAppBarButtonClassName({
+              isActive: item.isActive,
+              className: item.className,
+              expanded,
+            })}
+            aria-label={item.label}
+            title={expanded ? item.label : undefined}
+          >
+            <item.icon
+              className="size-icon-base shrink-0"
+              weight="bold"
+            />
+            {expanded && <AppBarItemLabel>{item.label}</AppBarItemLabel>}
+          </button>
+        );
+        return expanded ? (
+          button
+        ) : (
           <Tooltip content={item.label} side="right">
-            <button
-              type="button"
-              onClick={item.onClick}
-              className={getStandardAppBarButtonClassName({
-                isActive: item.isActive,
-                className: item.className,
-              })}
-              aria-label={item.label}
-            >
-              <item.icon className="size-icon-base" weight="bold" />
-            </button>
+            {button}
           </Tooltip>
         );
+      }
       case 'host-button': {
         const isOffline = item.host.status === 'offline';
-
-        return (
+        const button = (
+          <div className={cn('relative', expanded && 'w-full')}>
+            <span
+              className={cn(
+                'absolute z-10 w-3.5 h-3.5 rounded-full border border-secondary',
+                expanded ? 'top-1 right-1' : '-top-1 -right-1',
+                getHostStatusIndicatorClass(item.host.status)
+              )}
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              disabled={isOffline}
+              onClick={item.onClick}
+              className={getHostButtonClassName({
+                host: item.host,
+                isActive: item.isActive,
+                expanded,
+              })}
+              aria-label={`${item.host.name} (${getHostStatusLabel(item.host.status)})`}
+              title={
+                expanded
+                  ? `${item.host.name} · ${getHostStatusLabel(item.host.status)}`
+                  : undefined
+              }
+            >
+              <span
+                className={cn(
+                  'flex shrink-0 items-center justify-center font-medium',
+                  expanded ? 'size-6 rounded-md bg-secondary text-xs' : 'text-sm'
+                )}
+              >
+                {getProjectInitials(item.host.name)}
+              </span>
+              {expanded && <AppBarItemLabel>{item.host.name}</AppBarItemLabel>}
+            </button>
+          </div>
+        );
+        return expanded ? (
+          button
+        ) : (
           <Tooltip
             content={`${item.host.name} · ${getHostStatusLabel(item.host.status)}`}
             side="right"
           >
-            <div className="relative">
-              <span
-                className={cn(
-                  'absolute -top-1 -right-1 z-10',
-                  'w-3.5 h-3.5 rounded-full border border-secondary',
-                  getHostStatusIndicatorClass(item.host.status)
-                )}
-                aria-hidden="true"
-              />
-              <button
-                type="button"
-                disabled={isOffline}
-                onClick={item.onClick}
-                className={getHostButtonClassName({
-                  host: item.host,
-                  isActive: item.isActive,
-                })}
-                aria-label={`${item.host.name} (${getHostStatusLabel(item.host.status)})`}
-              >
-                {getProjectInitials(item.host.name)}
-              </button>
-            </div>
+            {button}
           </Tooltip>
         );
       }
-      case 'kanban-cta':
+      case 'kanban-cta': {
+        const trigger = (
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={getStandardAppBarButtonClassName({ expanded })}
+              aria-label={item.label}
+              title={expanded ? item.label : undefined}
+            >
+              <KanbanIcon
+                className="size-icon-base shrink-0"
+                weight="bold"
+              />
+              {expanded && <AppBarItemLabel>{item.label}</AppBarItemLabel>}
+            </button>
+          </PopoverTrigger>
+        );
         return (
           <Popover>
-            <Tooltip content={item.label} side="right">
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className={getStandardAppBarButtonClassName({})}
-                  aria-label={item.label}
-                >
-                  <KanbanIcon className="size-icon-base" weight="bold" />
-                </button>
-              </PopoverTrigger>
-            </Tooltip>
+            {expanded ? (
+              trigger
+            ) : (
+              <Tooltip content={item.label} side="right">
+                {trigger}
+              </Tooltip>
+            )}
             <PopoverContent side="right" sideOffset={8}>
               <p className="text-sm font-medium text-high">
                 {t('appBar.kanban.title')}
@@ -425,10 +518,19 @@ export function AppBar({
             </PopoverContent>
           </Popover>
         );
+      }
       case 'loading':
         return (
-          <div className="flex items-center justify-center w-10 h-10">
-            <SpinnerIcon className="size-5 animate-spin text-muted" />
+          <div
+            className={cn(
+              'flex items-center',
+              expanded ? 'h-9 w-full justify-start gap-2 px-2.5' : 'h-10 w-10 justify-center'
+            )}
+          >
+            <SpinnerIcon className="size-5 shrink-0 animate-spin text-muted" />
+            {expanded && (
+              <AppBarItemLabel>Loading…</AppBarItemLabel>
+            )}
           </div>
         );
       case 'project-list':
@@ -443,7 +545,10 @@ export function AppBar({
                 <div
                   ref={dropProvided.innerRef}
                   {...dropProvided.droppableProps}
-                  className="flex flex-col items-center -mb-base"
+                  className={cn(
+                    'flex flex-col -mb-base',
+                    expanded ? 'items-stretch' : 'items-center'
+                  )}
                 >
                   {item.projects.map((project, index) => (
                     <Draggable
@@ -453,45 +558,77 @@ export function AppBar({
                       disableInteractiveElementBlocking
                       isDragDisabled={item.isSavingProjectOrder}
                     >
-                      {(dragProvided, snapshot) => (
-                        <div
-                          ref={dragProvided.innerRef}
-                          {...dragProvided.draggableProps}
-                          {...dragProvided.dragHandleProps}
-                          className="mb-base"
-                          style={dragProvided.draggableProps.style}
-                        >
-                          <Tooltip content={project.name} side="right">
-                            <button
-                              type="button"
-                              onClick={() => item.onProjectClick(project.id)}
-                              onMouseEnter={() =>
-                                item.onProjectHover?.(project.id)
-                              }
-                              onFocus={() => item.onProjectHover?.(project.id)}
+                      {(dragProvided, snapshot) => {
+                        const projectButton = (
+                          <button
+                            type="button"
+                            onClick={() => item.onProjectClick(project.id)}
+                            onMouseEnter={() =>
+                              item.onProjectHover?.(project.id)
+                            }
+                            onFocus={() => item.onProjectHover?.(project.id)}
+                            className={cn(
+                              appBarItemBaseClassName,
+                              getAppBarItemLayoutClassName(expanded),
+                              'cursor-grab',
+                              snapshot.isDragging && 'shadow-lg',
+                              item.activeProjectId === project.id
+                                ? ''
+                                : 'bg-primary text-normal hover:opacity-80'
+                            )}
+                            style={
+                              item.activeProjectId === project.id
+                                ? {
+                                    color: `hsl(${project.color})`,
+                                    backgroundColor: `hsl(${project.color} / 0.2)`,
+                                  }
+                                : undefined
+                            }
+                            aria-label={project.name}
+                            title={expanded ? project.name : undefined}
+                          >
+                            <span
                               className={cn(
-                                appBarItemBaseClassName,
-                                'cursor-grab',
-                                snapshot.isDragging && 'shadow-lg',
-                                item.activeProjectId === project.id
-                                  ? ''
-                                  : 'bg-primary text-normal hover:opacity-80'
+                                'flex shrink-0 items-center justify-center font-medium',
+                                expanded
+                                  ? 'size-6 rounded-md text-xs'
+                                  : 'text-sm'
                               )}
                               style={
-                                item.activeProjectId === project.id
+                                expanded
                                   ? {
                                       color: `hsl(${project.color})`,
                                       backgroundColor: `hsl(${project.color} / 0.2)`,
                                     }
                                   : undefined
                               }
-                              aria-label={project.name}
                             >
                               {getProjectInitials(project.name)}
-                            </button>
-                          </Tooltip>
-                        </div>
-                      )}
+                            </span>
+                            {expanded && (
+                              <AppBarItemLabel>{project.name}</AppBarItemLabel>
+                            )}
+                          </button>
+                        );
+
+                        return (
+                          <div
+                            ref={dragProvided.innerRef}
+                            {...dragProvided.draggableProps}
+                            {...dragProvided.dragHandleProps}
+                            className="mb-base"
+                            style={dragProvided.draggableProps.style}
+                          >
+                            {expanded ? (
+                              projectButton
+                            ) : (
+                              <Tooltip content={project.name} side="right">
+                                {projectButton}
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      }}
                     </Draggable>
                   ))}
                   {dropProvided.placeholder}
@@ -508,13 +645,36 @@ export function AppBar({
       onMouseEnter={onHoverStart}
       onMouseLeave={onHoverEnd}
       className={cn(
-        'flex flex-col items-center h-full min-h-0 overflow-y-auto p-base gap-base',
-        'bg-secondary border-r border-border'
+        'flex flex-col h-full min-h-0 overflow-y-auto p-base gap-base',
+        'bg-secondary border-r border-border transition-[width]',
+        expanded ? 'w-[220px] items-stretch' : 'w-auto items-center'
       )}
     >
+      {onToggleExpanded && (
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className={cn(
+            'rounded-md px-2 py-1.5 text-xs text-low hover:text-normal hover:bg-primary',
+            expanded ? 'text-left' : 'w-10 text-center'
+          )}
+          aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+          {expanded ? '« 收起' : '»'}
+        </button>
+      )}
+
       {sections.map((section) => (
-        <div key={section.key} className="flex flex-col items-center gap-1">
-          <AppBarSectionLabel>{section.label}</AppBarSectionLabel>
+        <div
+          key={section.key}
+          className={cn(
+            'flex flex-col gap-1',
+            expanded ? 'items-stretch' : 'items-center'
+          )}
+        >
+          <AppBarSectionLabel expanded={expanded}>
+            {section.label}
+          </AppBarSectionLabel>
           {section.items.map((item) => (
             <div
               key={item.key}
@@ -528,34 +688,114 @@ export function AppBar({
         </div>
       ))}
 
+      {expanded && activeProjectId && (
+        <div className="flex flex-col gap-1 border-t border-border pt-base">
+          <AppBarSectionLabel expanded>Project</AppBarSectionLabel>
+          {(
+            [
+              {
+                id: 'board' as const,
+                label: 'Board',
+                icon: KanbanIcon,
+                onClick: () => onNavigateBoard?.(activeProjectId),
+              },
+              {
+                id: 'agents' as const,
+                label: 'Agents',
+                icon: RobotIcon,
+                onClick: () => onNavigateAgents?.(activeProjectId),
+              },
+              {
+                id: 'copilot' as const,
+                label: 'Copilot',
+                icon: ChatCircleIcon,
+                onClick: () => onNavigateCopilot?.(activeProjectId),
+              },
+              {
+                id: 'inbox' as const,
+                label: 'Inbox',
+                icon: TrayIcon,
+                onClick: () => onNavigateInbox?.(activeProjectId),
+              },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={item.onClick}
+              title={item.label}
+              className={cn(
+                appBarItemBaseClassName,
+                getAppBarItemLayoutClassName(true),
+                activeProjectSubNav === item.id
+                  ? 'bg-brand/15 text-normal'
+                  : 'text-low hover:bg-primary hover:text-normal'
+              )}
+            >
+              <item.icon className="size-icon-base shrink-0" weight="bold" />
+              <AppBarItemLabel>{item.label}</AppBarItemLabel>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Bottom section: Notifications + User popover + GitHub */}
-      <div className="mt-auto pt-base flex flex-col items-center gap-4">
+      <div
+        className={cn(
+          'mt-auto pt-base flex flex-col gap-4',
+          expanded ? 'items-stretch' : 'items-center'
+        )}
+      >
         {notificationBell}
         {userPopover}
         <AppBarSocialLink
           href="https://github.com/magele758/hyper-vibekanban"
           label="Star on GitHub"
           iconPath={githubIconPath}
+          expanded={expanded}
         />
         {updateVersion ? (
-          <Tooltip content={`Update to v${updateVersion}`} side="right">
+          expanded ? (
             <button
               type="button"
               onClick={onUpdateClick}
+              title={`Update to v${updateVersion}`}
               className={cn(
-                'flex items-center justify-center py-1 rounded-md w-10',
-                'text-[9px] font-ibm-plex-mono font-medium leading-none',
+                'flex h-9 w-full items-center justify-start gap-2 rounded-md px-2.5',
+                'text-xs font-ibm-plex-mono font-medium',
                 'bg-brand text-on-brand hover:bg-brand-hover',
                 'transition-colors cursor-pointer'
               )}
             >
-              Update
+              <span className="min-w-0 flex-1 truncate text-left">
+                Update to v{updateVersion}
+              </span>
             </button>
-          </Tooltip>
+          ) : (
+            <Tooltip content={`Update to v${updateVersion}`} side="right">
+              <button
+                type="button"
+                onClick={onUpdateClick}
+                className={cn(
+                  'flex items-center justify-center py-1 rounded-md w-10',
+                  'text-[9px] font-ibm-plex-mono font-medium leading-none',
+                  'bg-brand text-on-brand hover:bg-brand-hover',
+                  'transition-colors cursor-pointer'
+                )}
+              >
+                Update
+              </button>
+            </Tooltip>
+          )
         ) : (
           appVersion && (
             <p
-              className="text-[9px] font-ibm-plex-mono text-low leading-none truncate max-w-10 text-center"
+              className={cn(
+                'font-ibm-plex-mono text-low leading-none truncate',
+                expanded
+                  ? 'px-2.5 text-[10px] text-left'
+                  : 'max-w-10 text-center text-[9px]'
+              )}
               title={`v${appVersion}`}
             >
               v{appVersion}

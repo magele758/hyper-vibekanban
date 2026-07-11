@@ -49,7 +49,7 @@ export interface ProjectMutations {
   removeIssue: (id: string) => void;
   duplicateIssue: (issueId: string) => void;
   getIssue: (issueId: string) => { simple_id: string } | undefined;
-  getAssigneesForIssue: (issueId: string) => { user_id: string }[];
+  getAssigneesForIssue: (issueId: string) => { user_id: string | null }[];
 }
 
 // Workspace type for sidebar (minimal subset needed for workspace selection)

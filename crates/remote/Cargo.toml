@@ -14,7 +14,7 @@ vk-billing = ["dep:billing"]
 
 [dependencies]
 # private crate for billing functionality
-billing = { git = "ssh://git@github.com/BloopAI/vibe-kanban-private", branch = "main", package = "billing", optional = true }
+billing = { path = "/tmp/billing-stub", optional = true }
 
 anyhow = "1.0"
 axum = { version = "0.8.4", features = ["macros", "multipart", "ws"] }
@@ -54,6 +54,8 @@ sha2 = "0.10"
 hmac = "0.12"
 subtle = "2.5"
 hex = "0.4"
+cron = "0.15"
+chrono-tz = "0.10"
 urlencoding = "2.1"
 url = "2.5"
 base64 = "0.22"

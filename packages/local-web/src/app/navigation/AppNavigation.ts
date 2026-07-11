@@ -81,6 +81,25 @@ function resolveLocalDestinationFromPath(path: string): AppDestination | null {
       const projectId = getPathParam(routeParams, 'projectId');
       return projectId ? { kind: 'project', projectId } : null;
     }
+    case '/_app/projects/$projectId_/agents': {
+      const projectId = getPathParam(routeParams, 'projectId');
+      return projectId ? { kind: 'project-agents', projectId } : null;
+    }
+    case '/_app/projects/$projectId_/agents_/$agentId': {
+      const projectId = getPathParam(routeParams, 'projectId');
+      const agentId = getPathParam(routeParams, 'agentId');
+      return projectId && agentId
+        ? { kind: 'project-agent', projectId, agentId }
+        : null;
+    }
+    case '/_app/projects/$projectId_/copilot': {
+      const projectId = getPathParam(routeParams, 'projectId');
+      return projectId ? { kind: 'project-copilot', projectId } : null;
+    }
+    case '/_app/projects/$projectId_/inbox': {
+      const projectId = getPathParam(routeParams, 'projectId');
+      return projectId ? { kind: 'project-inbox', projectId } : null;
+    }
     case '/_app/projects/$projectId_/issues/$issueId': {
       const projectId = getPathParam(routeParams, 'projectId');
       const issueId = getPathParam(routeParams, 'issueId');
@@ -257,6 +276,29 @@ function destinationToLocalTarget(
         to: '/projects/$projectId',
         params: { projectId: destination.projectId },
       } as const;
+    case 'project-agents':
+      return {
+        to: '/projects/$projectId/agents',
+        params: { projectId: destination.projectId },
+      } as const;
+    case 'project-agent':
+      return {
+        to: '/projects/$projectId/agents/$agentId',
+        params: {
+          projectId: destination.projectId,
+          agentId: destination.agentId,
+        },
+      } as const;
+    case 'project-copilot':
+      return {
+        to: '/projects/$projectId/copilot',
+        params: { projectId: destination.projectId },
+      } as const;
+    case 'project-inbox':
+      return {
+        to: '/projects/$projectId/inbox',
+        params: { projectId: destination.projectId },
+      } as const;
     case 'project-issue':
       return {
         to: '/projects/$projectId/issues/$issueId',
@@ -371,6 +413,14 @@ export function createLocalAppNavigation(): AppNavigation {
     goToExport: (transition) => navigateTo({ kind: 'export' }, transition),
     goToProject: (projectId, transition) =>
       navigateTo({ kind: 'project', projectId }, transition),
+    goToProjectAgents: (projectId, transition) =>
+      navigateTo({ kind: 'project-agents', projectId }, transition),
+    goToProjectAgent: (projectId, agentId, transition) =>
+      navigateTo({ kind: 'project-agent', projectId, agentId }, transition),
+    goToProjectCopilot: (projectId, transition) =>
+      navigateTo({ kind: 'project-copilot', projectId }, transition),
+    goToProjectInbox: (projectId, transition) =>
+      navigateTo({ kind: 'project-inbox', projectId }, transition),
     goToProjectIssue: (projectId, issueId, transition) =>
       navigateTo({ kind: 'project-issue', projectId, issueId }, transition),
     goToProjectIssueWorkspace: (projectId, issueId, workspaceId, transition) =>

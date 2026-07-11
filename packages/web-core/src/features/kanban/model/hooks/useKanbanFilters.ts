@@ -51,6 +51,7 @@ export function useKanbanFilters({
   const assigneesByIssue = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const ia of issueAssignees) {
+      if (!ia.user_id) continue;
       if (!map[ia.issue_id]) {
         map[ia.issue_id] = [];
       }

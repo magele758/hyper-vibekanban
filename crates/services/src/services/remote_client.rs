@@ -3,20 +3,22 @@
 use std::time::Duration;
 
 use api_types::{
-    AcceptInvitationResponse, AuthMethodsResponse, CreateInvitationRequest,
-    CreateInvitationResponse, CreateIssueAssigneeRequest, CreateIssueRelationshipRequest,
+    AcceptInvitationResponse, Agent, AgentTask, AuthMethodsResponse, ClaimAgentTaskRequest,
+    ClaimAgentTaskResponse, CreateAgentRequest, CreateInvitationRequest, CreateInvitationResponse,
+    CreateIssueAssigneeRequest, CreateIssueCommentRequest, CreateIssueRelationshipRequest,
     CreateIssueRequest, CreateIssueTagRequest, CreateOrganizationRequest,
     CreateOrganizationResponse, CreateWorkspaceRequest, DeleteResponse, DeleteWorkspaceRequest,
     GetInvitationResponse, GetOrganizationResponse, HandoffInitRequest, HandoffInitResponse,
-    HandoffRedeemRequest, HandoffRedeemResponse, Issue, IssueAssignee, IssueRelationship, IssueTag,
-    ListAttachmentsResponse, ListInvitationsResponse, ListIssueAssigneesResponse,
-    ListIssueRelationshipsResponse, ListIssueTagsResponse, ListIssuesResponse, ListMembersResponse,
-    ListOrganizationsResponse, ListProjectStatusesResponse, ListProjectsResponse,
-    ListPullRequestsResponse, ListTagsResponse, LocalLoginRequest, LocalLoginResponse,
-    MutationResponse, Organization, ProfileResponse, PullRequest, RevokeInvitationRequest,
-    SearchIssuesRequest, Tag, TokenRefreshRequest, TokenRefreshResponse, UpdateIssueRequest,
-    UpdateMemberRoleRequest, UpdateMemberRoleResponse, UpdateOrganizationRequest,
-    UpdatePullRequestApiRequest, UpdateWorkspaceRequest, UpsertPullRequestRequest, Workspace,
+    HandoffRedeemRequest, HandoffRedeemResponse, Issue, IssueAssignee, IssueComment,
+    IssueRelationship, IssueTag, ListAgentsResponse, ListAttachmentsResponse,
+    ListInvitationsResponse, ListIssueAssigneesResponse, ListIssueRelationshipsResponse,
+    ListIssueTagsResponse, ListIssuesResponse, ListMembersResponse, ListOrganizationsResponse,
+    ListProjectStatusesResponse, ListProjectsResponse, ListPullRequestsResponse, ListTagsResponse,
+    LocalLoginRequest, LocalLoginResponse, MutationResponse, Organization, ProfileResponse,
+    PullRequest, RevokeInvitationRequest, SearchIssuesRequest, Tag, TokenRefreshRequest,
+    TokenRefreshResponse, UpdateAgentTaskRequest, UpdateIssueRequest, UpdateMemberRoleRequest,
+    UpdateMemberRoleResponse, UpdateOrganizationRequest, UpdatePullRequestApiRequest,
+    UpdateWorkspaceRequest, UpsertPullRequestRequest, Workspace,
 };
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Duration as ChronoDuration;
@@ -793,6 +795,14 @@ impl RemoteClient {
             .await
     }
 
+    /// Creates a comment on an issue.
+    pub async fn create_issue_comment(
+        &self,
+        request: &CreateIssueCommentRequest,
+    ) -> Result<MutationResponse<IssueComment>, RemoteClientError> {
+        self.post_authed("/v1/issue_comments", Some(request)).await
+    }
+
     /// Deletes an issue.
     pub async fn delete_issue(&self, issue_id: Uuid) -> Result<DeleteResponse, RemoteClientError> {
         let res = self
@@ -852,6 +862,62 @@ impl RemoteClient {
         res.json::<DeleteResponse>()
             .await
             .map_err(|e| RemoteClientError::Serde(e.to_string()))
+    }
+
+    // ── Agents ─────────────────────────────────────────────────────────
+
+    pub async fn list_agents(
+        &self,
+        project_id: Uuid,
+    ) -> Result<ListAgentsResponse, RemoteClientError> {
+        self.get_authed(&format!("/v1/agents?project_id={project_id}"))
+            .await
+    }
+
+    pub async fn create_agent(
+        &self,
+        request: &CreateAgentRequest,
+    ) -> Result<MutationResponse<Agent>, RemoteClientError> {
+        self.post_authed("/v1/agents", Some(request)).await
+    }
+
+    pub async fn get_agent(&self, agent_id: Uuid) -> Result<Agent, RemoteClientError> {
+        self.get_authed(&format!("/v1/agents/{agent_id}")).await
+    }
+
+    // ── Agent Tasks ────────────────────────────────────────────────────
+
+    pub async fn claim_agent_task(
+        &self,
+        request: &ClaimAgentTaskRequest,
+    ) -> Result<ClaimAgentTaskResponse, RemoteClientError> {
+        self.post_authed("/v1/agent_tasks/claim", Some(request))
+            .await
+    }
+
+    pub async fn update_agent_task(
+        &self,
+        agent_task_id: Uuid,
+        request: &UpdateAgentTaskRequest,
+    ) -> Result<MutationResponse<AgentTask>, RemoteClientError> {
+        self.send(
+            reqwest::Method::PATCH,
+            &format!("/v1/agent_tasks/{agent_task_id}"),
+            true,
+            Some(request),
+        )
+        .await?
+        .json::<MutationResponse<AgentTask>>()
+        .await
+        .map_err(|e| RemoteClientError::Serde(e.to_string()))
+    }
+
+    pub async fn get_agent_task(
+        &self,
+        agent_task_id: Uuid,
+    ) -> Result<AgentTask, RemoteClientError> {
+        self.get_authed(&format!("/v1/agent_tasks/{agent_task_id}"))
+            .await
     }
 
     // ── Tags ───────────────────────────────────────────────────────────

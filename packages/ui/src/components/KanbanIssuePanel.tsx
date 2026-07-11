@@ -151,6 +151,7 @@ export interface KanbanIssuePanelProps {
 
   // Edit-mode section renderers
   renderWorkspacesSection?: (issueId: string) => ReactNode;
+  renderAgentTasksSection?: (issueId: string) => ReactNode;
   renderRelationshipsSection?: (issueId: string) => ReactNode;
   renderSubIssuesSection?: (issueId: string) => ReactNode;
   renderCommentsSection?: (issueId: string) => ReactNode;
@@ -191,6 +192,7 @@ export function KanbanIssuePanel({
   attachmentError,
   onDismissAttachmentError,
   renderWorkspacesSection,
+  renderAgentTasksSection,
   renderRelationshipsSection,
   renderSubIssuesSection,
   renderCommentsSection,
@@ -526,6 +528,11 @@ export function KanbanIssuePanel({
         {/* Workspaces Section (Edit mode only) */}
         {!isCreateMode && issueId && renderWorkspacesSection && (
           <div className="border-t">{renderWorkspacesSection(issueId)}</div>
+        )}
+
+        {/* Agent Tasks Section (Edit mode only) */}
+        {!isCreateMode && issueId && renderAgentTasksSection && (
+          <div className="border-t">{renderAgentTasksSection(issueId)}</div>
         )}
 
         {/* Relationships Section (Edit mode only) */}

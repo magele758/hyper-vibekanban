@@ -138,6 +138,8 @@ export type KanbanCardContentProps<TTag extends KanbanTag = KanbanTag> = {
   onMoreActionsClick?: () => void;
   tagEditProps?: TagEditProps<TTag>;
   isMobile?: boolean;
+  /** Active agent task status shown as a small badge on the card. */
+  agentTaskStatus?: 'queued' | 'dispatched' | 'running' | null;
 };
 
 export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
@@ -157,6 +159,7 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   onMoreActionsClick,
   tagEditProps,
   isMobile,
+  agentTaskStatus = null,
 }: KanbanCardContentProps<TTag>) {
   const { t } = useTranslation('common');
   const previewDescription = useMemo(() => {
@@ -212,6 +215,22 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
           <span className="font-ibm-plex-mono text-sm text-low truncate">
             {displayId}
           </span>
+          {agentTaskStatus && (
+            <span
+              className={cn(
+                'shrink-0 rounded-sm px-1 py-px text-[10px] font-medium',
+                agentTaskStatus === 'running'
+                  ? 'bg-brand/15 text-brand'
+                  : 'bg-secondary text-low'
+              )}
+            >
+              {agentTaskStatus === 'queued'
+                ? '排队'
+                : agentTaskStatus === 'dispatched'
+                  ? '派发'
+                  : '执行中'}
+            </span>
+          )}
           {isLoading && <RunningDots />}
         </div>
         {onMoreActionsClick && (

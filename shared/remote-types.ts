@@ -20,9 +20,81 @@ export type ProjectStatus = { id: string, project_id: string, name: string, colo
 
 export type Tag = { id: string, project_id: string, name: string, color: string, };
 
+export type Agent = { id: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks: number, status: AgentStatus, chat_runtime: AgentChatRuntime, created_by_user_id: string | null, created_at: string, updated_at: string, };
+
+export type AgentStatus = "idle" | "working" | "offline" | "error";
+
+export type AgentChatRuntime = "cursor" | "pi" | "opencode";
+
+export type AgentTask = { id: string, agent_id: string, issue_id: string, status: AgentTaskStatus, trigger: AgentTaskTrigger, priority: number, attempt: number, max_attempts: number, failure_reason: string | null, local_workspace_id: string | null, local_session_id: string | null, claimed_by_host: string | null, claimed_at: string | null, started_at: string | null, completed_at: string | null, force_fresh_session: boolean, resume_session_id: string | null, squad_id: string | null, is_leader_task: boolean, preferred_repo_id: string | null, created_at: string, updated_at: string, };
+
+export type AgentTaskStatus = "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
+
+export type AgentTaskTrigger = "assign" | "mention" | "manual" | "copilot" | "autopilot";
+
+export type ClaimAgentTaskResponse = { agent_task: AgentTask | null, };
+
+export type ListAgentsResponse = { agents: Array<Agent>, };
+
+export type ListAgentTasksResponse = { agent_tasks: Array<AgentTask>, };
+
+export type Autopilot = { id: string, project_id: string, name: string, agent_id: string | null, enabled: boolean, execution_mode: AutopilotExecutionMode, cron_expression: string, timezone: string, concurrency_policy: AutopilotConcurrencyPolicy, issue_title_template: string, issue_description_template: string, next_run_at: string | null, last_run_at: string | null, created_at: string, updated_at: string, };
+
+export type AutopilotExecutionMode = "create_issue" | "run_only";
+
+export type AutopilotConcurrencyPolicy = "skip" | "queue";
+
+export type AutopilotRun = { id: string, autopilot_id: string, status: AutopilotRunStatus, planned_at: string, started_at: string | null, completed_at: string | null, issue_id: string | null, agent_task_id: string | null, error_message: string | null, created_at: string, };
+
+export type AutopilotRunStatus = "queued" | "running" | "completed" | "failed" | "skipped";
+
+export type ListAutopilotResponse = { autopilots: Array<Autopilot>, };
+
+export type ListAutopilotRunsResponse = { runs: Array<AutopilotRun>, };
+
+export type Squad = { id: string, project_id: string, name: string, leader_agent_id: string | null, created_at: string, updated_at: string, };
+
+export type SquadMember = { id: string, squad_id: string, agent_id: string | null, user_id: string | null, created_at: string, };
+
+export type ListSquadsResponse = { squads: Array<Squad>, };
+
+export type ListSquadMembersResponse = { members: Array<SquadMember>, };
+
+export type InboxItem = { id: string, recipient_user_id: string, project_id: string | null, issue_id: string | null, type: string, title: string, body: string, payload: JsonValue, read_at: string | null, archived_at: string | null, created_at: string, };
+
+export type InboxUnreadCountResponse = { unread_count: number, };
+
+export type ListInboxResponse = { items: Array<InboxItem>, unread_count: number, };
+
+export type WebhookEndpoint = { id: string, project_id: string, autopilot_id: string | null, token: string, name: string, enabled: boolean, created_at: string, };
+
+export type WebhookDelivery = { id: string, webhook_endpoint_id: string, dedupe_key: string | null, status: string, request_body: string, response_summary: string | null, created_at: string, };
+
+export type ListWebhookEndpointsResponse = { endpoints: Array<WebhookEndpoint>, };
+
+export type CopilotSession = { id: string, project_id: string, issue_id: string | null, created_by_user_id: string | null, title: string | null, created_at: string, updated_at: string, };
+
+export type CopilotMessage = { id: string, session_id: string, role: string, content: string, created_at: string, };
+
+export type ListCopilotSessionsResponse = { copilot_sessions: Array<CopilotSession>, };
+
+export type ListCopilotMessagesResponse = { copilot_messages: Array<CopilotMessage>, };
+
 export type Issue = { id: string, project_id: string, issue_number: number, simple_id: string, status_id: string, title: string, description: string | null, priority: IssuePriority | null, start_date: string | null, target_date: string | null, completed_at: string | null, sort_order: number, parent_issue_id: string | null, parent_issue_sort_order: number | null, extension_metadata: JsonValue, creator_user_id: string | null, created_at: string, updated_at: string, };
 
-export type IssueAssignee = { id: string, issue_id: string, user_id: string, assigned_at: string, };
+export type IssueAssignee = { id: string, issue_id: string, 
+/**
+ * Present when the assignee is a human user.
+ */
+user_id: string | null, 
+/**
+ * Present when the assignee is an agent.
+ */
+agent_id: string | null,
+/**
+ * Present when the assignee is a squad.
+ */
+squad_id: string | null, assigned_at: string, };
 
 export type Blob = { id: string, project_id: string, blob_path: string, thumbnail_blob_path: string | null, original_name: string, mime_type: string | null, size_bytes: bigint, hash: string, width: number | null, height: number | null, created_at: string, updated_at: string, };
 
@@ -101,6 +173,30 @@ id?: string, project_id: string, name: string, color: string, };
 
 export type UpdateTagRequest = { name: string | null, color: string | null, };
 
+export type CreateAgentRequest = { id?: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks?: number, chat_runtime?: AgentChatRuntime, api_key?: string | null, base_url?: string | null, model_name?: string | null, };
+
+export type UpdateAgentRequest = { name?: string | null, instructions?: string | null, default_executor?: string | null, max_concurrent_tasks?: number | null, status?: AgentStatus | null, chat_runtime?: AgentChatRuntime | null, };
+
+export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string | null, is_leader_task?: boolean, preferred_repo_id?: string | null, };
+
+export type UpdateAgentTaskRequest = { status: AgentTaskStatus | null, failure_reason: string | null | null, local_workspace_id: string | null | null, local_session_id: string | null | null, claimed_by_host: string | null | null, attempt: number | null, };
+
+export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string | null, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
+
+export type UpdateAutopilotRequest = { name?: string | null, agent_id?: string | null, enabled?: boolean | null, execution_mode?: AutopilotExecutionMode | null, cron_expression?: string | null, timezone?: string | null, concurrency_policy?: AutopilotConcurrencyPolicy | null, issue_title_template?: string | null, issue_description_template?: string | null, };
+
+export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string | null, };
+
+export type UpdateSquadRequest = { name?: string | null, leader_agent_id?: string | null, };
+
+export type CreateWebhookEndpointRequest = { id?: string, project_id: string, name: string, autopilot_id?: string | null, signing_secret?: string | null, };
+
+export type AddSquadMemberRequest = { squad_id: string, agent_id?: string | null, user_id?: string | null, };
+
+export type CreateCopilotSessionRequest = { id?: string, project_id: string, issue_id: string | null, title: string | null, };
+
+export type CreateCopilotMessageRequest = { id?: string, session_id: string, role: string, content: string, };
+
 export type CreateProjectStatusRequest = { 
 /**
  * Optional client-generated ID. If not provided, server generates one.
@@ -124,7 +220,19 @@ export type CreateIssueAssigneeRequest = {
  * Optional client-generated ID. If not provided, server generates one.
  * Using client-generated IDs enables stable optimistic updates.
  */
-id?: string, issue_id: string, user_id: string, };
+id?: string, issue_id: string, 
+/**
+ * Assign a human user. Mutually exclusive with `agent_id` and `squad_id`.
+ */
+user_id?: string, 
+/**
+ * Assign an agent. Mutually exclusive with `user_id` and `squad_id`.
+ */
+agent_id?: string,
+/**
+ * Assign a squad. Mutually exclusive with `user_id` and `agent_id`.
+ */
+squad_id?: string, };
 
 export type CreateIssueFollowerRequest = { 
 /**
@@ -238,6 +346,20 @@ export const PROJECT_TAGS_SHAPE = defineShape<Tag>(
   '/v1/fallback/tags'
 );
 
+export const PROJECT_AGENTS_SHAPE = defineShape<Agent>(
+  'agents',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/agents',
+  '/v1/fallback/agents'
+);
+
+export const PROJECT_AGENT_TASKS_SHAPE = defineShape<AgentTask>(
+  'agent_tasks',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/agent_tasks',
+  '/v1/fallback/agent_tasks'
+);
+
 export const PROJECT_PROJECT_STATUSES_SHAPE = defineShape<ProjectStatus>(
   'project_statuses',
   ['project_id'] as const,
@@ -322,6 +444,34 @@ export const ISSUE_REACTIONS_SHAPE = defineShape<IssueCommentReaction>(
   '/v1/fallback/issue_comment_reactions'
 );
 
+export const PROJECT_AUTOPILOTS_SHAPE = defineShape<Autopilot>(
+  'autopilots',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/autopilots',
+  '/v1/fallback/autopilots'
+);
+
+export const PROJECT_SQUADS_SHAPE = defineShape<Squad>(
+  'squads',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/squads',
+  '/v1/fallback/squads'
+);
+
+export const PROJECT_SQUAD_MEMBERS_SHAPE = defineShape<SquadMember>(
+  'squad_members',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/squad_members',
+  '/v1/fallback/squad_members'
+);
+
+export const USER_INBOX_SHAPE = defineShape<InboxItem>(
+  'inbox_items',
+  [] as const,
+  '/v1/shape/user/inbox',
+  '/v1/fallback/inbox'
+);
+
 // =============================================================================
 // Mutation Definitions
 // =============================================================================
@@ -357,6 +507,16 @@ export const NOTIFICATION_MUTATION = defineMutation<Notification, unknown, Updat
 export const TAG_MUTATION = defineMutation<Tag, CreateTagRequest, UpdateTagRequest>(
   'Tag',
   '/v1/tags'
+);
+
+export const AGENT_MUTATION = defineMutation<Agent, CreateAgentRequest, UpdateAgentRequest>(
+  'Agent',
+  '/v1/agents'
+);
+
+export const AGENT_TASK_MUTATION = defineMutation<AgentTask, CreateAgentTaskRequest, UpdateAgentTaskRequest>(
+  'AgentTask',
+  '/v1/agent_tasks'
 );
 
 export const PROJECT_STATUS_MUTATION = defineMutation<ProjectStatus, CreateProjectStatusRequest, UpdateProjectStatusRequest>(
@@ -402,6 +562,26 @@ export const ISSUE_COMMENT_REACTION_MUTATION = defineMutation<IssueCommentReacti
 export const PULL_REQUEST_ISSUE_MUTATION = defineMutation<PullRequestIssue, CreatePullRequestIssueRequest, unknown>(
   'PullRequestIssue',
   '/v1/pull_request_issues'
+);
+
+export const AUTOPILOT_MUTATION = defineMutation<Autopilot, CreateAutopilotRequest, UpdateAutopilotRequest>(
+  'Autopilot',
+  '/v1/autopilots'
+);
+
+export const SQUAD_MUTATION = defineMutation<Squad, CreateSquadRequest, UpdateSquadRequest>(
+  'Squad',
+  '/v1/squads'
+);
+
+export const SQUAD_MEMBER_MUTATION = defineMutation<SquadMember, AddSquadMemberRequest, unknown>(
+  'SquadMember',
+  '/v1/squads'
+);
+
+export const WEBHOOK_ENDPOINT_MUTATION = defineMutation<WebhookEndpoint, CreateWebhookEndpointRequest, unknown>(
+  'WebhookEndpoint',
+  '/v1/webhooks'
 );
 
 // Type helpers to extract types from a mutation definition

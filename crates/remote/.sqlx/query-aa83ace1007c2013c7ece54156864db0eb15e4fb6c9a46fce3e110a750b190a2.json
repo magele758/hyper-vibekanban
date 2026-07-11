@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE inbox_items\n            SET read_at = NOW()\n            WHERE recipient_user_id = $1\n              AND id = ANY($2)\n              AND read_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa83ace1007c2013c7ece54156864db0eb15e4fb6c9a46fce3e110a750b190a2"
+}

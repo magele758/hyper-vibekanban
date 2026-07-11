@@ -104,6 +104,8 @@ interface IssueCommentsSectionProps {
   attachmentError?: string | null;
   onDismissAttachmentError?: () => void;
   renderEditor: (props: IssueCommentsEditorProps) => ReactNode;
+  /** Extra controls rendered in the composer toolbar row (e.g. mention-agent dropdown) */
+  composerToolbar?: ReactNode;
 }
 
 export function IssueCommentsSection({
@@ -131,6 +133,7 @@ export function IssueCommentsSection({
   attachmentError,
   onDismissAttachmentError,
   renderEditor,
+  composerToolbar,
 }: IssueCommentsSectionProps) {
   const { t } = useTranslation('common');
 
@@ -197,6 +200,7 @@ export function IssueCommentsSection({
             </div>
           )}
           <div className="flex items-center justify-end gap-half">
+            {composerToolbar}
             {onBrowseAttachment && (
               <TooltipProvider>
                 <Tooltip>

@@ -1,0 +1,84 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id                  AS \"id!: Uuid\",\n                recipient_user_id   AS \"recipient_user_id!: Uuid\",\n                project_id,\n                issue_id,\n                type                AS \"item_type!\",\n                title               AS \"title!\",\n                body                AS \"body!\",\n                payload             AS \"payload!: Value\",\n                read_at,\n                archived_at,\n                created_at          AS \"created_at!: DateTime<Utc>\"\n            FROM inbox_items\n            WHERE recipient_user_id = $1\n              AND ($2 OR archived_at IS NULL)\n            ORDER BY created_at DESC\n            LIMIT $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "recipient_user_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "issue_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "item_type!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "title!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "body!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "payload!: Value",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "read_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "archived_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "c9c76b53695eeef5233fa7aa236c4bb88a99c08a14ac3acb4bfb995f8f426809"
+}

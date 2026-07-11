@@ -1,0 +1,175 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "issue_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!: AgentTaskStatus",
+        "type_info": {
+          "Custom": {
+            "name": "agent_task_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "dispatched",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "trigger!: AgentTaskTrigger",
+        "type_info": {
+          "Custom": {
+            "name": "agent_task_trigger",
+            "kind": {
+              "Enum": [
+                "assign",
+                "mention",
+                "manual",
+                "copilot",
+                "autopilot"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "priority!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "attempt!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "max_attempts!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "failure_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "local_workspace_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "local_session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "claimed_by_host",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "claimed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "force_fresh_session!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "resume_session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 17,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 18,
+        "name": "is_leader_task!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "preferred_repo_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "created_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "updated_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "01428eca99966a3258a07b9e6cb27487981957bb3ffa35b95125e032b860fb83"
+}

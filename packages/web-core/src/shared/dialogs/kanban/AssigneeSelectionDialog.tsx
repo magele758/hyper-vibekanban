@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { useTranslation } from 'react-i18next';
-import type { Project } from 'shared/remote-types';
+import type { Project, Squad } from 'shared/remote-types';
 import type { OrganizationMemberWithProfile } from 'shared/types';
 import { defineModal } from '@/shared/lib/modals';
 import { CommandDialog } from '@vibe/ui/components/Command';
@@ -27,6 +27,7 @@ import {
   patchKanbanIssueComposer,
   useKanbanIssueComposer,
 } from '@/shared/stores/useKanbanIssueComposerStore';
+import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
 export interface AssigneeSelectionDialogProps {
   projectId: string;
   issueIds: string[];
@@ -73,6 +74,16 @@ function AssigneeSelectionContent({
     [destination]
   );
   const resolvedProjectId = projectId || projectDestination?.projectId || null;
+
+  // Load squads for this project
+  const [squads, setSquads] = useState<Squad[]>([]);
+  useEffect(() => {
+    if (!resolvedProjectId) return;
+    boardAgentsApi
+      .listSquads(resolvedProjectId)
+      .then(setSquads)
+      .catch(() => undefined);
+  }, [resolvedProjectId]);
   const issueComposerKey = useMemo(() => {
     if (!resolvedProjectId) return null;
     const hostId =
@@ -88,8 +99,8 @@ function AssigneeSelectionContent({
     [membersWithProfilesById]
   );
 
-  // Get issue assignees and mutation functions from ProjectContext
-  const { issueAssignees, insertIssueAssignee, removeIssueAssignee } =
+  // Get issue assignees, agents and mutation functions from ProjectContext
+  const { issueAssignees, agents, insertIssueAssignee, removeIssueAssignee } =
     useProjectContext();
 
   // Local state for create mode when using callback pattern
@@ -124,7 +135,12 @@ function AssigneeSelectionContent({
     }
     return issueAssignees
       .filter((a) => issueIds.includes(a.issue_id))
-      .map((a) => a.user_id);
+      .flatMap((a) => {
+        if (a.user_id) return [a.user_id];
+        if (a.agent_id) return [`agent:${a.agent_id}`];
+        if (a.squad_id) return [`squad:${a.squad_id}`];
+        return [];
+      });
   }, [
     isCreateMode,
     issueIds,
@@ -145,6 +161,34 @@ function AssigneeSelectionContent({
   }, [modal.visible]);
 
   const options: MultiSelectOption<string>[] = useMemo(() => {
+    const squadOptions = squads.map((squad) => ({
+      value: `squad:${squad.id}`,
+      label: `👥 ${squad.name}`,
+      searchValue: `squad ${squad.name}`,
+      renderOption: () => (
+        <div className="flex items-center gap-base">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-[10px]">
+            S
+          </div>
+          <span>{squad.name}</span>
+        </div>
+      ),
+    }));
+
+    const agentOptions = agents.map((agent) => ({
+      value: `agent:${agent.id}`,
+      label: `🤖 ${agent.name}`,
+      searchValue: `agent ${agent.name} ${agent.instructions}`,
+      renderOption: () => (
+        <div className="flex items-center gap-base">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-[10px]">
+            A
+          </div>
+          <span>{agent.name}</span>
+        </div>
+      ),
+    }));
+
     const userOptions = users.map((user) => ({
       value: user.user_id,
       label: getUserDisplayName(user),
@@ -158,20 +202,25 @@ function AssigneeSelectionContent({
     }));
 
     if (!isCreateMode || !additionalOptions || additionalOptions.length === 0) {
-      return userOptions;
+      return [...squadOptions, ...agentOptions, ...userOptions];
     }
 
-    return [...additionalOptions, ...userOptions];
-  }, [users, isCreateMode, additionalOptions]);
+    return [...additionalOptions, ...squadOptions, ...agentOptions, ...userOptions];
+  }, [users, agents, squads, isCreateMode, additionalOptions]);
 
   const handleToggle = useCallback(
-    (userId: string) => {
-      const isSelected = selectedIds.includes(userId);
+    (selectedValue: string) => {
+      const isSelected = selectedIds.includes(selectedValue);
+      const isAgent = selectedValue.startsWith('agent:');
+      const isSquad = selectedValue.startsWith('squad:');
+      const agentId = isAgent ? selectedValue.slice('agent:'.length) : null;
+      const squadId = isSquad ? selectedValue.slice('squad:'.length) : null;
+      const userId = !isAgent && !isSquad ? selectedValue : null;
 
       if (isCreateMode) {
         const newIds = isSelected
-          ? selectedIds.filter((id: string) => id !== userId)
-          : [...selectedIds, userId];
+          ? selectedIds.filter((id: string) => id !== selectedValue)
+          : [...selectedIds, selectedValue];
         if (onCreateModeAssigneesChange) {
           setLocalCreateAssignees(newIds);
           onCreateModeAssigneesChange(newIds);
@@ -179,19 +228,35 @@ function AssigneeSelectionContent({
           setIssueComposerAssigneeIds(newIds);
         }
       } else {
-        // Edit mode: apply mutation immediately for each issue
         for (const issueId of issueIds) {
           if (isSelected) {
-            // Remove the assignee
             const record = issueAssignees.find(
-              (a) => a.issue_id === issueId && a.user_id === userId
+              (a) =>
+                a.issue_id === issueId &&
+                (agentId
+                  ? a.agent_id === agentId
+                  : squadId
+                    ? a.squad_id === squadId
+                    : a.user_id === userId)
             );
             if (record) {
               removeIssueAssignee(record.id);
             }
-          } else {
-            // Add the assignee
-            insertIssueAssignee({ issue_id: issueId, user_id: userId });
+          } else if (agentId) {
+            insertIssueAssignee({
+              issue_id: issueId,
+              agent_id: agentId,
+            });
+          } else if (squadId) {
+            insertIssueAssignee({
+              issue_id: issueId,
+              squad_id: squadId,
+            });
+          } else if (userId) {
+            insertIssueAssignee({
+              issue_id: issueId,
+              user_id: userId,
+            });
           }
         }
       }

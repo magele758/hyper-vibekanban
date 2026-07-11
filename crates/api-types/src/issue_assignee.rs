@@ -7,7 +7,12 @@ use uuid::Uuid;
 pub struct IssueAssignee {
     pub id: Uuid,
     pub issue_id: Uuid,
-    pub user_id: Uuid,
+    /// Present when the assignee is a human user.
+    pub user_id: Option<Uuid>,
+    /// Present when the assignee is an agent.
+    pub agent_id: Option<Uuid>,
+    /// Present when the assignee is a squad.
+    pub squad_id: Option<Uuid>,
     pub assigned_at: DateTime<Utc>,
 }
 
@@ -18,7 +23,18 @@ pub struct CreateIssueAssigneeRequest {
     #[ts(optional)]
     pub id: Option<Uuid>,
     pub issue_id: Uuid,
-    pub user_id: Uuid,
+    /// Assign a human user. Mutually exclusive with `agent_id` and `squad_id`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub user_id: Option<Uuid>,
+    /// Assign an agent. Mutually exclusive with `user_id` and `squad_id`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub agent_id: Option<Uuid>,
+    /// Assign a squad. Mutually exclusive with `user_id` and `agent_id`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub squad_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

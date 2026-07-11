@@ -13,12 +13,19 @@ import type {
   PullRequest,
   PullRequestIssue,
   Workspace,
+  Agent,
+  AgentTask,
+  Autopilot,
+  Squad,
+  SquadMember,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateProjectStatusRequest,
   UpdateProjectStatusRequest,
   CreateTagRequest,
   UpdateTagRequest,
+  CreateAgentRequest,
+  UpdateAgentRequest,
   CreateIssueAssigneeRequest,
   CreateIssueFollowerRequest,
   CreateIssueTagRequest,
@@ -48,6 +55,11 @@ export interface ProjectContextValue {
   issues: Issue[];
   statuses: ProjectStatus[];
   tags: Tag[];
+  agents: Agent[];
+  agentTasks: AgentTask[];
+  autopilots: Autopilot[];
+  squads: Squad[];
+  squadMembers: SquadMember[];
   issueAssignees: IssueAssignee[];
   issueFollowers: IssueFollower[];
   issueTags: IssueTag[];
@@ -84,6 +96,14 @@ export interface ProjectContextValue {
   insertTag: (data: CreateTagRequest) => InsertResult<Tag>;
   updateTag: (id: string, changes: Partial<UpdateTagRequest>) => MutationResult;
   removeTag: (id: string) => MutationResult;
+
+  // Agent mutations
+  insertAgent: (data: CreateAgentRequest) => InsertResult<Agent>;
+  updateAgent: (
+    id: string,
+    changes: Partial<UpdateAgentRequest>
+  ) => MutationResult;
+  removeAgent: (id: string) => MutationResult;
 
   // IssueAssignee mutations
   insertIssueAssignee: (

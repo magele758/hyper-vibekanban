@@ -154,7 +154,7 @@ pub async fn collect_issue_recipients(
     let assignees = IssueAssigneeRepository::list_by_issue(pool, issue_id).await?;
     let followers = IssueFollowerRepository::list_by_issue(pool, issue_id).await?;
 
-    let mut user_ids: HashSet<Uuid> = assignees.iter().map(|a| a.user_id).collect();
+    let mut user_ids: HashSet<Uuid> = assignees.iter().filter_map(|a| a.user_id).collect();
     user_ids.extend(followers.iter().map(|f| f.user_id));
     user_ids.remove(&exclude_user_id);
 
