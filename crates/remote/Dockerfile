@@ -83,7 +83,7 @@ RUN if [ -n "${APT_MIRROR}" ]; then \
       > /usr/local/cargo/config.toml; \
   fi \
   && apt-get update \
-  && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates git openssh-client \
+  && apt-get install -y --no-install-recommends build-essential pkg-config libssl-dev ca-certificates git openssh-client \
   && mkdir -p -m 0700 /root/.ssh \
   && (ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null || printf '%s\n' \
     'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5arkCK58UgpUAlkN4' \
@@ -128,16 +128,16 @@ RUN mkdir -p /app/bin
 
 # When building without FEATURES (self-hosted), strip billing so cargo won't fetch the private repo.
 RUN if [ -z "${FEATURES}" ]; then \
-      sed -i '/^billing = {.*vibe-kanban-private.*/d' crates/remote/Cargo.toml; \
+      sed -i '/^billing = {/d' crates/remote/Cargo.toml; \
       sed -i '/^# private crate for billing/d' crates/remote/Cargo.toml; \
       sed -i 's/^vk-billing = \["dep:billing"\]/vk-billing = []/' crates/remote/Cargo.toml; \
       sed -i '/^[[:space:]]*"billing",$/d' crates/remote/Cargo.lock; \
       perl -i -0pe 's/\n\[\[package\]\]\nname = "billing"\n.*?(?=\n\[\[package\]\]|\z)//s' crates/remote/Cargo.lock; \
     fi
 
-RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
-    --mount=type=cache,id=remote-target,target=/app/target \
+RUN --mount=type=cache,id=cargo-registry-v2,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-git-v2,target=/usr/local/cargo/git \
+    --mount=type=cache,id=remote-target-v2,target=/app/target \
     cargo build --locked --release --manifest-path crates/remote/Cargo.toml ${FEATURES:+--features ${FEATURES}} \
  && cp /app/target/release/${APP_NAME} /app/bin/${APP_NAME}
 
