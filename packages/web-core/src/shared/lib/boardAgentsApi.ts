@@ -5,13 +5,15 @@ import type {
   CreateAutopilotRequest,
   UpdateAutopilotRequest,
   ListInboxResponse,
-  InboxItem,
   Squad,
   SquadMember,
   CreateSquadRequest,
   WebhookEndpoint,
   CreateWebhookEndpointRequest,
+  FeishuBotBinding,
 } from 'shared/remote-types';
+
+export type { FeishuBotBinding };
 
 // Prefer same-origin Vite proxy (`/agent-sidecar`) so the browser does not
 // cross-origin fetch 127.0.0.1 (Private Network Access / silent failures).
@@ -304,6 +306,59 @@ export const boardAgentsApi = {
     return data.data;
   },
 
+  // ── Feishu (Lark) ─────────────────────────────────────────────────────────
+
+  async listFeishuBindings(projectId: string): Promise<FeishuBotBinding[]> {
+    const data = await json<{ bindings: FeishuBotBinding[] }>(
+      await makeRequest(`/v1/feishu/bindings?project_id=${projectId}`)
+    );
+    return data.bindings;
+  },
+
+  async createFeishuBinding(body: {
+    project_id: string;
+    agent_id: string;
+    name?: string;
+    app_id: string;
+    app_secret: string;
+    encrypt_key?: string;
+    verification_token?: string;
+    reply_on_complete?: boolean;
+  }): Promise<FeishuBotBinding> {
+    return json(
+      await makeRequest('/v1/feishu/bindings', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+
+  async updateFeishuBinding(
+    id: string,
+    body: Record<string, unknown>
+  ): Promise<FeishuBotBinding> {
+    return json(
+      await makeRequest(`/v1/feishu/bindings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+
+  async deleteFeishuBinding(id: string): Promise<void> {
+    await json<unknown>(
+      await makeRequest(`/v1/feishu/bindings/${id}`, { method: 'DELETE' })
+    );
+  },
+
+  async rotateFeishuCallbackToken(id: string): Promise<FeishuBotBinding> {
+    return json(
+      await makeRequest(`/v1/feishu/bindings/${id}/rotate-token`, {
+        method: 'POST',
+      })
+    );
+  },
+
   async chatStream(params: {
     project_id: string;
     session_id: string;
@@ -345,9 +400,7 @@ export const boardAgentsApi = {
       const chunks = buffer.split('\n\n');
       buffer = chunks.pop() ?? '';
       for (const chunk of chunks) {
-        const line = chunk
-          .split('\n')
-          .find((l) => l.startsWith('data: '));
+        const line = chunk.split('\n').find((l) => l.startsWith('data: '));
         if (!line) continue;
         const payload = JSON.parse(line.slice(6)) as {
           type: string;

@@ -26,11 +26,27 @@ export type AgentStatus = "idle" | "working" | "offline" | "error";
 
 export type AgentChatRuntime = "cursor" | "pi" | "opencode";
 
-export type AgentTask = { id: string, agent_id: string, issue_id: string, status: AgentTaskStatus, trigger: AgentTaskTrigger, priority: number, attempt: number, max_attempts: number, failure_reason: string | null, local_workspace_id: string | null, local_session_id: string | null, claimed_by_host: string | null, claimed_at: string | null, started_at: string | null, completed_at: string | null, force_fresh_session: boolean, resume_session_id: string | null, squad_id: string | null, is_leader_task: boolean, preferred_repo_id: string | null, created_at: string, updated_at: string, };
+export type AgentTask = { id: string, agent_id: string, issue_id: string, status: AgentTaskStatus, trigger: AgentTaskTrigger, priority: number, attempt: number, max_attempts: number, failure_reason: string | null, local_workspace_id: string | null, local_session_id: string | null, claimed_by_host: string | null, claimed_at: string | null, started_at: string | null, completed_at: string | null, 
+/**
+ * If true, the executor must not resume any previous session.
+ */
+force_fresh_session: boolean, 
+/**
+ * Session to resume (populated automatically during claim unless force_fresh_session).
+ */
+resume_session_id: string | null, 
+/**
+ * Squad this task belongs to (for leader/squad coordination).
+ */
+squad_id: string | null, is_leader_task: boolean, 
+/**
+ * Preferred local repo path/id hint for the executor.
+ */
+preferred_repo_id: string | null, created_at: string, updated_at: string, };
 
 export type AgentTaskStatus = "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
 
-export type AgentTaskTrigger = "assign" | "mention" | "manual" | "copilot" | "autopilot";
+export type AgentTaskTrigger = "assign" | "mention" | "manual" | "copilot" | "autopilot" | "feishu";
 
 export type ClaimAgentTaskResponse = { agent_task: AgentTask | null, };
 
@@ -62,9 +78,9 @@ export type ListSquadMembersResponse = { members: Array<SquadMember>, };
 
 export type InboxItem = { id: string, recipient_user_id: string, project_id: string | null, issue_id: string | null, type: string, title: string, body: string, payload: JsonValue, read_at: string | null, archived_at: string | null, created_at: string, };
 
-export type InboxUnreadCountResponse = { unread_count: number, };
+export type InboxUnreadCountResponse = { unread_count: bigint, };
 
-export type ListInboxResponse = { items: Array<InboxItem>, unread_count: number, };
+export type ListInboxResponse = { items: Array<InboxItem>, unread_count: bigint, };
 
 export type WebhookEndpoint = { id: string, project_id: string, autopilot_id: string | null, token: string, name: string, enabled: boolean, created_at: string, };
 
@@ -72,7 +88,23 @@ export type WebhookDelivery = { id: string, webhook_endpoint_id: string, dedupe_
 
 export type ListWebhookEndpointsResponse = { endpoints: Array<WebhookEndpoint>, };
 
-export type CopilotSession = { id: string, project_id: string, issue_id: string | null, created_by_user_id: string | null, title: string | null, created_at: string, updated_at: string, };
+export type FeishuBotBinding = { id: string, project_id: string, agent_id: string, name: string, app_id: string, 
+/**
+ * Always true when a secret is stored; the raw secret is never returned.
+ */
+has_app_secret: boolean, has_encrypt_key: boolean, has_verification_token: boolean, callback_token: string, enabled: boolean, reply_on_complete: boolean, created_at: string, updated_at: string, };
+
+export type ListFeishuBotBindingsResponse = { bindings: Array<FeishuBotBinding>, };
+
+export type CopilotSession = { id: string, project_id: string, 
+/**
+ * NULL = project-level Copilot; set = per-board-agent chat.
+ */
+agent_id: string | null, issue_id: string | null, created_by_user_id: string | null, title: string | null, 
+/**
+ * Cursor SDK agent id for Agent.resume().
+ */
+external_agent_id: string | null, created_at: string, updated_at: string, };
 
 export type CopilotMessage = { id: string, session_id: string, role: string, content: string, created_at: string, };
 
@@ -90,7 +122,7 @@ user_id: string | null,
 /**
  * Present when the assignee is an agent.
  */
-agent_id: string | null,
+agent_id: string | null, 
 /**
  * Present when the assignee is a squad.
  */
@@ -173,27 +205,33 @@ id?: string, project_id: string, name: string, color: string, };
 
 export type UpdateTagRequest = { name: string | null, color: string | null, };
 
-export type CreateAgentRequest = { id?: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks?: number, chat_runtime?: AgentChatRuntime, api_key?: string | null, base_url?: string | null, model_name?: string | null, };
+export type CreateAgentRequest = { id?: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks?: number, chat_runtime?: AgentChatRuntime, 
+/**
+ * Optional Cursor SDK credentials set at create time.
+ */
+api_key?: string, base_url?: string, model_name?: string, };
 
-export type UpdateAgentRequest = { name?: string | null, instructions?: string | null, default_executor?: string | null, max_concurrent_tasks?: number | null, status?: AgentStatus | null, chat_runtime?: AgentChatRuntime | null, };
+export type UpdateAgentRequest = { name: string | null, instructions: string | null, default_executor: string | null | null, max_concurrent_tasks: number | null, status: AgentStatus | null, chat_runtime: AgentChatRuntime | null, };
 
-export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string | null, is_leader_task?: boolean, preferred_repo_id?: string | null, };
+export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string, is_leader_task?: boolean, preferred_repo_id?: string, };
 
-export type UpdateAgentTaskRequest = { status: AgentTaskStatus | null, failure_reason: string | null | null, local_workspace_id: string | null | null, local_session_id: string | null | null, claimed_by_host: string | null | null, attempt: number | null, };
+export type UpdateAgentTaskRequest = { status?: AgentTaskStatus | null, failure_reason?: string | null | null, local_workspace_id?: string | null | null, local_session_id?: string | null | null, claimed_by_host?: string | null | null, attempt?: number | null, };
 
-export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string | null, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
+export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
 
-export type UpdateAutopilotRequest = { name?: string | null, agent_id?: string | null, enabled?: boolean | null, execution_mode?: AutopilotExecutionMode | null, cron_expression?: string | null, timezone?: string | null, concurrency_policy?: AutopilotConcurrencyPolicy | null, issue_title_template?: string | null, issue_description_template?: string | null, };
+export type UpdateAutopilotRequest = { name: string | null, agent_id: string | null | null, enabled: boolean | null, execution_mode: AutopilotExecutionMode | null, cron_expression: string | null, timezone: string | null, concurrency_policy: AutopilotConcurrencyPolicy | null, issue_title_template: string | null, issue_description_template: string | null, };
 
-export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string | null, };
+export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string, };
 
-export type UpdateSquadRequest = { name?: string | null, leader_agent_id?: string | null, };
+export type UpdateSquadRequest = { name: string | null, leader_agent_id: string | null | null, };
 
-export type CreateWebhookEndpointRequest = { id?: string, project_id: string, name: string, autopilot_id?: string | null, signing_secret?: string | null, };
+export type CreateWebhookEndpointRequest = { id?: string, project_id: string, name: string, autopilot_id?: string, signing_secret?: string, };
 
-export type AddSquadMemberRequest = { squad_id: string, agent_id?: string | null, user_id?: string | null, };
+export type CreateFeishuBotBindingRequest = { id?: string, project_id: string, agent_id: string, name?: string, app_id: string, app_secret: string, encrypt_key?: string, verification_token?: string, reply_on_complete?: boolean, };
 
-export type CreateCopilotSessionRequest = { id?: string, project_id: string, issue_id: string | null, title: string | null, };
+export type UpdateFeishuBotBindingRequest = { name?: string | null, agent_id?: string | null, app_id?: string | null, app_secret?: string | null, encrypt_key?: string | null | null, verification_token?: string | null | null, enabled?: boolean | null, reply_on_complete?: boolean | null, };
+
+export type CreateCopilotSessionRequest = { id?: string, project_id: string, agent_id?: string, issue_id: string | null, title: string | null, };
 
 export type CreateCopilotMessageRequest = { id?: string, session_id: string, role: string, content: string, };
 
@@ -228,7 +266,7 @@ user_id?: string,
 /**
  * Assign an agent. Mutually exclusive with `user_id` and `squad_id`.
  */
-agent_id?: string,
+agent_id?: string, 
 /**
  * Assign a squad. Mutually exclusive with `user_id` and `agent_id`.
  */
@@ -360,6 +398,27 @@ export const PROJECT_AGENT_TASKS_SHAPE = defineShape<AgentTask>(
   '/v1/fallback/agent_tasks'
 );
 
+export const PROJECT_AUTOPILOTS_SHAPE = defineShape<Autopilot>(
+  'autopilots',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/autopilots',
+  '/v1/fallback/autopilots'
+);
+
+export const PROJECT_SQUADS_SHAPE = defineShape<Squad>(
+  'squads',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/squads',
+  '/v1/fallback/squads'
+);
+
+export const PROJECT_SQUAD_MEMBERS_SHAPE = defineShape<SquadMember>(
+  'squad_members',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/squad_members',
+  '/v1/fallback/squad_members'
+);
+
 export const PROJECT_PROJECT_STATUSES_SHAPE = defineShape<ProjectStatus>(
   'project_statuses',
   ['project_id'] as const,
@@ -379,6 +438,13 @@ export const USER_WORKSPACES_SHAPE = defineShape<Workspace>(
   ['owner_user_id'] as const,
   '/v1/shape/user/workspaces',
   '/v1/fallback/user_workspaces'
+);
+
+export const USER_INBOX_SHAPE = defineShape<InboxItem>(
+  'inbox_items',
+  ['recipient_user_id'] as const,
+  '/v1/shape/user/inbox',
+  '/v1/fallback/inbox'
 );
 
 export const PROJECT_WORKSPACES_SHAPE = defineShape<Workspace>(
@@ -442,34 +508,6 @@ export const ISSUE_REACTIONS_SHAPE = defineShape<IssueCommentReaction>(
   ['issue_id'] as const,
   '/v1/shape/issue/{issue_id}/reactions',
   '/v1/fallback/issue_comment_reactions'
-);
-
-export const PROJECT_AUTOPILOTS_SHAPE = defineShape<Autopilot>(
-  'autopilots',
-  ['project_id'] as const,
-  '/v1/shape/project/{project_id}/autopilots',
-  '/v1/fallback/autopilots'
-);
-
-export const PROJECT_SQUADS_SHAPE = defineShape<Squad>(
-  'squads',
-  ['project_id'] as const,
-  '/v1/shape/project/{project_id}/squads',
-  '/v1/fallback/squads'
-);
-
-export const PROJECT_SQUAD_MEMBERS_SHAPE = defineShape<SquadMember>(
-  'squad_members',
-  ['project_id'] as const,
-  '/v1/shape/project/{project_id}/squad_members',
-  '/v1/fallback/squad_members'
-);
-
-export const USER_INBOX_SHAPE = defineShape<InboxItem>(
-  'inbox_items',
-  [] as const,
-  '/v1/shape/user/inbox',
-  '/v1/fallback/inbox'
 );
 
 // =============================================================================
@@ -562,26 +600,6 @@ export const ISSUE_COMMENT_REACTION_MUTATION = defineMutation<IssueCommentReacti
 export const PULL_REQUEST_ISSUE_MUTATION = defineMutation<PullRequestIssue, CreatePullRequestIssueRequest, unknown>(
   'PullRequestIssue',
   '/v1/pull_request_issues'
-);
-
-export const AUTOPILOT_MUTATION = defineMutation<Autopilot, CreateAutopilotRequest, UpdateAutopilotRequest>(
-  'Autopilot',
-  '/v1/autopilots'
-);
-
-export const SQUAD_MUTATION = defineMutation<Squad, CreateSquadRequest, UpdateSquadRequest>(
-  'Squad',
-  '/v1/squads'
-);
-
-export const SQUAD_MEMBER_MUTATION = defineMutation<SquadMember, AddSquadMemberRequest, unknown>(
-  'SquadMember',
-  '/v1/squads'
-);
-
-export const WEBHOOK_ENDPOINT_MUTATION = defineMutation<WebhookEndpoint, CreateWebhookEndpointRequest, unknown>(
-  'WebhookEndpoint',
-  '/v1/webhooks'
 );
 
 // Type helpers to extract types from a mutation definition

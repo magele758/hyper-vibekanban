@@ -8,6 +8,7 @@ pub mod copilot;
 pub mod digest;
 pub mod electric_publications;
 pub mod export;
+pub mod feishu;
 pub mod github_app;
 pub mod hosts;
 pub mod identity_errors;

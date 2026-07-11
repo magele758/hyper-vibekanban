@@ -33,6 +33,7 @@ pub mod copilot;
 pub(crate) mod electric_proxy;
 pub(crate) mod error;
 mod export;
+pub mod feishu;
 mod github_app;
 pub mod hosts;
 mod identity;
@@ -115,6 +116,7 @@ pub fn router(state: AppState) -> Router {
         .merge(review::public_router())
         .merge(github_app::public_router())
         .merge(webhooks::public_router())
+        .merge(feishu::public_router())
         .merge(billing::public_router());
 
     let v1_protected = Router::<AppState>::new()
@@ -134,6 +136,7 @@ pub fn router(state: AppState) -> Router {
         .merge(squads::router())
         .merge(inbox::router())
         .merge(webhooks::router())
+        .merge(feishu::router())
         .merge(copilot::router())
         .merge(issue_comments::router())
         .merge(issue_comment_reactions::router())

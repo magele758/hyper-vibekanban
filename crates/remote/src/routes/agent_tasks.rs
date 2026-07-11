@@ -232,6 +232,7 @@ async fn update_agent_task(
     ) && existing.status != response.data.status
     {
         notify_agent_task_terminal(state.pool(), &response.data).await;
+        super::feishu::maybe_reply_feishu_on_terminal(state.pool(), &response.data).await;
     }
 
     Ok(Json(response))
@@ -322,12 +323,11 @@ async fn notify_agent_task_terminal(pool: &sqlx::PgPool, task: &AgentTask) {
         }
     }
     // Board inbox subscribers (issue_subscribers table).
-    if let Ok(rows) = sqlx::query_scalar::<_, Uuid>(
-        "SELECT user_id FROM issue_subscribers WHERE issue_id = $1",
-    )
-    .bind(issue.id)
-    .fetch_all(pool)
-    .await
+    if let Ok(rows) =
+        sqlx::query_scalar::<_, Uuid>("SELECT user_id FROM issue_subscribers WHERE issue_id = $1")
+            .bind(issue.id)
+            .fetch_all(pool)
+            .await
     {
         recipients.extend(rows);
     }

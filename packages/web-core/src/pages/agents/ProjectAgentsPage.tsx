@@ -20,6 +20,7 @@ import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
 import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
+import type { FeishuBotBinding } from '@/shared/lib/boardAgentsApi';
 import { cn } from '@/shared/lib/utils';
 import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
 import type {
@@ -28,7 +29,7 @@ import type {
   WebhookEndpoint,
 } from 'shared/remote-types';
 
-type Tab = 'agents' | 'autopilots' | 'squads' | 'webhooks';
+type Tab = 'agents' | 'autopilots' | 'squads' | 'webhooks' | 'feishu';
 
 // ── Agents tab ───────────────────────────────────────────────────────────────
 
@@ -551,7 +552,9 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
 
                 {showRuns === ap.id && (
                   <div className="mt-3 border-t border-border pt-3">
-                    <p className="mb-2 text-xs font-medium text-low">运行记录</p>
+                    <p className="mb-2 text-xs font-medium text-low">
+                      运行记录
+                    </p>
                     {!runs[ap.id] ? (
                       <p className="text-xs text-low">加载中…</p>
                     ) : runs[ap.id].length === 0 ? (
@@ -616,8 +619,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const membersFor = useCallback(
-    (squadId: string) =>
-      allSquadMembers.filter((m) => m.squad_id === squadId),
+    (squadId: string) => allSquadMembers.filter((m) => m.squad_id === squadId),
     [allSquadMembers]
   );
 
@@ -824,37 +826,35 @@ function SquadsTab({ projectId }: { projectId: string }) {
                     {(() => {
                       const members = membersFor(squad.id);
                       if (members.length === 0) {
-                        return (
-                          <p className="text-xs text-low">暂无成员</p>
-                        );
+                        return <p className="text-xs text-low">暂无成员</p>;
                       }
                       return (
-                      <ul className="space-y-1">
-                        {members.map((m) => {
-                          const agentName = agents.find(
-                            (a) => a.id === m.agent_id
-                          )?.name;
-                          return (
-                            <li
-                              key={m.id}
-                              className="flex items-center justify-between text-xs"
-                            >
-                              <span className="text-normal">
-                                {agentName ?? m.agent_id ?? m.user_id ?? m.id}
-                              </span>
-                              <button
-                                type="button"
-                                className="text-low hover:text-destructive"
-                                onClick={() =>
-                                  void handleRemoveMember(squad.id, m.id)
-                                }
+                        <ul className="space-y-1">
+                          {members.map((m) => {
+                            const agentName = agents.find(
+                              (a) => a.id === m.agent_id
+                            )?.name;
+                            return (
+                              <li
+                                key={m.id}
+                                className="flex items-center justify-between text-xs"
                               >
-                                移除
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
+                                <span className="text-normal">
+                                  {agentName ?? m.agent_id ?? m.user_id ?? m.id}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-low hover:text-destructive"
+                                  onClick={() =>
+                                    void handleRemoveMember(squad.id, m.id)
+                                  }
+                                >
+                                  移除
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       );
                     })()}
                   </div>
@@ -925,7 +925,7 @@ function WebhooksTab({ projectId }: { projectId: string }) {
   };
 
   const handleCopy = (token: string) => {
-    const url = `${apiBase}/v1/webhooks/${token}`;
+    const url = `${apiBase}/v1/hooks/${token}`;
     void navigator.clipboard.writeText(url).then(() => {
       setCopied(token);
       setTimeout(() => setCopied(null), 2000);
@@ -933,20 +933,14 @@ function WebhooksTab({ projectId }: { projectId: string }) {
   };
 
   const handleRotate = async (id: string) => {
-    if (
-      !window.confirm(
-        '旋转 Token 会使旧 URL 立即失效，确定继续？'
-      )
-    ) {
+    if (!window.confirm('旋转 Token 会使旧 URL 立即失效，确定继续？')) {
       return;
     }
     setRotating(id);
     setError(null);
     try {
       const updated = await boardAgentsApi.rotateWebhookToken(id);
-      setEndpoints((prev) =>
-        prev.map((ep) => (ep.id === id ? updated : ep))
-      );
+      setEndpoints((prev) => prev.map((ep) => (ep.id === id ? updated : ep)));
       setNewToken((prev) => ({ ...prev, [id]: updated.token }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1001,7 +995,7 @@ function WebhooksTab({ projectId }: { projectId: string }) {
       ) : (
         <div className="space-y-3">
           {endpoints.map((ep) => {
-            const url = `${apiBase}/v1/webhooks/${ep.token}`;
+            const url = `${apiBase}/v1/hooks/${ep.token}`;
             return (
               <div
                 key={ep.id}
@@ -1063,10 +1057,12 @@ function WebhooksTab({ projectId }: { projectId: string }) {
                 </div>
                 {newToken[ep.id] && (
                   <div className="mt-2 border-t border-border pt-2">
-                    <p className="mb-1 text-xs text-low">新 Token（请立即复制，刷新后不再显示）：</p>
+                    <p className="mb-1 text-xs text-low">
+                      新 Token（请立即复制，刷新后不再显示）：
+                    </p>
                     <div className="flex items-center gap-2">
                       <code className="max-w-sm truncate rounded bg-primary px-2 py-1 text-xs font-mono text-normal">
-                        {`${apiBase}/v1/webhooks/${newToken[ep.id]}`}
+                        {`${apiBase}/v1/hooks/${newToken[ep.id]}`}
                       </code>
                       <button
                         type="button"
@@ -1091,6 +1087,305 @@ function WebhooksTab({ projectId }: { projectId: string }) {
   );
 }
 
+// ── Feishu tab ───────────────────────────────────────────────────────────────
+
+function FeishuTab({ projectId }: { projectId: string }) {
+  const { agents } = useProjectContext();
+  const [bindings, setBindings] = useState<FeishuBotBinding[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('飞书机器人');
+  const [agentId, setAgentId] = useState('');
+  const [appId, setAppId] = useState('');
+  const [appSecret, setAppSecret] = useState('');
+  const [encryptKey, setEncryptKey] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
+  const [replyOnComplete, setReplyOnComplete] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const apiBase = getRemoteApiUrl();
+
+  const load = useCallback(async () => {
+    try {
+      const list = await boardAgentsApi.listFeishuBindings(projectId);
+      setBindings(list);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!agentId && agents.length > 0) {
+      setAgentId(agents[0].id);
+    }
+  }, [agents, agentId]);
+
+  const handleCreate = async () => {
+    if (!agentId || !appId.trim() || !appSecret.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await boardAgentsApi.createFeishuBinding({
+        project_id: projectId,
+        agent_id: agentId,
+        name: name.trim() || '飞书机器人',
+        app_id: appId.trim(),
+        app_secret: appSecret,
+        encrypt_key: encryptKey.trim() || undefined,
+        verification_token: verificationToken.trim() || undefined,
+        reply_on_complete: replyOnComplete,
+      });
+      setCreating(false);
+      setAppId('');
+      setAppSecret('');
+      setEncryptKey('');
+      setVerificationToken('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (id: string, bindingName: string) => {
+    if (!window.confirm(`确定删除飞书绑定「${bindingName}」？`)) return;
+    try {
+      await boardAgentsApi.deleteFeishuBinding(id);
+      setBindings((prev) => prev.filter((b) => b.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleToggle = async (b: FeishuBotBinding) => {
+    try {
+      const updated = await boardAgentsApi.updateFeishuBinding(b.id, {
+        enabled: !b.enabled,
+      });
+      setBindings((prev) => prev.map((x) => (x.id === b.id ? updated : x)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleCopy = (token: string) => {
+    const url = `${apiBase}/v1/feishu/events/${token}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(token);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
+
+  const handleRotate = async (id: string) => {
+    if (!window.confirm('旋转回调 Token 会使旧 URL 立即失效，确定继续？')) {
+      return;
+    }
+    try {
+      const updated = await boardAgentsApi.rotateFeishuCallbackToken(id);
+      setBindings((prev) => prev.map((b) => (b.id === id ? updated : b)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const agentName = (id: string) =>
+    agents.find((a) => a.id === id)?.name ?? id.slice(0, 8);
+
+  return (
+    <div className="p-6">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <p className="text-sm text-low">
+          绑定飞书机器人：在飞书里发消息 → 创建 Issue 并入队 Agent
+          任务；完成后可回复飞书。
+        </p>
+        <PrimaryButton
+          onClick={() => setCreating(true)}
+          disabled={agents.length === 0}
+        >
+          <PlusIcon className="size-4" />
+          绑定飞书
+        </PrimaryButton>
+      </div>
+
+      {agents.length === 0 && (
+        <p className="mb-4 text-sm text-low">
+          请先创建一个 Agent，再绑定飞书。
+        </p>
+      )}
+
+      {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+
+      {creating && (
+        <div className="mb-6 max-w-xl space-y-3 rounded-lg border border-border bg-secondary p-4">
+          <h2 className="font-medium text-normal">绑定飞书机器人</h2>
+          <input
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+            placeholder="名称"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <select
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+          >
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-mono"
+            placeholder="App ID"
+            value={appId}
+            onChange={(e) => setAppId(e.target.value)}
+          />
+          <input
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-mono"
+            placeholder="App Secret"
+            type="password"
+            value={appSecret}
+            onChange={(e) => setAppSecret(e.target.value)}
+          />
+          <input
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-mono"
+            placeholder="Encrypt Key（可选）"
+            value={encryptKey}
+            onChange={(e) => setEncryptKey(e.target.value)}
+          />
+          <input
+            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-mono"
+            placeholder="Verification Token（可选）"
+            value={verificationToken}
+            onChange={(e) => setVerificationToken(e.target.value)}
+          />
+          <label className="flex items-center gap-2 text-sm text-normal">
+            <input
+              type="checkbox"
+              checked={replyOnComplete}
+              onChange={(e) => setReplyOnComplete(e.target.checked)}
+            />
+            任务完成后回复飞书
+          </label>
+          <div className="flex gap-2">
+            <PrimaryButton disabled={busy} onClick={() => void handleCreate()}>
+              {busy ? '创建中…' : '创建'}
+            </PrimaryButton>
+            <button
+              type="button"
+              className="rounded-md px-3 py-1.5 text-sm text-low"
+              onClick={() => setCreating(false)}
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      {bindings.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-20 text-low">
+          <ChatCircleIcon className="size-10" />
+          <p>还没有飞书绑定。</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {bindings.map((b) => {
+            const url = `${apiBase}/v1/feishu/events/${b.callback_token}`;
+            return (
+              <div
+                key={b.id}
+                className="rounded-lg border border-border bg-secondary p-4"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ChatCircleIcon className="size-4 text-brand" />
+                      <span className="font-medium text-normal">{b.name}</span>
+                      <span className="text-xs text-low">
+                        → {agentName(b.agent_id)}
+                      </span>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-xs',
+                          b.enabled
+                            ? 'bg-brand/15 text-normal'
+                            : 'bg-secondary text-low'
+                        )}
+                      >
+                        {b.enabled ? '启用' : '停用'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-low font-mono">
+                      App ID: {b.app_id}
+                      {b.has_encrypt_key ? ' · Encrypt Key ✓' : ''}
+                      {b.has_verification_token ? ' · Token ✓' : ''}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <code className="max-w-md truncate rounded bg-primary px-2 py-1 text-xs font-mono text-low">
+                        {url}
+                      </code>
+                      <button
+                        type="button"
+                        title="复制回调 URL"
+                        className="rounded p-1 text-low hover:text-normal"
+                        onClick={() => handleCopy(b.callback_token)}
+                      >
+                        {copied === b.callback_token ? (
+                          <span className="text-xs text-brand">已复制</span>
+                        ) : (
+                          <CopyIcon className="size-3.5" />
+                        )}
+                      </button>
+                    </div>
+                    <p className="mt-2 text-xs text-low">
+                      将此 URL 填到飞书开放平台 → 事件订阅 → 请求地址；订阅{' '}
+                      <code className="font-mono">im.message.receive_v1</code>
+                      。群聊需 @机器人。
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      title={b.enabled ? '停用' : '启用'}
+                      className="rounded-md px-2 py-1 text-xs text-low hover:bg-primary"
+                      onClick={() => void handleToggle(b)}
+                    >
+                      {b.enabled ? '停用' : '启用'}
+                    </button>
+                    <button
+                      type="button"
+                      title="旋转 Token"
+                      className="rounded-md p-1.5 text-low hover:bg-warning/10 hover:text-warning"
+                      onClick={() => void handleRotate(b.id)}
+                    >
+                      <ArrowsClockwiseIcon className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="删除"
+                      className="rounded-md p-1.5 text-low hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => void handleDelete(b.id, b.name)}
+                    >
+                      <TrashIcon className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Page shell ───────────────────────────────────────────────────────────────
 
 const TABS: { id: Tab; label: string }[] = [
@@ -1098,6 +1393,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'autopilots', label: 'Autopilots' },
   { id: 'squads', label: 'Squads' },
   { id: 'webhooks', label: 'Webhooks' },
+  { id: 'feishu', label: '飞书' },
 ];
 
 function AgentsPageInner() {
@@ -1134,6 +1430,7 @@ function AgentsPageInner() {
         {tab === 'autopilots' && <AutopilotsTab projectId={projectId} />}
         {tab === 'squads' && <SquadsTab projectId={projectId} />}
         {tab === 'webhooks' && <WebhooksTab projectId={projectId} />}
+        {tab === 'feishu' && <FeishuTab projectId={projectId} />}
       </div>
     </div>
   );

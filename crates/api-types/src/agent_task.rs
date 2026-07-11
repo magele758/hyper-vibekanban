@@ -27,6 +27,7 @@ pub enum AgentTaskTrigger {
     Manual,
     Copilot,
     Autopilot,
+    Feishu,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
