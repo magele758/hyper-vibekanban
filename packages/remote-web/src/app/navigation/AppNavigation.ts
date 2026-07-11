@@ -176,7 +176,8 @@ function destinationToRemoteTarget(
     case "project-agents":
     case "project-agent":
     case "project-copilot":
-      // Remote-web does not host Agents/Copilot pages yet; fall back to board.
+    case "project-inbox":
+      // Remote-web does not host Agents/Copilot/Inbox pages yet; fall back to board.
       return {
         to: "/projects/$projectId",
         params: { projectId: destination.projectId },
@@ -269,6 +270,8 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
       navigateTo({ kind: "project-agent", projectId, agentId }, transition),
     goToProjectCopilot: (projectId, transition) =>
       navigateTo({ kind: "project-copilot", projectId }, transition),
+    goToProjectInbox: (projectId, transition) =>
+      navigateTo({ kind: "project-inbox", projectId }, transition),
     goToProjectIssue: (projectId, issueId, transition) =>
       navigateTo({ kind: "project-issue", projectId, issueId }, transition),
     goToProjectIssueWorkspace: (projectId, issueId, workspaceId, transition) =>
@@ -348,6 +351,8 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
       navigateTo({ kind: "project-agent", projectId, agentId }, transition),
     goToProjectCopilot: (projectId, transition) =>
       navigateTo({ kind: "project-copilot", projectId }, transition),
+    goToProjectInbox: (projectId, transition) =>
+      navigateTo({ kind: "project-inbox", projectId }, transition),
     goToProjectIssue: (projectId, issueId, transition) =>
       navigateTo({ kind: "project-issue", projectId, issueId }, transition),
     goToProjectIssueWorkspace: (projectId, issueId, workspaceId, transition) =>

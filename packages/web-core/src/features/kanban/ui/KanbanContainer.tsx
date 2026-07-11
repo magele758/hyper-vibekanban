@@ -42,7 +42,6 @@ import {
   useKanbanIssueComposer,
 } from '@/shared/stores/useKanbanIssueComposerStore';
 import type { KanbanAssigneeUser } from '@vibe/ui/components/KanbanAssignee';
-import type { AgentTaskStatus } from 'shared/remote-types';
 import {
   KanbanProvider,
   KanbanBoard,
@@ -572,21 +571,26 @@ export function KanbanContainer() {
 
   // Active agent task status per issue (for card badge)
   const agentTaskStatusByIssueId = useMemo(() => {
-    const map = new Map<string, AgentTaskStatus>();
-    const active: AgentTaskStatus[] = ['queued', 'dispatched', 'running'];
+    const result = new Map<string, 'queued' | 'dispatched' | 'running'>();
     for (const task of agentTasks) {
-      if (!active.includes(task.status)) continue;
-      const existing = map.get(task.issue_id);
+      if (
+        task.status !== 'queued' &&
+        task.status !== 'dispatched' &&
+        task.status !== 'running'
+      ) {
+        continue;
+      }
+      const existing = result.get(task.issue_id);
       // Prefer running > dispatched > queued
       if (
         !existing ||
         (task.status === 'running' && existing !== 'running') ||
         (task.status === 'dispatched' && existing === 'queued')
       ) {
-        map.set(task.issue_id, task.status);
+        result.set(task.issue_id, task.status);
       }
     }
-    return map;
+    return result;
   }, [agentTasks]);
 
   const membersWithProfiles = useMemo(

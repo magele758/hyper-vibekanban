@@ -362,12 +362,9 @@ export function KanbanIssuePanelContainer({
         return [
           {
             user_id: id,
-            role: 'member' as const,
-            joined_at: '',
             first_name: agent.name,
             last_name: null,
             username: agent.name,
-            email: null,
             avatar_url: null,
             is_agent: true,
           },
@@ -377,19 +374,26 @@ export function KanbanIssuePanelContainer({
         return [
           {
             user_id: id,
-            role: 'member' as const,
-            joined_at: '',
             first_name: 'Squad',
             last_name: null,
             username: id,
-            email: null,
             avatar_url: null,
             is_agent: true,
           },
         ];
       }
       const member = membersWithProfilesById.get(id);
-      return member ? [member] : [];
+      return member
+        ? [
+            {
+              user_id: member.user_id,
+              first_name: member.first_name,
+              last_name: member.last_name,
+              username: member.username,
+              avatar_url: member.avatar_url,
+            },
+          ]
+        : [];
     });
   }, [displayData.assigneeIds, membersWithProfilesById, agents]);
 
