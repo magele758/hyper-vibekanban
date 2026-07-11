@@ -141,10 +141,7 @@ impl WebhookRepository {
         Ok(DeleteResponse { txid })
     }
 
-    pub async fn rotate_token(
-        pool: &PgPool,
-        id: Uuid,
-    ) -> Result<WebhookEndpoint, WebhookError> {
+    pub async fn rotate_token(pool: &PgPool, id: Uuid) -> Result<WebhookEndpoint, WebhookError> {
         let new_token = Uuid::new_v4().to_string().replace('-', "");
         let record = sqlx::query_as!(
             WebhookEndpoint,

@@ -37,7 +37,9 @@ pub fn router() -> Router<AppState> {
 
 /// Public webhook ingress - token (+ optional HMAC signature).
 pub fn public_router() -> Router<AppState> {
-    Router::new().route("/webhooks/{token}", post(webhook_ingress))
+    // Use `/hooks/{token}` (not `/webhooks/{token}`) so it does not conflict
+    // with authenticated management routes under `/webhooks/{id}`.
+    Router::new().route("/hooks/{token}", post(webhook_ingress))
 }
 
 #[instrument(name = "webhooks.list", skip(state, ctx), fields(user_id = %ctx.user.id))]
@@ -165,10 +167,7 @@ fn verify_signature(secret: &str, body: &[u8], headers: &HeaderMap) -> bool {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    let provided = provided
-        .strip_prefix("sha256=")
-        .unwrap_or(provided)
-        .trim();
+    let provided = provided.strip_prefix("sha256=").unwrap_or(provided).trim();
     if provided.is_empty() {
         return false;
     }
@@ -186,7 +185,7 @@ fn verify_signature(secret: &str, body: &[u8], headers: &HeaderMap) -> bool {
     expected.as_bytes().ct_eq(provided.as_bytes()).into()
 }
 
-/// Public webhook ingress: POST /v1/webhooks/{token}
+/// Public webhook ingress: POST /v1/hooks/{token}
 #[instrument(name = "webhooks.ingress", skip(state, body, headers), fields(token = %token))]
 async fn webhook_ingress(
     State(state): State<AppState>,
