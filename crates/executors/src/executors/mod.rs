@@ -326,6 +326,10 @@ pub struct SpawnedChild {
     pub exit_signal: Option<ExecutorExitSignal>,
     /// Container → Executor: signals when container wants to cancel the execution
     pub cancel: Option<CancellationToken>,
+    /// Optional notifier installed onto the execution's `MsgStore` so log
+    /// normalization can complete the turn (used by Cursor agent, which often
+    /// keeps the CLI process alive after emitting `result`).
+    pub msg_store_exit_tx: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
 impl From<AsyncGroupChild> for SpawnedChild {
@@ -334,6 +338,7 @@ impl From<AsyncGroupChild> for SpawnedChild {
             child,
             exit_signal: None,
             cancel: None,
+            msg_store_exit_tx: None,
         }
     }
 }

@@ -1561,6 +1561,15 @@ impl ContainerService for LocalContainerService {
                 .await;
         }
 
+        // Cursor (and similar) may keep the CLI alive after emitting `result`.
+        // Install the exit notifier onto the MsgStore so normalize_logs can
+        // complete the turn without waiting forever for process exit.
+        if let Some(tx) = spawned.msg_store_exit_tx
+            && let Some(store) = self.get_msg_store_by_id(&execution_process.id).await
+        {
+            store.set_exit_notifier(tx);
+        }
+
         // Spawn unified exit monitor: watches OS exit and optional executor signal
         let hn = self.spawn_exit_monitor(&execution_process.id, spawned.exit_signal);
         self.add_exit_monitor_handle(execution_process.id, hn).await;

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::{io::AsyncWriteExt, process::Command, sync::oneshot};
 use ts_rs::TS;
 use workspace_utils::{
     command_ext::GroupSpawnNoWindowExt,
@@ -20,8 +20,8 @@ use crate::{
     env::ExecutionEnv,
     executor_discovery::ExecutorDiscoveredOptions,
     executors::{
-        AppendPrompt, AvailabilityInfo, BaseCodingAgent, ExecutorError, SpawnedChild,
-        StandardCodingAgentExecutor,
+        AppendPrompt, AvailabilityInfo, BaseCodingAgent, ExecutorError, ExecutorExitResult,
+        SpawnedChild, StandardCodingAgentExecutor,
     },
     logs::{
         ActionType, FileChange, NormalizedEntry, NormalizedEntryError, NormalizedEntryType,
@@ -38,6 +38,127 @@ use crate::{
 mod mcp;
 const CURSOR_AUTH_REQUIRED_MSG: &str = "Authentication required. Please run 'agent login' first, or set CURSOR_API_KEY environment variable.";
 const CURSOR_LEGACY_AUTH_REQUIRED_MSG: &str = "Authentication required. Please run 'cursor-agent login' first, or set CURSOR_API_KEY environment variable.";
+/// Printed by cursor-agent's SIGINT handler when we kill the process after a
+/// successful `result` event (CLI often stays alive). Not a real failure.
+const CURSOR_ABORTING_OPERATION_MSG: &str = "Aborting operation...";
+
+/// Cursor CLI often keeps running after emitting a final `result` event.
+/// Bridge MsgStore completion → container exit_signal so the turn can finish.
+fn cursor_spawned_child(child: command_group::AsyncGroupChild) -> SpawnedChild {
+    let (exit_tx, exit_rx) = oneshot::channel::<ExecutorExitResult>();
+    let (msg_tx, msg_rx) = oneshot::channel::<bool>();
+    tokio::spawn(async move {
+        if let Ok(success) = msg_rx.await {
+            let _ = exit_tx.send(if success {
+                ExecutorExitResult::Success
+            } else {
+                ExecutorExitResult::Failure
+            });
+        }
+    });
+    SpawnedChild {
+        child,
+        exit_signal: Some(exit_rx),
+        cancel: None,
+        msg_store_exit_tx: Some(msg_tx),
+    }
+}
+
+/// Escape raw control characters inside JSON string literals so serde can parse
+/// Cursor output that embeds literal newlines in values (invalid JSONL).
+fn sanitize_json_control_chars(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_string = false;
+    let mut escape = false;
+    for ch in s.chars() {
+        if in_string {
+            if escape {
+                out.push(ch);
+                escape = false;
+            } else if ch == '\\' {
+                out.push(ch);
+                escape = true;
+            } else if ch == '"' {
+                out.push(ch);
+                in_string = false;
+            } else if ch == '\n' {
+                out.push_str("\\n");
+            } else if ch == '\r' {
+                out.push_str("\\r");
+            } else if ch == '\t' {
+                out.push_str("\\t");
+            } else {
+                out.push(ch);
+            }
+        } else {
+            if ch == '"' {
+                in_string = true;
+            }
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn parse_cursor_json(line: &str) -> Result<CursorJson, serde_json::Error> {
+    match serde_json::from_str(line) {
+        Ok(v) => Ok(v),
+        Err(_) => serde_json::from_str(&sanitize_json_control_chars(line)),
+    }
+}
+
+/// Extract complete JSON objects from a byte stream, tolerating raw newlines
+/// inside string values (Cursor sometimes emits non-strict JSONL).
+fn extract_json_objects(buffer: &mut String, chunk: &str) -> Vec<String> {
+    buffer.push_str(chunk);
+    let mut out = Vec::new();
+    loop {
+        let Some(start) = buffer.find('{') else {
+            buffer.clear();
+            break;
+        };
+        if start > 0 {
+            buffer.drain(..start);
+        }
+
+        let mut depth = 0i32;
+        let mut in_string = false;
+        let mut escape = false;
+        let mut end = None;
+        for (i, ch) in buffer.char_indices() {
+            if in_string {
+                if escape {
+                    escape = false;
+                } else if ch == '\\' {
+                    escape = true;
+                } else if ch == '"' {
+                    in_string = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(i + ch.len_utf8());
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let Some(end) = end else {
+            break;
+        };
+        let object = buffer[..end].to_string();
+        buffer.drain(..end);
+        out.push(object);
+    }
+    out
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS, JsonSchema)]
 pub struct CursorAgent {
@@ -236,7 +357,7 @@ impl StandardCodingAgentExecutor for CursorAgent {
             stdin.shutdown().await?;
         }
 
-        Ok(child.into())
+        Ok(cursor_spawned_child(child))
     }
 
     async fn spawn_follow_up(
@@ -279,7 +400,7 @@ impl StandardCodingAgentExecutor for CursorAgent {
             stdin.shutdown().await?;
         }
 
-        Ok(child.into())
+        Ok(cursor_spawned_child(child))
     }
 
     fn normalize_logs(
@@ -289,7 +410,8 @@ impl StandardCodingAgentExecutor for CursorAgent {
     ) -> Vec<tokio::task::JoinHandle<()>> {
         let entry_index_provider = EntryIndexProvider::start_from(&msg_store);
 
-        // Custom stderr processor for Cursor that detects login errors
+        // Custom stderr processor for Cursor that detects login errors and
+        // suppresses the benign "Aborting operation..." printed on SIGINT kill.
         let msg_store_stderr = msg_store.clone();
         let entry_index_provider_stderr = entry_index_provider.clone();
         let h1 = tokio::spawn(async move {
@@ -309,6 +431,13 @@ impl StandardCodingAgentExecutor for CursorAgent {
                 }))
                 .time_gap(Duration::from_secs(2))
                 .index_provider(entry_index_provider_stderr.clone())
+                .transform_lines(Box::new(|lines: &mut Vec<String>| {
+                    lines.retain(|line| {
+                        let stripped = strip_ansi_escapes::strip_str(line);
+                        let trimmed = stripped.trim();
+                        !trimmed.is_empty() && !trimmed.contains(CURSOR_ABORTING_OPERATION_MSG)
+                    });
+                }))
                 .build();
 
             while let Some(Ok(chunk)) = stderr.next().await {
@@ -328,7 +457,6 @@ impl StandardCodingAgentExecutor for CursorAgent {
                     msg_store_stderr
                         .push_patch(ConversationPatch::add_normalized_entry(id, error_message));
                 } else {
-                    // Always emit error message
                     for patch in processor.process(chunk) {
                         msg_store_stderr.push_patch(patch);
                     }
@@ -336,10 +464,12 @@ impl StandardCodingAgentExecutor for CursorAgent {
             }
         });
 
-        // Process Cursor stdout JSONL with typed serde models
+        // Process Cursor stdout JSON objects (brace-aware; Cursor may embed
+        // raw newlines inside string values which breaks line-based JSONL).
         let current_dir = worktree_path.to_path_buf();
         let h2 = tokio::spawn(async move {
-            let mut lines = msg_store.stdout_lines_stream();
+            let mut chunks = msg_store.stdout_chunked_stream();
+            let mut json_buffer = String::new();
 
             // Assistant streaming coalescer state
             let mut model_reported = false;
@@ -349,6 +479,7 @@ impl StandardCodingAgentExecutor for CursorAgent {
             let mut current_assistant_message_index: Option<usize> = None;
             let mut current_thinking_message_buffer = String::new();
             let mut current_thinking_message_index: Option<usize> = None;
+            let mut saw_assistant_message = false;
 
             let worktree_str = current_dir.to_string_lossy().to_string();
 
@@ -356,272 +487,320 @@ impl StandardCodingAgentExecutor for CursorAgent {
             // Track tool call_id -> entry index
             let mut call_index_map: HashMap<String, usize> = HashMap::new();
 
-            while let Some(Ok(line)) = lines.next().await {
-                // Parse line as CursorJson
-                let cursor_json: CursorJson = match serde_json::from_str(&line) {
-                    Ok(cursor_json) => cursor_json,
-                    Err(_) => {
-                        // Handle non-JSON output as raw system message
-                        if !line.is_empty() {
-                            let entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::SystemMessage,
-                                content: line.to_string(),
-                                metadata: None,
-                            };
+            while let Some(Ok(chunk)) = chunks.next().await {
+                for line in extract_json_objects(&mut json_buffer, &chunk) {
+                    // Parse line as CursorJson
+                    let cursor_json: CursorJson = match parse_cursor_json(&line) {
+                        Ok(cursor_json) => cursor_json,
+                        Err(_) => {
+                            // Handle non-JSON output as raw system message
+                            if !line.is_empty() {
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::SystemMessage,
+                                    content: line.to_string(),
+                                    metadata: None,
+                                };
 
-                            let patch_id = entry_index_provider.next();
-                            let patch = ConversationPatch::add_normalized_entry(patch_id, entry);
-                            msg_store.push_patch(patch);
+                                let patch_id = entry_index_provider.next();
+                                let patch =
+                                    ConversationPatch::add_normalized_entry(patch_id, entry);
+                                msg_store.push_patch(patch);
+                            }
+                            continue;
                         }
-                        continue;
-                    }
-                };
+                    };
 
-                // Push session_id if present
-                if !session_id_reported && let Some(session_id) = cursor_json.extract_session_id() {
-                    msg_store.push_session_id(session_id);
-                    session_id_reported = true;
-                }
-
-                let is_assistant_message = matches!(cursor_json, CursorJson::Assistant { .. });
-                let is_thinking_message = matches!(cursor_json, CursorJson::Thinking { .. });
-                if !is_assistant_message && current_assistant_message_index.is_some() {
-                    // flush
-                    current_assistant_message_index = None;
-                    current_assistant_message_buffer.clear();
-                }
-                if !is_thinking_message && current_thinking_message_index.is_some() {
-                    current_thinking_message_index = None;
-                    current_thinking_message_buffer.clear();
-                }
-
-                match &cursor_json {
-                    CursorJson::System { model, .. } => {
-                        if !model_reported && let Some(model) = model.as_ref() {
-                            let entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::SystemMessage,
-                                content: format!("System initialized with model: {model}"),
-                                metadata: None,
-                            };
-                            let id = entry_index_provider.next();
-                            msg_store
-                                .push_patch(ConversationPatch::add_normalized_entry(id, entry));
-                            model_reported = true;
-                        }
+                    // Push session_id if present
+                    if !session_id_reported
+                        && let Some(session_id) = cursor_json.extract_session_id()
+                    {
+                        msg_store.push_session_id(session_id);
+                        session_id_reported = true;
                     }
 
-                    CursorJson::User { .. } => {}
+                    let is_assistant_message = matches!(cursor_json, CursorJson::Assistant { .. });
+                    let is_thinking_message = matches!(cursor_json, CursorJson::Thinking { .. });
+                    if !is_assistant_message && current_assistant_message_index.is_some() {
+                        // flush
+                        current_assistant_message_index = None;
+                        current_assistant_message_buffer.clear();
+                    }
+                    if !is_thinking_message && current_thinking_message_index.is_some() {
+                        current_thinking_message_index = None;
+                        current_thinking_message_buffer.clear();
+                    }
 
-                    CursorJson::Assistant { message, .. } => {
-                        if let Some(chunk) = message.concat_text() {
-                            current_assistant_message_buffer.push_str(&chunk);
-                            let replace_entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::AssistantMessage,
-                                content: current_assistant_message_buffer.clone(),
-                                metadata: None,
-                            };
-                            if let Some(id) = current_assistant_message_index {
-                                msg_store.push_patch(ConversationPatch::replace(id, replace_entry))
-                            } else {
+                    match &cursor_json {
+                        CursorJson::System { model, .. } => {
+                            if !model_reported && let Some(model) = model.as_ref() {
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::SystemMessage,
+                                    content: format!("System initialized with model: {model}"),
+                                    metadata: None,
+                                };
                                 let id = entry_index_provider.next();
-                                current_assistant_message_index = Some(id);
-                                msg_store.push_patch(ConversationPatch::add_normalized_entry(
-                                    id,
-                                    replace_entry,
-                                ));
-                            };
-                        }
-                    }
-                    CursorJson::Thinking { text, .. } => {
-                        if let Some(chunk) = text
-                            && !chunk.is_empty()
-                        {
-                            current_thinking_message_buffer.push_str(chunk);
-                            let entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::Thinking,
-                                content: current_thinking_message_buffer.clone(),
-                                metadata: None,
-                            };
-                            if let Some(id) = current_thinking_message_index {
-                                msg_store.push_patch(ConversationPatch::replace(id, entry));
-                            } else {
-                                let id = entry_index_provider.next();
-                                current_thinking_message_index = Some(id);
                                 msg_store
                                     .push_patch(ConversationPatch::add_normalized_entry(id, entry));
+                                model_reported = true;
                             }
                         }
-                    }
 
-                    CursorJson::ToolCall {
-                        subtype,
-                        call_id,
-                        tool_call,
-                        ..
-                    } => {
-                        // Only process "started" subtype (completed contains results we currently ignore)
-                        if subtype
-                            .as_deref()
-                            .map(|s| s.eq_ignore_ascii_case("started"))
-                            .unwrap_or(false)
-                        {
-                            let tool_name = tool_call.get_name().to_string();
-                            let (action_type, content) =
-                                tool_call.to_action_and_content(&worktree_str);
+                        CursorJson::User { .. } => {}
 
+                        CursorJson::Assistant { message, .. } => {
+                            if let Some(chunk) = message.concat_text() {
+                                saw_assistant_message = true;
+                                current_assistant_message_buffer.push_str(&chunk);
+                                let replace_entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::AssistantMessage,
+                                    content: current_assistant_message_buffer.clone(),
+                                    metadata: None,
+                                };
+                                if let Some(id) = current_assistant_message_index {
+                                    msg_store
+                                        .push_patch(ConversationPatch::replace(id, replace_entry))
+                                } else {
+                                    let id = entry_index_provider.next();
+                                    current_assistant_message_index = Some(id);
+                                    msg_store.push_patch(ConversationPatch::add_normalized_entry(
+                                        id,
+                                        replace_entry,
+                                    ));
+                                };
+                            }
+                        }
+                        CursorJson::Thinking { text, .. } => {
+                            if let Some(chunk) = text
+                                && !chunk.is_empty()
+                            {
+                                current_thinking_message_buffer.push_str(chunk);
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::Thinking,
+                                    content: current_thinking_message_buffer.clone(),
+                                    metadata: None,
+                                };
+                                if let Some(id) = current_thinking_message_index {
+                                    msg_store.push_patch(ConversationPatch::replace(id, entry));
+                                } else {
+                                    let id = entry_index_provider.next();
+                                    current_thinking_message_index = Some(id);
+                                    msg_store.push_patch(ConversationPatch::add_normalized_entry(
+                                        id, entry,
+                                    ));
+                                }
+                            }
+                        }
+
+                        CursorJson::ToolCall {
+                            subtype,
+                            call_id,
+                            tool_call,
+                            ..
+                        } => {
+                            // Only process "started" subtype (completed contains results we currently ignore)
+                            if subtype
+                                .as_deref()
+                                .map(|s| s.eq_ignore_ascii_case("started"))
+                                .unwrap_or(false)
+                            {
+                                let tool_name = tool_call.get_name().to_string();
+                                let (action_type, content) =
+                                    tool_call.to_action_and_content(&worktree_str);
+
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::ToolUse {
+                                        tool_name,
+                                        action_type,
+                                        status: ToolStatus::Created,
+                                    },
+                                    content,
+                                    metadata: None,
+                                };
+                                let id = entry_index_provider.next();
+                                if let Some(cid) = call_id.as_ref() {
+                                    call_index_map.insert(cid.clone(), id);
+                                }
+                                msg_store
+                                    .push_patch(ConversationPatch::add_normalized_entry(id, entry));
+                            } else if subtype
+                                .as_deref()
+                                .map(|s| s.eq_ignore_ascii_case("completed"))
+                                .unwrap_or(false)
+                                && let Some(cid) = call_id.as_ref()
+                                && let Some(&idx) = call_index_map.get(cid)
+                            {
+                                // Compute base content and action again
+                                let (mut new_action, content_str) =
+                                    tool_call.to_action_and_content(&worktree_str);
+                                if let CursorToolCall::Shell { args, result } = &tool_call {
+                                    // Merge stdout/stderr and derive exit status when available using typed deserialization
+                                    let (stdout_val, stderr_val, exit_code) =
+                                        if let Some(res) = result {
+                                            match serde_json::from_value::<CursorShellResult>(
+                                                res.clone(),
+                                            ) {
+                                                Ok(r) => {
+                                                    if let Some(out) = r.into_outcome() {
+                                                        (out.stdout, out.stderr, out.exit_code)
+                                                    } else {
+                                                        (None, None, None)
+                                                    }
+                                                }
+                                                Err(_) => (None, None, None),
+                                            }
+                                        } else {
+                                            (None, None, None)
+                                        };
+                                    let output = match (stdout_val, stderr_val) {
+                                        (Some(sout), Some(serr)) => {
+                                            let st = sout.trim();
+                                            let se = serr.trim();
+                                            if st.is_empty() && se.is_empty() {
+                                                None
+                                            } else if st.is_empty() {
+                                                Some(serr)
+                                            } else if se.is_empty() {
+                                                Some(sout)
+                                            } else {
+                                                Some(format!("STDOUT:\n{st}\n\nSTDERR:\n{se}"))
+                                            }
+                                        }
+                                        (Some(sout), None) => {
+                                            if sout.trim().is_empty() {
+                                                None
+                                            } else {
+                                                Some(sout)
+                                            }
+                                        }
+                                        (None, Some(serr)) => {
+                                            if serr.trim().is_empty() {
+                                                None
+                                            } else {
+                                                Some(serr)
+                                            }
+                                        }
+                                        (None, None) => None,
+                                    };
+                                    let exit_status = exit_code.map(|code| {
+                                        crate::logs::CommandExitStatus::ExitCode { code }
+                                    });
+                                    new_action = ActionType::CommandRun {
+                                        command: args.command.clone(),
+                                        result: Some(crate::logs::CommandRunResult {
+                                            exit_status,
+                                            output,
+                                        }),
+                                        category: CommandCategory::from_command(&args.command),
+                                    };
+                                } else if let CursorToolCall::Mcp { args, result } = &tool_call {
+                                    // Extract a human-readable text from content array using typed deserialization
+                                    let md: Option<String> = if let Some(res) = result {
+                                        match serde_json::from_value::<CursorMcpResult>(res.clone())
+                                        {
+                                            Ok(r) => r.into_markdown(),
+                                            Err(_) => None,
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    let provider =
+                                        args.provider_identifier.as_deref().unwrap_or("mcp");
+                                    let tname = args.tool_name.as_deref().unwrap_or(&args.name);
+                                    let label = format!("mcp:{provider}:{tname}");
+                                    new_action = ActionType::Tool {
+                                        tool_name: label.clone(),
+                                        arguments: Some(serde_json::json!({
+                                            "name": args.name,
+                                            "args": args.args,
+                                            "providerIdentifier": args.provider_identifier,
+                                            "toolName": args.tool_name,
+                                        })),
+                                        result: md.map(|s| crate::logs::ToolResult {
+                                            r#type: crate::logs::ToolResultValueType::Markdown,
+                                            value: serde_json::Value::String(s),
+                                        }),
+                                    };
+                                }
+
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::ToolUse {
+                                        tool_name: match &tool_call {
+                                            CursorToolCall::Mcp { args, .. } => {
+                                                let provider = args
+                                                    .provider_identifier
+                                                    .as_deref()
+                                                    .unwrap_or("mcp");
+                                                let tname =
+                                                    args.tool_name.as_deref().unwrap_or(&args.name);
+                                                format!("mcp:{provider}:{tname}")
+                                            }
+                                            _ => tool_call.get_name().to_string(),
+                                        },
+                                        action_type: new_action,
+                                        status: ToolStatus::Success,
+                                    },
+                                    content: content_str,
+                                    metadata: None,
+                                };
+                                msg_store.push_patch(ConversationPatch::replace(idx, entry));
+                            }
+                        }
+
+                        CursorJson::Result {
+                            subtype,
+                            is_error,
+                            result,
+                            ..
+                        } => {
+                            // Cursor often puts the final answer only in `result`, and
+                            // may keep the CLI process alive afterwards. Surface the
+                            // text if we never got an assistant message, then signal
+                            // turn completion so the container can stop the process.
+                            let result_text = result.as_ref().and_then(|v| match v {
+                                serde_json::Value::String(s) => Some(s.clone()),
+                                other => other.as_str().map(|s| s.to_string()),
+                            });
+                            if !saw_assistant_message
+                                && let Some(text) = result_text
+                                && !text.trim().is_empty()
+                            {
+                                let entry = NormalizedEntry {
+                                    timestamp: None,
+                                    entry_type: NormalizedEntryType::AssistantMessage,
+                                    content: text,
+                                    metadata: Some(
+                                        serde_json::to_value(&cursor_json)
+                                            .unwrap_or(serde_json::Value::Null),
+                                    ),
+                                };
+                                let id = entry_index_provider.next();
+                                msg_store
+                                    .push_patch(ConversationPatch::add_normalized_entry(id, entry));
+                                saw_assistant_message = true;
+                            }
+
+                            let success = !is_error.unwrap_or(false)
+                                && !matches!(subtype.as_deref(), Some("error"));
+                            msg_store.signal_executor_exit(success);
+                        }
+
+                        CursorJson::Unknown => {
                             let entry = NormalizedEntry {
                                 timestamp: None,
-                                entry_type: NormalizedEntryType::ToolUse {
-                                    tool_name,
-                                    action_type,
-                                    status: ToolStatus::Created,
-                                },
-                                content,
+                                entry_type: NormalizedEntryType::SystemMessage,
+                                content: line,
                                 metadata: None,
                             };
                             let id = entry_index_provider.next();
-                            if let Some(cid) = call_id.as_ref() {
-                                call_index_map.insert(cid.clone(), id);
-                            }
                             msg_store
                                 .push_patch(ConversationPatch::add_normalized_entry(id, entry));
-                        } else if subtype
-                            .as_deref()
-                            .map(|s| s.eq_ignore_ascii_case("completed"))
-                            .unwrap_or(false)
-                            && let Some(cid) = call_id.as_ref()
-                            && let Some(&idx) = call_index_map.get(cid)
-                        {
-                            // Compute base content and action again
-                            let (mut new_action, content_str) =
-                                tool_call.to_action_and_content(&worktree_str);
-                            if let CursorToolCall::Shell { args, result } = &tool_call {
-                                // Merge stdout/stderr and derive exit status when available using typed deserialization
-                                let (stdout_val, stderr_val, exit_code) = if let Some(res) = result
-                                {
-                                    match serde_json::from_value::<CursorShellResult>(res.clone()) {
-                                        Ok(r) => {
-                                            if let Some(out) = r.into_outcome() {
-                                                (out.stdout, out.stderr, out.exit_code)
-                                            } else {
-                                                (None, None, None)
-                                            }
-                                        }
-                                        Err(_) => (None, None, None),
-                                    }
-                                } else {
-                                    (None, None, None)
-                                };
-                                let output = match (stdout_val, stderr_val) {
-                                    (Some(sout), Some(serr)) => {
-                                        let st = sout.trim();
-                                        let se = serr.trim();
-                                        if st.is_empty() && se.is_empty() {
-                                            None
-                                        } else if st.is_empty() {
-                                            Some(serr)
-                                        } else if se.is_empty() {
-                                            Some(sout)
-                                        } else {
-                                            Some(format!("STDOUT:\n{st}\n\nSTDERR:\n{se}"))
-                                        }
-                                    }
-                                    (Some(sout), None) => {
-                                        if sout.trim().is_empty() {
-                                            None
-                                        } else {
-                                            Some(sout)
-                                        }
-                                    }
-                                    (None, Some(serr)) => {
-                                        if serr.trim().is_empty() {
-                                            None
-                                        } else {
-                                            Some(serr)
-                                        }
-                                    }
-                                    (None, None) => None,
-                                };
-                                let exit_status = exit_code
-                                    .map(|code| crate::logs::CommandExitStatus::ExitCode { code });
-                                new_action = ActionType::CommandRun {
-                                    command: args.command.clone(),
-                                    result: Some(crate::logs::CommandRunResult {
-                                        exit_status,
-                                        output,
-                                    }),
-                                    category: CommandCategory::from_command(&args.command),
-                                };
-                            } else if let CursorToolCall::Mcp { args, result } = &tool_call {
-                                // Extract a human-readable text from content array using typed deserialization
-                                let md: Option<String> = if let Some(res) = result {
-                                    match serde_json::from_value::<CursorMcpResult>(res.clone()) {
-                                        Ok(r) => r.into_markdown(),
-                                        Err(_) => None,
-                                    }
-                                } else {
-                                    None
-                                };
-                                let provider = args.provider_identifier.as_deref().unwrap_or("mcp");
-                                let tname = args.tool_name.as_deref().unwrap_or(&args.name);
-                                let label = format!("mcp:{provider}:{tname}");
-                                new_action = ActionType::Tool {
-                                    tool_name: label.clone(),
-                                    arguments: Some(serde_json::json!({
-                                        "name": args.name,
-                                        "args": args.args,
-                                        "providerIdentifier": args.provider_identifier,
-                                        "toolName": args.tool_name,
-                                    })),
-                                    result: md.map(|s| crate::logs::ToolResult {
-                                        r#type: crate::logs::ToolResultValueType::Markdown,
-                                        value: serde_json::Value::String(s),
-                                    }),
-                                };
-                            }
-
-                            let entry = NormalizedEntry {
-                                timestamp: None,
-                                entry_type: NormalizedEntryType::ToolUse {
-                                    tool_name: match &tool_call {
-                                        CursorToolCall::Mcp { args, .. } => {
-                                            let provider = args
-                                                .provider_identifier
-                                                .as_deref()
-                                                .unwrap_or("mcp");
-                                            let tname =
-                                                args.tool_name.as_deref().unwrap_or(&args.name);
-                                            format!("mcp:{provider}:{tname}")
-                                        }
-                                        _ => tool_call.get_name().to_string(),
-                                    },
-                                    action_type: new_action,
-                                    status: ToolStatus::Success,
-                                },
-                                content: content_str,
-                                metadata: None,
-                            };
-                            msg_store.push_patch(ConversationPatch::replace(idx, entry));
                         }
-                    }
-
-                    CursorJson::Result { .. } => {
-                        // no-op; metadata-only events not surfaced
-                    }
-
-                    CursorJson::Unknown => {
-                        let entry = NormalizedEntry {
-                            timestamp: None,
-                            entry_type: NormalizedEntryType::SystemMessage,
-                            content: line,
-                            metadata: None,
-                        };
-                        let id = entry_index_provider.next();
-                        msg_store.push_patch(ConversationPatch::add_normalized_entry(id, entry));
                     }
                 }
             }
@@ -1482,6 +1661,38 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn test_aborting_operation_stderr_is_suppressed() {
+        let msg_store = Arc::new(MsgStore::new());
+        let mut processor = PlainTextLogProcessor::builder()
+            .normalized_entry_producer(Box::new(|content: String| NormalizedEntry {
+                timestamp: None,
+                entry_type: NormalizedEntryType::ErrorMessage {
+                    error_type: NormalizedEntryError::Other,
+                },
+                content,
+                metadata: None,
+            }))
+            .index_provider(EntryIndexProvider::start_from(&msg_store))
+            .transform_lines(Box::new(|lines: &mut Vec<String>| {
+                lines.retain(|line| {
+                    let stripped = strip_ansi_escapes::strip_str(line);
+                    let trimmed = stripped.trim();
+                    !trimmed.is_empty() && !trimmed.contains(CURSOR_ABORTING_OPERATION_MSG)
+                });
+            }))
+            .build();
+
+        let patches = processor.process("\nAborting operation...\n".to_string());
+        assert!(
+            patches.is_empty(),
+            "SIGINT abort message should not surface as an error"
+        );
+
+        let patches = processor.process("real failure happened\n".to_string());
+        assert_eq!(patches.len(), 1);
+    }
+
     #[tokio::test]
     async fn test_cursor_streaming_patch_generation() {
         // Avoid relying on feature flag in tests; construct with a dummy command
@@ -1524,6 +1735,74 @@ mod tests {
             patch_count >= 2,
             "Expected at least 2 patches, got {patch_count}"
         );
+    }
+
+    #[test]
+    fn test_extract_json_objects_handles_embedded_newlines() {
+        let mut buf = String::new();
+        let chunk1 = r#"{"type":"result","result":"先查本"#;
+        let chunk2 = "地服务\n状态\"}\n";
+        let first = extract_json_objects(&mut buf, chunk1);
+        assert!(first.is_empty(), "incomplete object should stay buffered");
+        let second = extract_json_objects(&mut buf, chunk2);
+        assert_eq!(second.len(), 1);
+        let parsed = parse_cursor_json(&second[0]).expect("sanitized parse");
+        match parsed {
+            CursorJson::Result { result, .. } => {
+                assert_eq!(
+                    result.as_ref().and_then(|v| v.as_str()),
+                    Some("先查本地服务\n状态")
+                );
+            }
+            other => panic!("expected Result, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cursor_result_signals_exit_and_surfaces_assistant() {
+        let executor = CursorAgent {
+            append_prompt: AppendPrompt::default(),
+            force: None,
+            model: None,
+            reasoning: None,
+            cmd: Default::default(),
+        };
+        let msg_store = Arc::new(MsgStore::new());
+        let (tx, rx) = oneshot::channel::<bool>();
+        msg_store.set_exit_notifier(tx);
+        let current_dir = std::path::PathBuf::from("/tmp/test-worktree");
+
+        msg_store.push_stdout(
+            r#"{"type":"thinking","subtype":"delta","text":"准备用中文简洁回答。"}"#.to_string()
+                + "\n",
+        );
+        msg_store.push_stdout(
+            r#"{"type":"result","subtype":"success","is_error":false,"result":"最终答复内容"}"#
+                .to_string()
+                + "\n",
+        );
+        msg_store.push_finished();
+
+        executor.normalize_logs(msg_store.clone(), &current_dir);
+        let success = tokio::time::timeout(std::time::Duration::from_secs(2), rx)
+            .await
+            .expect("exit signal timed out")
+            .expect("exit notifier dropped");
+        assert!(success);
+
+        let history = msg_store.get_history();
+        let assistant_patches = history.iter().filter_map(|m| match m {
+            workspace_utils::log_msg::LogMsg::JsonPatch(p) => Some(p),
+            _ => None,
+        });
+        let mut saw_assistant = false;
+        for patch in assistant_patches {
+            let s = serde_json::to_string(patch).unwrap_or_default();
+            if s.contains("最终答复内容") {
+                saw_assistant = true;
+            }
+        }
+        assert!(saw_assistant, "result text should surface as assistant");
     }
 
     #[test]

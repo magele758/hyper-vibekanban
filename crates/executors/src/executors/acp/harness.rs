@@ -128,6 +128,7 @@ impl AcpAgentHarness {
             child,
             exit_signal: Some(exit_rx),
             cancel: Some(cancel),
+            msg_store_exit_tx: None,
         })
     }
 
@@ -181,6 +182,7 @@ impl AcpAgentHarness {
             child,
             exit_signal: Some(exit_rx),
             cancel: Some(cancel),
+            msg_store_exit_tx: None,
         })
     }
 

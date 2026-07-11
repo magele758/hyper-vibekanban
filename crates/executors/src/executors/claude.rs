@@ -708,6 +708,7 @@ impl ClaudeCode {
             child,
             exit_signal: None,
             cancel: Some(cancel),
+            msg_store_exit_tx: None,
         })
     }
 }

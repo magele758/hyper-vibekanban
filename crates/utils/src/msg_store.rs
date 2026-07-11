@@ -1,10 +1,13 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use futures::{StreamExt, future};
-use tokio::{sync::broadcast, task::JoinHandle};
+use tokio::{
+    sync::{broadcast, oneshot},
+    task::JoinHandle,
+};
 use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
 
 use crate::{log_msg::LogMsg, stream_lines::LinesStreamExt};
@@ -26,6 +29,10 @@ struct Inner {
 pub struct MsgStore {
     inner: RwLock<Inner>,
     sender: broadcast::Sender<LogMsg>,
+    /// Optional one-shot used by executors (e.g. Cursor) to signal turn completion
+    /// so the container can stop a process that does not exit on its own.
+    /// `true` = success, `false` = failure.
+    exit_notifier: Mutex<Option<oneshot::Sender<bool>>>,
 }
 
 impl Default for MsgStore {
@@ -43,6 +50,20 @@ impl MsgStore {
                 total_bytes: 0,
             }),
             sender,
+            exit_notifier: Mutex::new(None),
+        }
+    }
+
+    /// Install a notifier that `signal_executor_exit` can fire exactly once.
+    pub fn set_exit_notifier(&self, tx: oneshot::Sender<bool>) {
+        *self.exit_notifier.lock().unwrap() = Some(tx);
+    }
+
+    /// Signal that the coding-agent turn finished. No-op if no notifier is set
+    /// or it was already consumed.
+    pub fn signal_executor_exit(&self, success: bool) {
+        if let Some(tx) = self.exit_notifier.lock().unwrap().take() {
+            let _ = tx.send(success);
         }
     }
 
