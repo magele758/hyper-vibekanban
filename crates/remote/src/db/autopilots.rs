@@ -505,8 +505,6 @@ pub fn render_autopilot_template(template: &str, ap: &Autopilot) -> String {
         .replace("{{project_id}}", &ap.project_id.to_string())
         .replace(
             "{{agent_id}}",
-            &ap.agent_id
-                .map(|id| id.to_string())
-                .unwrap_or_default(),
+            &ap.agent_id.map(|id| id.to_string()).unwrap_or_default(),
         )
 }

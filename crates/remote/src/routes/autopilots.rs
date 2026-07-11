@@ -25,13 +25,13 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/autopilots", get(list_autopilots).post(create_autopilot))
         .route(
-            "/autopilots/:id",
+            "/autopilots/{id}",
             get(get_autopilot)
                 .put(update_autopilot)
                 .delete(delete_autopilot),
         )
-        .route("/autopilots/:id/trigger", post(trigger_autopilot))
-        .route("/autopilots/:id/runs", get(list_autopilot_runs))
+        .route("/autopilots/{id}/trigger", post(trigger_autopilot))
+        .route("/autopilots/{id}/runs", get(list_autopilot_runs))
 }
 
 #[instrument(name = "autopilots.list", skip(state, ctx), fields(user_id = %ctx.user.id))]

@@ -21,15 +21,15 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/squads", get(list_squads).post(create_squad))
         .route(
-            "/squads/:id",
+            "/squads/{id}",
             get(get_squad).put(update_squad).delete(delete_squad),
         )
         .route(
-            "/squads/:id/members",
+            "/squads/{id}/members",
             get(list_squad_members).post(add_squad_member),
         )
         .route(
-            "/squads/:squad_id/members/:member_id",
+            "/squads/{squad_id}/members/{member_id}",
             delete(remove_squad_member),
         )
 }
