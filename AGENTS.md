@@ -41,6 +41,8 @@ Do not manually edit shared/remote-types.ts, instead edit crates/remote/src/bin/
 
 ## Before Completing a Task
 - Run `pnpm run format` to format all Rust workspaces and web code.
+- For frontend / full-stack UI changes: run `pnpm run test:e2e` against the live vk-start main stack (`localhost:13001`). See `e2e/AGENT_DOD.md`.
+- For frontend / full-stack UI changes: run `pnpm run test:e2e` against the live vk-start main stack (`localhost:13001`). See `e2e/AGENT_DOD.md`.
 
 ## Local Dev Stack (`vk-*`) — Agent 自行重启
 

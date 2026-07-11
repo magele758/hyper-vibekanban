@@ -4,6 +4,12 @@
 # Preview-machine local vendor / patches (never commit)
 /vendor/
 
+# Playwright E2E (keep *-snapshots/ committed; ignore run artifacts)
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+e2e/.cache/
+
 # Rust
 target/
 **/*.rs.bk

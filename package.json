@@ -52,6 +52,10 @@
     "vk:start": "bash scripts/vk-start.sh",
     "vk:stop": "bash scripts/vk-stop.sh",
     "vk:status": "bash scripts/vk-status.sh",
+    "test:e2e": "bash scripts/e2e-run.sh",
+    "test:e2e:update-snapshots": "bash scripts/e2e-run.sh --update-snapshots",
+    "test:e2e:ui": "bash scripts/e2e-run.sh --ui",
+    "test:e2e:headed": "bash scripts/e2e-run.sh --headed",
     "vk:install-autostart": "bash scripts/vk-install-autostart.sh",
     "vk:uninstall-autostart": "bash scripts/vk-uninstall-autostart.sh",
     "remote:dev": "cd crates/remote && docker compose --env-file .env.remote up --build ; docker compose --env-file .env.remote down -v",
@@ -64,6 +68,7 @@
     "tauri:build": "cd crates/tauri-app && cargo tauri build"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.0.0",
     "bippy": "0.5.28",
