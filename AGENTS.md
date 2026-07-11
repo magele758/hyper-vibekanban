@@ -62,6 +62,24 @@ bash scripts/vk-status.sh   # 必须全 OK 再收工
 
 默认端口见 `scripts/vk-ports.sh`（Desktop **13001**、Remote **13000**、Relay **18082**、API **13002**、桌面 h2 前门 **13443**）。手机经 Tailscale 访问 Remote 时用 **当前页面的 Tailscale IP/主机名** 配 Relay，不要用局域网 IP。
 
+### OrbStack `:13000` 端口转发卡死（容器 healthy 但本机连不上）
+
+**现象**：`docker ps` 里 `remote-remote-server` 仍 healthy，但本机 `curl http://127.0.0.1:13000/v1/health` connection refused；`vk-status` 报 Remote 挂。
+
+**原因**：不是 Remote 进程挂了，而是 **OrbStack 在宿主机上的 `:13000` 端口转发层卡死**（常见大量 `CLOSED` 连接堆积）。容器内健康检查只打 `127.0.0.1:8081`，不经过宿主机端口映射，所以仍显示 healthy。
+
+**诱因**：
+1. **Docker Remote 与本地 `remote` 二进制混用同一 `:13000`**（最危险）——只用一种来源：Docker XOR 本地 binary。
+2. Electric/shape 长连接经 Caddy → `:13000` 频繁建连/断连，加重转发层压力。
+3. 多 tab 长时间挂看板、机器休眠唤醒（次要）。
+
+**恢复（无需 `VK_REBUILD`）**：
+1. `docker restart remote-remote-server-1`
+2. 不够再：`vk-stop && vk-start`
+3. 仍不行：重启 OrbStack
+
+**避免**：日常只走 `vk-start` Docker 栈时，不要再起本地 `cargo-target-remote` / `remote-local`；以 `vk-status`（测宿主机端口）为准，别只看容器 healthy。过期的 `~/.vk-kanban/pids/remote-local.pid` 可删，避免误判本地 remote 还在。
+
 ### HTTP/2 桌面前门（切换丝滑的关键）
 
 Remote API 是 HTTP/1.1，浏览器同源并发连接上限约 6 条；而一个看板需要约 9 条 Electric live 长连接，导致切换 project 时新请求被 `stalled/blocked`。解决办法是让浏览器经 **HTTP/2** 多路复用访问，所有 shape 共用一条连接。
