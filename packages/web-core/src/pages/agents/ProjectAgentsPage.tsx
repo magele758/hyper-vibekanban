@@ -1402,18 +1402,18 @@ function AgentsPageInner() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-primary">
-      <div className="flex items-center gap-4 border-b border-border px-6 py-4">
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-4">
         <div>
           <h1 className="text-lg font-semibold text-normal">Agents</h1>
         </div>
-        <nav className="ml-4 flex gap-1">
+        <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 sm:ml-4">
           {TABS.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
               className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                 tab === t.id
                   ? 'bg-brand/15 text-normal'
                   : 'text-low hover:bg-primary hover:text-normal'

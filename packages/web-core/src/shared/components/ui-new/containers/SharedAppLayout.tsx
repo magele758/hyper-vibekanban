@@ -9,6 +9,9 @@ import {
   KanbanIcon,
   DownloadSimpleIcon,
   LinkIcon,
+  RobotIcon,
+  ChatCircleIcon,
+  TrayIcon,
 } from '@phosphor-icons/react';
 import { SyncErrorProvider } from '@/shared/providers/SyncErrorProvider';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
@@ -292,6 +295,82 @@ export function SharedAppLayout() {
     [activeProjectId, appNavigation]
   );
 
+  const handleNavigateBoard = useCallback(
+    (projectId: string) => {
+      void navigate({
+        to: '/projects/$projectId',
+        params: { projectId },
+      });
+    },
+    [navigate]
+  );
+
+  const handleNavigateAgents = useCallback(
+    (projectId: string) => {
+      void navigate({
+        to: '/projects/$projectId/agents',
+        params: { projectId },
+      });
+    },
+    [navigate]
+  );
+
+  const handleNavigateCopilot = useCallback(
+    (projectId: string) => {
+      void navigate({
+        to: '/projects/$projectId/copilot',
+        params: { projectId },
+      });
+    },
+    [navigate]
+  );
+
+  const handleNavigateInbox = useCallback(
+    (projectId: string) => {
+      void navigate({
+        to: '/projects/$projectId/inbox',
+        params: { projectId },
+      });
+    },
+    [navigate]
+  );
+
+  const mobileProjectSubNavItems = useMemo(() => {
+    if (!activeProjectId) return [];
+    return [
+      {
+        id: 'board' as const,
+        label: 'Board',
+        icon: KanbanIcon,
+        onClick: () => handleNavigateBoard(activeProjectId),
+      },
+      {
+        id: 'agents' as const,
+        label: 'Agents',
+        icon: RobotIcon,
+        onClick: () => handleNavigateAgents(activeProjectId),
+      },
+      {
+        id: 'copilot' as const,
+        label: 'Copilot',
+        icon: ChatCircleIcon,
+        onClick: () => handleNavigateCopilot(activeProjectId),
+      },
+      {
+        id: 'inbox' as const,
+        label: 'Inbox',
+        icon: TrayIcon,
+        onClick: () => handleNavigateInbox(activeProjectId),
+      },
+    ];
+  }, [
+    activeProjectId,
+    handleNavigateBoard,
+    handleNavigateAgents,
+    handleNavigateCopilot,
+    handleNavigateInbox,
+  ]);
+
   const handleProjectHover = useCallback(
     (projectId: string) => {
       if (projectId !== activeProjectId) {
@@ -451,30 +530,10 @@ export function SharedAppLayout() {
                 });
               }}
               activeProjectSubNav={activeProjectSubNav}
-              onNavigateBoard={(projectId) => {
-                void navigate({
-                  to: '/projects/$projectId',
-                  params: { projectId },
-                });
-              }}
-              onNavigateAgents={(projectId) => {
-                void navigate({
-                  to: '/projects/$projectId/agents',
-                  params: { projectId },
-                });
-              }}
-              onNavigateCopilot={(projectId) => {
-                void navigate({
-                  to: '/projects/$projectId/copilot',
-                  params: { projectId },
-                });
-              }}
-              onNavigateInbox={(projectId) => {
-                void navigate({
-                  to: '/projects/$projectId/inbox',
-                  params: { projectId },
-                });
-              }}
+              onNavigateBoard={handleNavigateBoard}
+              onNavigateAgents={handleNavigateAgents}
+              onNavigateCopilot={handleNavigateCopilot}
+              onNavigateInbox={handleNavigateInbox}
               notificationBell={
                 isSignedIn ? <AppBarNotificationBellContainer /> : undefined
               }
@@ -671,29 +730,62 @@ export function SharedAppLayout() {
             {/* Project list */}
             <div className="flex-1 overflow-y-auto p-2">
               {isSignedIn ? (
-                orderedProjects.map((project) => (
-                  <button
-                    type="button"
-                    key={project.id}
-                    onClick={() => {
-                      handleProjectClick(project.id);
-                      setIsDrawerOpen(false);
-                    }}
-                    className={cn(
-                      'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left cursor-pointer',
-                      'transition-colors',
-                      project.id === activeProjectId
-                        ? 'bg-brand/10 text-high'
-                        : 'text-normal hover:bg-secondary'
-                    )}
-                  >
-                    <span
-                      className="h-2.5 w-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: `hsl(${project.color})` }}
-                    />
-                    <span className="truncate">{project.name}</span>
-                  </button>
-                ))
+                <>
+                  {orderedProjects.map((project) => (
+                    <div key={project.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const switchingProject =
+                            project.id !== activeProjectId;
+                          handleProjectClick(project.id);
+                          // Keep drawer open when switching projects so the
+                          // Board/Agents/Copilot/Inbox entries stay reachable.
+                          if (!switchingProject) {
+                            setIsDrawerOpen(false);
+                          }
+                        }}
+                        className={cn(
+                          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left cursor-pointer',
+                          'transition-colors',
+                          project.id === activeProjectId
+                            ? 'bg-brand/10 text-high'
+                            : 'text-normal hover:bg-secondary'
+                        )}
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: `hsl(${project.color})` }}
+                        />
+                        <span className="truncate">{project.name}</span>
+                      </button>
+                      {project.id === activeProjectId &&
+                        mobileProjectSubNavItems.length > 0 && (
+                          <div className="mb-1 ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+                            {mobileProjectSubNavItems.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  item.onClick();
+                                  setIsDrawerOpen(false);
+                                }}
+                                className={cn(
+                                  'flex items-center gap-2 w-full rounded-md px-2.5 py-2 text-sm text-left cursor-pointer transition-colors',
+                                  activeProjectSubNav === item.id
+                                    ? 'bg-brand/15 text-high'
+                                    : 'text-normal hover:bg-secondary'
+                                )}
+                              >
+                                <item.icon className="h-4 w-4 shrink-0" />
+                                <span>{item.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                    </div>
+                  ))}
+                </>
               ) : (
                 <div className="px-4 py-6 text-center">
                   <KanbanIcon
