@@ -24,10 +24,11 @@ pnpm run test:e2e:update-snapshots
 
 | 改了什么 | 至少覆盖 |
 |----------|----------|
-| 看板 / issue | `kanban.spec.ts` 相关断言或新用例 |
-| 壳 / 导航 / 侧栏 | `app-shell.spec.ts` |
+| 看板 / issue | `issue-crud.spec.ts` + `kanban.spec.ts` |
+| 壳 / 导航 / 侧栏 / Settings | `app-shell` + `board-filters` |
+| Workspace 列表/打开 | `workspaces-truth.spec.ts` |
 | 样式大改 | 更新 `visual.spec.ts` 基线 |
-| API / auth / relay | `health.api.spec.ts` 或加 API 断言 |
+| API / auth / relay | `health.api` + `api-truth` |
 
 ## 禁止
 

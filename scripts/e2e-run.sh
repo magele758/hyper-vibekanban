@@ -23,12 +23,17 @@ export VK_E2E_API_BASE="$API_BASE"
 export VK_E2E_REMOTE_BASE="${VK_E2E_REMOTE_BASE:-http://127.0.0.1:13000}"
 export VK_E2E_RELAY_BASE="${VK_E2E_RELAY_BASE:-http://127.0.0.1:18082}"
 
-ARGS=("$@")
+ARGS=()
+for arg in "$@"; do
+  # pnpm may forward a bare "--"; drop it for playwright.
+  [[ "$arg" == "--" ]] && continue
+  ARGS+=("$arg")
+done
 if [[ ${#ARGS[@]} -eq 0 ]]; then
-  ARGS=(--config e2e/playwright.config.ts)
+  PW_ARGS=(--config e2e/playwright.config.ts)
 else
-  ARGS=(--config e2e/playwright.config.ts "${ARGS[@]}")
+  PW_ARGS=(--config e2e/playwright.config.ts "${ARGS[@]}")
 fi
 
 echo "==> Playwright against $BASE_URL"
-exec pnpm exec playwright test "${ARGS[@]}"
+exec pnpm exec playwright test "${PW_ARGS[@]}"
