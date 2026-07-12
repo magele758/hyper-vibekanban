@@ -197,7 +197,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             .unwrap_or(BaseCodingAgent::ClaudeCode);
         let executor_config = ExecutorConfig::new(executor);
 
-        let prompt = format!(
+        let mut prompt = format!(
             "You are agent \"{}\".\n\n{}\n\nWork on issue {} — {}.\n\n{}",
             agent.name,
             agent.instructions,
@@ -205,6 +205,15 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             issue.title,
             issue.description.as_deref().unwrap_or("(no description)")
         );
+        if let Some(step) = task
+            .execution_prompt
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            prompt.push_str("\n\n---\n## Pipeline step context\n\n");
+            prompt.push_str(step);
+        }
 
         // Prefer (agent, issue) session resume when claim populated resume_session_id.
         if !task.force_fresh_session
@@ -702,9 +711,33 @@ fn select_repo_for_task<'a>(
     preferred_repo_id: Option<&str>,
     project_name: Option<&str>,
 ) -> Option<&'a Repo> {
-    if let Some(preferred) = preferred_repo_id {
+    if let Some(preferred) = preferred_repo_id.map(str::trim).filter(|s| !s.is_empty()) {
         if let Ok(id) = Uuid::parse_str(preferred) {
             if let Some(repo) = repos.iter().find(|r| r.id == id) {
+                return Some(repo);
+            }
+        }
+        // Squad working_directory is often an absolute path — match repo.path.
+        let preferred_path = std::path::Path::new(preferred);
+        if preferred_path.is_absolute() || preferred.contains('/') || preferred.contains('\\') {
+            if let Some(repo) = repos.iter().find(|r| {
+                let rp = r.path.as_path();
+                rp == preferred_path
+                    || preferred_path.starts_with(rp)
+                    || rp.starts_with(preferred_path)
+            }) {
+                return Some(repo);
+            }
+            // Case-insensitive string compare for path strings
+            let pref_norm = preferred.trim_end_matches('/').to_lowercase();
+            if let Some(repo) = repos.iter().find(|r| {
+                let rp = r
+                    .path
+                    .to_string_lossy()
+                    .trim_end_matches('/')
+                    .to_lowercase();
+                rp == pref_norm || pref_norm.starts_with(&rp) || rp.starts_with(&pref_norm)
+            }) {
                 return Some(repo);
             }
         }

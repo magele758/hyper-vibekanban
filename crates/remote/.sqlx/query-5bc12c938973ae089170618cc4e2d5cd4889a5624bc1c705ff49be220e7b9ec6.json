@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            FROM autopilots\n            WHERE project_id = $1\n            ORDER BY name ASC\n            ",
+  "query": "\n            SELECT\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                squad_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            FROM autopilots\n            WHERE enabled = TRUE\n              AND next_run_at IS NOT NULL\n              AND next_run_at <= NOW()\n            ORDER BY next_run_at ASC\n            FOR UPDATE SKIP LOCKED\n            ",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
         "name": "enabled!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "execution_mode!: AutopilotExecutionMode",
         "type_info": {
           "Custom": {
@@ -44,17 +49,17 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "cron_expression!",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "timezone!",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "concurrency_policy!: AutopilotConcurrencyPolicy",
         "type_info": {
           "Custom": {
@@ -69,45 +74,44 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "issue_title_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "issue_description_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "next_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "last_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
       false,
       false,
+      true,
       true,
       false,
       false,
@@ -122,5 +126,5 @@
       false
     ]
   },
-  "hash": "1c37a503a944f5d831c8baf587a626959c6e2c4517d7a984830212fb4c01984f"
+  "hash": "5bc12c938973ae089170618cc4e2d5cd4889a5624bc1c705ff49be220e7b9ec6"
 }

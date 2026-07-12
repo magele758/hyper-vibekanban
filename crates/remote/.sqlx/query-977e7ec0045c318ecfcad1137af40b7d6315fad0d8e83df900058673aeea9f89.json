@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO agent_tasks (\n                id, agent_id, issue_id, trigger, priority,\n                force_fresh_session, squad_id, is_leader_task, preferred_repo_id\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                execution_prompt,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks\n            WHERE issue_id = $1\n            ORDER BY created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
                 "mention",
                 "manual",
                 "copilot",
-                "autopilot"
+                "autopilot",
+                "feishu"
               ]
             }
           }
@@ -132,39 +133,23 @@
       },
       {
         "ordinal": 20,
+        "name": "execution_prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Uuid",
-        "Uuid",
-        {
-          "Custom": {
-            "name": "agent_task_trigger",
-            "kind": {
-              "Enum": [
-                "assign",
-                "mention",
-                "manual",
-                "copilot",
-                "autopilot"
-              ]
-            }
-          }
-        },
-        "Int4",
-        "Bool",
-        "Uuid",
-        "Bool",
-        "Text"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -188,9 +173,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "a77d461db43f2eb20c384b42f583e50dda6f919ab9f069e74b254ef69fbb6b06"
+  "hash": "977e7ec0045c318ecfcad1137af40b7d6315fad0d8e83df900058673aeea9f89"
 }

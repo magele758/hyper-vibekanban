@@ -296,6 +296,7 @@ impl CopilotRepository {
                 api_key,
                 base_url,
                 model_name,
+                working_directory,
                 updated_at AS "updated_at!: DateTime<Utc>"
             FROM agent_llm_settings
             WHERE agent_id = $1
@@ -310,6 +311,7 @@ impl CopilotRepository {
             has_api_key: r.api_key.as_ref().is_some_and(|k| !k.is_empty()),
             base_url: r.base_url,
             model_name: r.model_name,
+            working_directory: r.working_directory,
             updated_at: r.updated_at,
         }))
     }
@@ -324,7 +326,8 @@ impl CopilotRepository {
                 agent_id AS "agent_id!: Uuid",
                 api_key,
                 base_url,
-                model_name
+                model_name,
+                working_directory
             FROM agent_llm_settings
             WHERE agent_id = $1
             "#,
@@ -338,6 +341,7 @@ impl CopilotRepository {
             api_key: r.api_key,
             base_url: r.base_url,
             model_name: r.model_name,
+            working_directory: r.working_directory,
         }))
     }
 
@@ -347,29 +351,40 @@ impl CopilotRepository {
         api_key: Option<String>,
         base_url: Option<String>,
         model_name: Option<String>,
+        working_directory: Option<String>,
         update_api_key: bool,
+        update_working_directory: bool,
     ) -> Result<AgentLlmSettings, CopilotError> {
         let row = sqlx::query!(
             r#"
-            INSERT INTO agent_llm_settings (agent_id, api_key, base_url, model_name)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO agent_llm_settings (
+                agent_id, api_key, base_url, model_name, working_directory
+            )
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (agent_id) DO UPDATE SET
-                api_key = CASE WHEN $5 THEN EXCLUDED.api_key ELSE agent_llm_settings.api_key END,
+                api_key = CASE WHEN $6 THEN EXCLUDED.api_key ELSE agent_llm_settings.api_key END,
                 base_url = COALESCE(EXCLUDED.base_url, agent_llm_settings.base_url),
                 model_name = COALESCE(EXCLUDED.model_name, agent_llm_settings.model_name),
+                working_directory = CASE
+                    WHEN $7 THEN EXCLUDED.working_directory
+                    ELSE agent_llm_settings.working_directory
+                END,
                 updated_at = NOW()
             RETURNING
                 agent_id AS "agent_id!: Uuid",
                 api_key,
                 base_url,
                 model_name,
+                working_directory,
                 updated_at AS "updated_at!: DateTime<Utc>"
             "#,
             agent_id,
             api_key,
             base_url,
             model_name,
-            update_api_key
+            working_directory,
+            update_api_key,
+            update_working_directory
         )
         .fetch_one(pool)
         .await?;
@@ -379,6 +394,7 @@ impl CopilotRepository {
             has_api_key: row.api_key.as_ref().is_some_and(|k| !k.is_empty()),
             base_url: row.base_url,
             model_name: row.model_name,
+            working_directory: row.working_directory,
             updated_at: row.updated_at,
         })
     }

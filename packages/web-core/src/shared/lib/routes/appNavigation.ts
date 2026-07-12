@@ -69,10 +69,7 @@ export interface AppNavigation {
     projectId: string,
     transition?: NavigationTransition
   ): void;
-  goToProjectInbox(
-    projectId: string,
-    transition?: NavigationTransition
-  ): void;
+  goToProjectInbox(projectId: string, transition?: NavigationTransition): void;
   goToProjectIssue(
     projectId: string,
     issueId: string,

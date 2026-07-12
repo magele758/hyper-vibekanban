@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks\n            WHERE issue_id = $1\n            ORDER BY created_at DESC\n            ",
+  "query": "\n            SELECT\n                t.id                      AS \"id!: Uuid\",\n                t.agent_id                AS \"agent_id!: Uuid\",\n                t.issue_id                AS \"issue_id!: Uuid\",\n                t.status                  AS \"status!: AgentTaskStatus\",\n                t.trigger                 AS \"trigger!: AgentTaskTrigger\",\n                t.priority                AS \"priority!\",\n                t.attempt                 AS \"attempt!\",\n                t.max_attempts            AS \"max_attempts!\",\n                t.failure_reason,\n                t.local_workspace_id,\n                t.local_session_id,\n                t.claimed_by_host,\n                t.claimed_at,\n                t.started_at,\n                t.completed_at,\n                t.force_fresh_session     AS \"force_fresh_session!\",\n                t.resume_session_id,\n                t.squad_id,\n                t.is_leader_task          AS \"is_leader_task!\",\n                t.preferred_repo_id,\n                t.execution_prompt,\n                t.created_at              AS \"created_at!: DateTime<Utc>\",\n                t.updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks t\n            JOIN issues i ON i.id = t.issue_id\n            WHERE i.project_id = $1\n            ORDER BY t.created_at DESC\n            ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
                 "mention",
                 "manual",
                 "copilot",
-                "autopilot"
+                "autopilot",
+                "feishu"
               ]
             }
           }
@@ -132,11 +133,16 @@
       },
       {
         "ordinal": 20,
+        "name": "execution_prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -167,9 +173,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "47bf4a1a5ecf857d0780daf1dd02a6e28dcde1dc6154fba9d10ab2673149c548"
+  "hash": "2ebe17629818a2a3e0de2b195d0c16dfa9be8096cbab8fc53044a4a77278bab5"
 }

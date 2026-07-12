@@ -34,6 +34,7 @@ check "Remote" "http://127.0.0.1:${VK_REMOTE_PORT}/v1/health"
 check "Relay" "http://127.0.0.1:${VK_RELAY_PORT}/health"
 check "Local web" "$(vk_local_url "${FE}")"
 check "Local API" "http://127.0.0.1:${BE}/health"
+check "Agent sidecar" "http://127.0.0.1:${VK_AGENT_SIDECAR_PORT:-13110}/health"
 
 if [[ "${VK_DESKTOP_H2:-1}" == "1" ]]; then
   h2_url="https://localhost:${VK_DESKTOP_HTTPS_PORT}/"

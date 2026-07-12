@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agent_llm_settings (\n                agent_id, api_key, base_url, model_name, working_directory\n            )\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (agent_id) DO UPDATE SET\n                api_key = CASE WHEN $6 THEN EXCLUDED.api_key ELSE agent_llm_settings.api_key END,\n                base_url = COALESCE(EXCLUDED.base_url, agent_llm_settings.base_url),\n                model_name = COALESCE(EXCLUDED.model_name, agent_llm_settings.model_name),\n                working_directory = CASE\n                    WHEN $7 THEN EXCLUDED.working_directory\n                    ELSE agent_llm_settings.working_directory\n                END,\n                updated_at = NOW()\n            RETURNING\n                agent_id AS \"agent_id!: Uuid\",\n                api_key,\n                base_url,\n                model_name,\n                working_directory,\n                updated_at AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_id!: Uuid",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "api_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "base_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "model_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "working_directory",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at!: DateTime<Utc>",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "129f3a22bb460073fb807a32e604810f372150e3500e362af216120b915830b3"
+}

@@ -79,7 +79,9 @@ export function IssueSubIssuesSectionContainer({
         const status = statusesById.get(issue.status_id);
         const assigneeRecords = getAssigneesForIssue(issue.id);
         const assignees = assigneeRecords
-          .map((a) => (a.user_id ? membersWithProfilesById.get(a.user_id) : undefined))
+          .map((a) =>
+            a.user_id ? membersWithProfilesById.get(a.user_id) : undefined
+          )
           .filter((u): u is NonNullable<typeof u> => u !== undefined);
 
         return {

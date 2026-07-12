@@ -422,9 +422,7 @@ function IssueCommentsSectionContent() {
   const handleMentionAgent = useCallback(
     (agentId: string, agentName: string) => {
       const mention = `[@${agentName}](mention://agent/${agentId})`;
-      setCommentInput((prev) =>
-        prev.trim() ? `${prev} ${mention}` : mention
-      );
+      setCommentInput((prev) => (prev.trim() ? `${prev} ${mention}` : mention));
       setTimeout(() => {
         commentEditorRef.current?.focus();
       }, 0);

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                agent_id AS \"agent_id!: Uuid\",\n                api_key,\n                base_url,\n                model_name\n            FROM agent_llm_settings\n            WHERE agent_id = $1\n            ",
+  "query": "\n            SELECT\n                agent_id AS \"agent_id!: Uuid\",\n                api_key,\n                base_url,\n                model_name,\n                working_directory\n            FROM agent_llm_settings\n            WHERE agent_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "model_name",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "working_directory",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "ce24e3e854fe9ee0ca3fe8c4a8130cad1d35bfb0d6c3ea6b407d77d3f3ee776c"
+  "hash": "7e173445f5017a742973039453227f46ba7401522dbba58ce6325daa6c2b44f7"
 }

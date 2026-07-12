@@ -41,8 +41,13 @@ resume_session_id: string | null,
 squad_id: string | null, is_leader_task: boolean, 
 /**
  * Preferred local repo path/id hint for the executor.
+ * May also be an absolute working-directory path (squad path target).
  */
-preferred_repo_id: string | null, created_at: string, updated_at: string, };
+preferred_repo_id: string | null, 
+/**
+ * Optional per-step prompt (squad pipeline role/prompt/handoff).
+ */
+execution_prompt: string | null, created_at: string, updated_at: string, };
 
 export type AgentTaskStatus = "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
 
@@ -54,7 +59,11 @@ export type ListAgentsResponse = { agents: Array<Agent>, };
 
 export type ListAgentTasksResponse = { agent_tasks: Array<AgentTask>, };
 
-export type Autopilot = { id: string, project_id: string, name: string, agent_id: string | null, enabled: boolean, execution_mode: AutopilotExecutionMode, cron_expression: string, timezone: string, concurrency_policy: AutopilotConcurrencyPolicy, issue_title_template: string, issue_description_template: string, next_run_at: string | null, last_run_at: string | null, created_at: string, updated_at: string, };
+export type Autopilot = { id: string, project_id: string, name: string, agent_id: string | null, 
+/**
+ * When set, scheduler runs the squad pipeline instead of a single agent.
+ */
+squad_id: string | null, enabled: boolean, execution_mode: AutopilotExecutionMode, cron_expression: string, timezone: string, concurrency_policy: AutopilotConcurrencyPolicy, issue_title_template: string, issue_description_template: string, next_run_at: string | null, last_run_at: string | null, created_at: string, updated_at: string, };
 
 export type AutopilotExecutionMode = "create_issue" | "run_only";
 
@@ -68,13 +77,77 @@ export type ListAutopilotResponse = { autopilots: Array<Autopilot>, };
 
 export type ListAutopilotRunsResponse = { runs: Array<AutopilotRun>, };
 
-export type Squad = { id: string, project_id: string, name: string, leader_agent_id: string | null, created_at: string, updated_at: string, };
+export type Squad = { id: string, project_id: string, name: string, leader_agent_id: string | null, pipeline: SquadPipeline, 
+/**
+ * Work scope: issue / path / issue_and_path.
+ */
+target_type: SquadTargetType, 
+/**
+ * When target includes Issue — the goal/context Issue.
+ */
+issue_id: string | null, 
+/**
+ * When target includes Path — local codebase/workdir for agents.
+ */
+working_directory: string | null, created_at: string, updated_at: string, };
 
 export type SquadMember = { id: string, squad_id: string, agent_id: string | null, user_id: string | null, created_at: string, };
+
+export type SquadTargetType = "issue" | "path" | "issue_and_path";
+
+export type SquadPipeline = { nodes: Array<SquadPipelineNode>, edges: Array<SquadPipelineEdge>, loop_config?: SquadLoopConfig, };
+
+export type SquadPipelineNode = { id: string, 
+/**
+ * Node kind. Defaults to `agent` when omitted (legacy pipelines).
+ */
+type: SquadPipelineNodeType, agent_id?: string, role?: string, prompt?: string, label?: string, 
+/**
+ * Free-layout canvas coordinates; ignored by topo / run logic.
+ */
+position?: SquadNodePosition, 
+/**
+ * Condition text for `if` / `while` (MVP: heuristic evaluation).
+ */
+condition?: string, 
+/**
+ * Max loop iterations for `while` nodes.
+ */
+max_iterations?: number, 
+/**
+ * Sleep duration for `wait` nodes (seconds).
+ */
+wait_seconds?: number, 
+/**
+ * Optional human-readable wait reason / condition for `wait`.
+ */
+wait_for?: string, 
+/**
+ * For `join`: require N of M inbound branches (default = all inbound edges).
+ */
+join_count?: number, };
+
+export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "fork" | "join";
+
+export type SquadPipelineEdge = { id: string, source: string, target: string, 
+/**
+ * Branch label for if (`true`/`false`) or while (`body`/`exit`).
+ */
+branch?: SquadPipelineEdgeBranch, };
+
+export type SquadPipelineEdgeBranch = "default" | "true" | "false" | "body" | "exit" | "error";
+
+export type SquadNodePosition = { x: number, y: number, };
+
+export type SquadLoopConfig = { max_iterations?: number, success_condition?: string, cron_expression?: string, enabled?: boolean, };
 
 export type ListSquadsResponse = { squads: Array<Squad>, };
 
 export type ListSquadMembersResponse = { members: Array<SquadMember>, };
+
+export type RunSquadResponse = { issue_id: string, agent_task_ids: Array<string>, ordered_node_ids: Array<string>, target_type: SquadTargetType, working_directory: string | null, };
+
+export type RunSquadRequest = { issue_id?: string, working_directory?: string, };
 
 export type InboxItem = { id: string, recipient_user_id: string, project_id: string | null, issue_id: string | null, type: string, title: string, body: string, payload: JsonValue, read_at: string | null, archived_at: string | null, created_at: string, };
 
@@ -209,21 +282,25 @@ export type CreateAgentRequest = { id?: string, project_id: string, name: string
 /**
  * Optional Cursor SDK credentials set at create time.
  */
-api_key?: string, base_url?: string, model_name?: string, };
+api_key?: string, base_url?: string, model_name?: string, 
+/**
+ * Optional local cwd for Cursor SDK file ops.
+ */
+working_directory?: string, };
 
 export type UpdateAgentRequest = { name: string | null, instructions: string | null, default_executor: string | null | null, max_concurrent_tasks: number | null, status: AgentStatus | null, chat_runtime: AgentChatRuntime | null, };
 
-export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string, is_leader_task?: boolean, preferred_repo_id?: string, };
+export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string, is_leader_task?: boolean, preferred_repo_id?: string, execution_prompt?: string, };
 
 export type UpdateAgentTaskRequest = { status?: AgentTaskStatus | null, failure_reason?: string | null | null, local_workspace_id?: string | null | null, local_session_id?: string | null | null, claimed_by_host?: string | null | null, attempt?: number | null, };
 
-export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
+export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string, squad_id?: string, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
 
-export type UpdateAutopilotRequest = { name: string | null, agent_id: string | null | null, enabled: boolean | null, execution_mode: AutopilotExecutionMode | null, cron_expression: string | null, timezone: string | null, concurrency_policy: AutopilotConcurrencyPolicy | null, issue_title_template: string | null, issue_description_template: string | null, };
+export type UpdateAutopilotRequest = { name: string | null, agent_id: string | null | null, squad_id: string | null | null, enabled: boolean | null, execution_mode: AutopilotExecutionMode | null, cron_expression: string | null, timezone: string | null, concurrency_policy: AutopilotConcurrencyPolicy | null, issue_title_template: string | null, issue_description_template: string | null, };
 
-export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string, };
+export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string, pipeline?: SquadPipeline, target_type?: SquadTargetType, issue_id?: string, working_directory?: string, };
 
-export type UpdateSquadRequest = { name: string | null, leader_agent_id: string | null | null, };
+export type UpdateSquadRequest = { name: string | null, leader_agent_id: string | null | null, pipeline: SquadPipeline | null, target_type: SquadTargetType | null, issue_id: string | null | null, working_directory: string | null | null, };
 
 export type CreateWebhookEndpointRequest = { id?: string, project_id: string, name: string, autopilot_id?: string, signing_secret?: string, };
 

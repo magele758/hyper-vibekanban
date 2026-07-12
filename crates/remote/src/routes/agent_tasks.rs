@@ -173,6 +173,7 @@ async fn create_agent_task(
         payload.squad_id,
         payload.is_leader_task.unwrap_or(false),
         payload.preferred_repo_id,
+        payload.execution_prompt,
     )
     .await
     .map_err(|error| {

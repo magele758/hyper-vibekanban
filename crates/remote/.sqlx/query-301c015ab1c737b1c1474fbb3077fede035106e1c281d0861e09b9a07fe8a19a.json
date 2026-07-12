@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                t.id                      AS \"id!: Uuid\",\n                t.agent_id                AS \"agent_id!: Uuid\",\n                t.issue_id                AS \"issue_id!: Uuid\",\n                t.status                  AS \"status!: AgentTaskStatus\",\n                t.trigger                 AS \"trigger!: AgentTaskTrigger\",\n                t.priority                AS \"priority!\",\n                t.attempt                 AS \"attempt!\",\n                t.max_attempts            AS \"max_attempts!\",\n                t.failure_reason,\n                t.local_workspace_id,\n                t.local_session_id,\n                t.claimed_by_host,\n                t.claimed_at,\n                t.started_at,\n                t.completed_at,\n                t.force_fresh_session     AS \"force_fresh_session!\",\n                t.resume_session_id,\n                t.squad_id,\n                t.is_leader_task          AS \"is_leader_task!\",\n                t.preferred_repo_id,\n                t.created_at              AS \"created_at!: DateTime<Utc>\",\n                t.updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks t\n            JOIN agents a ON a.id = t.agent_id\n            WHERE t.status = 'queued'\n              AND (\n                SELECT COUNT(*) FROM agent_tasks active\n                WHERE active.agent_id = t.agent_id\n                  AND active.status IN ('dispatched', 'running')\n              ) < a.max_concurrent_tasks\n            ORDER BY t.priority DESC, t.created_at ASC\n            LIMIT 1\n            FOR UPDATE OF t SKIP LOCKED\n            ",
+  "query": "\n                SELECT\n                    id                      AS \"id!: Uuid\",\n                    agent_id                AS \"agent_id!: Uuid\",\n                    issue_id                AS \"issue_id!: Uuid\",\n                    status                  AS \"status!: AgentTaskStatus\",\n                    trigger                 AS \"trigger!: AgentTaskTrigger\",\n                    priority                AS \"priority!\",\n                    attempt                 AS \"attempt!\",\n                    max_attempts            AS \"max_attempts!\",\n                    failure_reason,\n                    local_workspace_id,\n                    local_session_id,\n                    claimed_by_host,\n                    claimed_at,\n                    started_at,\n                    completed_at,\n                    force_fresh_session     AS \"force_fresh_session!\",\n                    resume_session_id,\n                    squad_id,\n                    is_leader_task          AS \"is_leader_task!\",\n                    preferred_repo_id,\n                    execution_prompt,\n                    created_at              AS \"created_at!: DateTime<Utc>\",\n                    updated_at              AS \"updated_at!: DateTime<Utc>\"\n                FROM agent_tasks\n                WHERE agent_id = $1\n                  AND issue_id = $2\n                  AND status IN ('queued', 'dispatched', 'running')\n                  AND squad_id IS NULL\n                LIMIT 1\n                ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
                 "mention",
                 "manual",
                 "copilot",
-                "autopilot"
+                "autopilot",
+                "feishu"
               ]
             }
           }
@@ -132,17 +133,25 @@
       },
       {
         "ordinal": 20,
+        "name": "execution_prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
@@ -165,9 +174,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "7506fb34d34166aa0625ca5406ce6d2411d9339d0dce7e4ec94dad53ae6be66f"
+  "hash": "301c015ab1c737b1c1474fbb3077fede035106e1c281d0861e09b9a07fe8a19a"
 }

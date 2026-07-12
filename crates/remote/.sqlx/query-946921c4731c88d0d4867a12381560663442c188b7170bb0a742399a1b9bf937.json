@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks\n            WHERE id = $1\n            ",
+  "query": "\n            UPDATE agent_tasks\n            SET\n                status = COALESCE($2, status),\n                failure_reason = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::text IS NOT NULL THEN $4\n                    ELSE failure_reason\n                END,\n                local_workspace_id = CASE\n                    WHEN $5 THEN NULL\n                    WHEN $6::uuid IS NOT NULL THEN $6\n                    ELSE local_workspace_id\n                END,\n                local_session_id = CASE\n                    WHEN $7 THEN NULL\n                    WHEN $8::uuid IS NOT NULL THEN $8\n                    ELSE local_session_id\n                END,\n                claimed_by_host = CASE\n                    WHEN $9 THEN NULL\n                    WHEN $10::text IS NOT NULL THEN $10\n                    ELSE claimed_by_host\n                END,\n                attempt = COALESCE($11, attempt),\n                started_at = CASE WHEN $12 THEN COALESCE(started_at, NOW()) ELSE started_at END,\n                completed_at = CASE WHEN $13 THEN NOW() ELSE completed_at END,\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                execution_prompt,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
                 "mention",
                 "manual",
                 "copilot",
-                "autopilot"
+                "autopilot",
+                "feishu"
               ]
             }
           }
@@ -132,18 +133,49 @@
       },
       {
         "ordinal": 20,
+        "name": "execution_prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        {
+          "Custom": {
+            "name": "agent_task_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "dispatched",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Text",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "Bool",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool"
       ]
     },
     "nullable": [
@@ -167,9 +199,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "01428eca99966a3258a07b9e6cb27487981957bb3ffa35b95125e032b860fb83"
+  "hash": "946921c4731c88d0d4867a12381560663442c188b7170bb0a742399a1b9bf937"
 }

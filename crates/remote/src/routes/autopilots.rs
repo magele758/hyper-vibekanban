@@ -79,6 +79,7 @@ async fn create_autopilot(
         payload.project_id,
         payload.name,
         payload.agent_id,
+        payload.squad_id,
         payload.enabled.unwrap_or(true),
         payload
             .execution_mode
@@ -115,6 +116,7 @@ async fn update_autopilot(
         id,
         payload.name,
         payload.agent_id,
+        payload.squad_id,
         payload.enabled,
         payload.execution_mode,
         payload.cron_expression,

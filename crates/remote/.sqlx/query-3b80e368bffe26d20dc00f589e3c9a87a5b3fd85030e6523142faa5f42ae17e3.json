@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE autopilots\n            SET\n                name = COALESCE($2, name),\n                agent_id = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::uuid IS NOT NULL THEN $4\n                    ELSE agent_id\n                END,\n                enabled = COALESCE($5, enabled),\n                execution_mode = COALESCE($6, execution_mode),\n                cron_expression = COALESCE($7, cron_expression),\n                timezone = COALESCE($8, timezone),\n                concurrency_policy = COALESCE($9, concurrency_policy),\n                issue_title_template = COALESCE($10, issue_title_template),\n                issue_description_template = COALESCE($11, issue_description_template),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            UPDATE autopilots\n            SET\n                name = COALESCE($2, name),\n                agent_id = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::uuid IS NOT NULL THEN $4\n                    ELSE agent_id\n                END,\n                squad_id = CASE\n                    WHEN $5 THEN NULL\n                    WHEN $6::uuid IS NOT NULL THEN $6\n                    ELSE squad_id\n                END,\n                enabled = COALESCE($7, enabled),\n                execution_mode = COALESCE($8, execution_mode),\n                cron_expression = COALESCE($9, cron_expression),\n                timezone = COALESCE($10, timezone),\n                concurrency_policy = COALESCE($11, concurrency_policy),\n                issue_title_template = COALESCE($12, issue_title_template),\n                issue_description_template = COALESCE($13, issue_description_template),\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                squad_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
         "name": "enabled!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "execution_mode!: AutopilotExecutionMode",
         "type_info": {
           "Custom": {
@@ -44,17 +49,17 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "cron_expression!",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "timezone!",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "concurrency_policy!: AutopilotConcurrencyPolicy",
         "type_info": {
           "Custom": {
@@ -69,32 +74,32 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "issue_title_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "issue_description_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "next_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "last_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -103,6 +108,8 @@
       "Left": [
         "Uuid",
         "Text",
+        "Bool",
+        "Uuid",
         "Bool",
         "Uuid",
         "Bool",
@@ -139,6 +146,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -152,5 +160,5 @@
       false
     ]
   },
-  "hash": "0ce47ee26ece1958c9d634dcc413d978359fcccc2d2737f2b84c85e6b3454989"
+  "hash": "3b80e368bffe26d20dc00f589e3c9a87a5b3fd85030e6523142faa5f42ae17e3"
 }

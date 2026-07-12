@@ -111,10 +111,19 @@ async fn create_agent(
         db_error(error, "failed to create agent")
     })?;
 
-    if payload.api_key.is_some() || payload.base_url.is_some() || payload.model_name.is_some() {
+    if payload.api_key.is_some()
+        || payload.base_url.is_some()
+        || payload.model_name.is_some()
+        || payload.working_directory.is_some()
+    {
         let update_api_key = payload.api_key.is_some();
+        let update_working_directory = payload.working_directory.is_some();
         let api_key = payload.api_key.and_then(|k| {
             let t = k.trim().to_string();
+            if t.is_empty() { None } else { Some(t) }
+        });
+        let working_directory = payload.working_directory.and_then(|d| {
+            let t = d.trim().to_string();
             if t.is_empty() { None } else { Some(t) }
         });
         if let Err(error) = CopilotRepository::upsert_llm_settings(
@@ -123,7 +132,9 @@ async fn create_agent(
             api_key,
             payload.base_url.filter(|u| !u.trim().is_empty()),
             payload.model_name.filter(|m| !m.trim().is_empty()),
+            working_directory,
             update_api_key,
+            update_working_directory,
         )
         .await
         {

@@ -26,8 +26,21 @@ import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
 import type {
   Autopilot,
   AutopilotRun,
+  UpdateAutopilotRequest,
   WebhookEndpoint,
 } from 'shared/remote-types';
+import { FolderPickerDialog } from '@/shared/dialogs/shared/FolderPickerDialog';
+import { AgentModelNameField } from './AgentModelNameField';
+import {
+  AutopilotScheduleField,
+  getLocalTimezone,
+} from './AutopilotScheduleField';
+import {
+  SquadPipelineEditor,
+  squadToDraft,
+  type SquadEditorDraft,
+} from './SquadPipelineEditor';
+import { SquadChatCreatePanel } from './SquadChatCreatePanel';
 
 type Tab = 'agents' | 'autopilots' | 'squads' | 'webhooks' | 'feishu';
 
@@ -45,9 +58,21 @@ function AgentsTab({ projectId }: { projectId: string }) {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [modelName, setModelName] = useState('composer-2.5');
+  const [workingDirectory, setWorkingDirectory] = useState('');
+  const [defaultCwd, setDefaultCwd] = useState<string | null>(null);
+  const [cwdLoading, setCwdLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCwdLoading(true);
+    void boardAgentsApi
+      .getDefaultCwd()
+      .then((cwd) => setDefaultCwd(cwd || null))
+      .catch(() => setDefaultCwd(null))
+      .finally(() => setCwdLoading(false));
+  }, []);
 
   const sorted = useMemo(
     () => [...agents].sort((a, b) => a.name.localeCompare(b.name)),
@@ -69,6 +94,7 @@ function AgentsTab({ projectId }: { projectId: string }) {
         api_key: apiKey.trim() || undefined,
         base_url: baseUrl.trim() || undefined,
         model_name: modelName.trim() || undefined,
+        working_directory: workingDirectory.trim() || undefined,
       });
       setCreating(false);
       setName('');
@@ -77,6 +103,7 @@ function AgentsTab({ projectId }: { projectId: string }) {
       setApiKey('');
       setBaseUrl('');
       setModelName('composer-2.5');
+      setWorkingDirectory('');
       void navigate({
         to: '/projects/$projectId/agents/$agentId',
         params: { projectId, agentId: agent.id },
@@ -165,33 +192,86 @@ function AgentsTab({ projectId }: { projectId: string }) {
           </label>
           <div className="grid gap-2 sm:grid-cols-1">
             <label className="text-xs text-low">
-              API Key
+              {chatRuntime === 'cursor'
+                ? 'Cursor User API Key'
+                : 'API Key（OpenAI 兼容）'}
               <input
                 className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
                 type="password"
-                placeholder="key_..."
+                placeholder={
+                  chatRuntime === 'cursor'
+                    ? 'key_...'
+                    : '对应 runtime 的 API Key'
+                }
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                disabled={chatRuntime !== 'cursor'}
               />
             </label>
             <label className="text-xs text-low">
-              Base URL（可选）
+              Base URL
+              {chatRuntime !== 'cursor' ? '（Pi/OpenCode 必填）' : '（可选）'}
               <input
                 className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
-                placeholder="默认留空"
+                placeholder={
+                  chatRuntime === 'cursor'
+                    ? '默认留空（官方 Cursor）'
+                    : 'https://api.openai.com/v1 或自建网关'
+                }
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
             </label>
             <label className="text-xs text-low">
               Model name
-              <input
-                className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
-                placeholder="composer-2.5"
+              <AgentModelNameField
                 value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
+                onChange={setModelName}
+                chatRuntime={chatRuntime}
+                apiKey={apiKey}
+                baseUrl={baseUrl}
+                placeholder={
+                  chatRuntime === 'cursor' ? 'composer-2.5' : 'gpt-4.1-mini'
+                }
               />
+            </label>
+            <label className="text-xs text-low">
+              工作目录（可选）
+              <div className="mt-1 flex gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded-md border border-border bg-primary px-3 py-2 text-sm"
+                  placeholder={
+                    defaultCwd
+                      ? `留空 → ${defaultCwd}`
+                      : cwdLoading
+                        ? '正在读取 sidecar 默认目录…'
+                        : '留空则用 sidecar 进程目录'
+                  }
+                  value={workingDirectory}
+                  onChange={(e) => setWorkingDirectory(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="shrink-0 rounded-md border border-border px-3 py-2 text-sm text-low hover:bg-primary hover:text-normal"
+                  onClick={() => {
+                    void FolderPickerDialog.show({
+                      value: workingDirectory || defaultCwd || undefined,
+                      title: '选择 Agent 工作目录',
+                      description:
+                        'Cursor SDK 会在此目录读写文件。留空则使用 sidecar 默认目录。',
+                    }).then((selected) => {
+                      if (selected) setWorkingDirectory(selected);
+                    });
+                  }}
+                >
+                  选择…
+                </button>
+              </div>
+              <p className="mt-1 text-[11px] text-low">
+                未指定时实际目录：
+                {cwdLoading
+                  ? '（读取中…）'
+                  : (defaultCwd ?? '（无法读取 sidecar 默认目录）')}
+              </p>
             </label>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -276,14 +356,14 @@ function AgentsTab({ projectId }: { projectId: string }) {
 // ── Autopilots tab ───────────────────────────────────────────────────────────
 
 function AutopilotsTab({ projectId }: { projectId: string }) {
-  const { agents, autopilots } = useProjectContext();
+  const { agents, autopilots, squads } = useProjectContext();
   const [runs, setRuns] = useState<Record<string, AutopilotRun[]>>({});
   const [showRuns, setShowRuns] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState('');
+  const [squadId, setSquadId] = useState('');
   const [cron, setCron] = useState('0 9 * * 1-5');
-  const [timezone, setTimezone] = useState('UTC');
   const [executionMode, setExecutionMode] = useState<
     'create_issue' | 'run_only'
   >('create_issue');
@@ -296,15 +376,20 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
 
   const handleCreate = async () => {
     if (!name.trim()) return;
+    if (!agentId && !squadId) {
+      setError('请选择 Agent 或 Squad');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       await boardAgentsApi.createAutopilot({
         project_id: projectId,
         name: name.trim(),
-        agent_id: agentId || null,
+        agent_id: squadId ? undefined : agentId || undefined,
+        squad_id: squadId || undefined,
         cron_expression: cron.trim(),
-        timezone: timezone.trim(),
+        timezone: getLocalTimezone(),
         execution_mode: executionMode,
         concurrency_policy: concurrency,
         issue_title_template: titleTemplate.trim(),
@@ -312,6 +397,8 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
       });
       setCreating(false);
       setName('');
+      setAgentId('');
+      setSquadId('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -323,7 +410,7 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
     try {
       await boardAgentsApi.updateAutopilot(ap.id, {
         enabled: !ap.enabled,
-      });
+      } as UpdateAutopilotRequest);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -386,11 +473,15 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
             onChange={(e) => setName(e.target.value)}
           />
           <label className="block text-xs text-low">
-            绑定 Agent（可选）
+            绑定 Agent（单 Agent 模式）
             <select
               className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
               value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
+              disabled={!!squadId}
+              onChange={(e) => {
+                setAgentId(e.target.value);
+                if (e.target.value) setSquadId('');
+              }}
             >
               <option value="">（无）</option>
               {agents.map((a) => (
@@ -401,23 +492,25 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
             </select>
           </label>
           <label className="block text-xs text-low">
-            Cron 表达式
-            <input
-              className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm font-mono"
-              placeholder="0 9 * * 1-5"
-              value={cron}
-              onChange={(e) => setCron(e.target.value)}
-            />
-          </label>
-          <label className="block text-xs text-low">
-            时区
-            <input
+            或绑定 Squad（运行其流水线 / Loop）
+            <select
               className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
-              placeholder="UTC"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            />
+              value={squadId}
+              disabled={!!agentId}
+              onChange={(e) => {
+                setSquadId(e.target.value);
+                if (e.target.value) setAgentId('');
+              }}
+            >
+              <option value="">（无）</option>
+              {squads.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </label>
+          <AutopilotScheduleField value={cron} onChange={setCron} />
           <label className="block text-xs text-low">
             执行模式
             <select
@@ -477,6 +570,7 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
         <div className="space-y-3">
           {autopilots.map((ap) => {
             const agentName = agents.find((a) => a.id === ap.agent_id)?.name;
+            const squadName = squads.find((s) => s.id === ap.squad_id)?.name;
             return (
               <div
                 key={ap.id}
@@ -502,7 +596,11 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
                     </p>
                     <p className="text-xs text-low">
                       {ap.execution_mode} · {ap.concurrency_policy}
-                      {agentName ? ` · Agent: ${agentName}` : ''}
+                      {squadName
+                        ? ` · Squad: ${squadName}`
+                        : agentName
+                          ? ` · Agent: ${agentName}`
+                          : ''}
                     </p>
                     {ap.next_run_at && (
                       <p className="text-xs text-low">
@@ -606,36 +704,107 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
 // ── Squads tab ───────────────────────────────────────────────────────────────
 
 function SquadsTab({ projectId }: { projectId: string }) {
-  const { agents, squads, squadMembers: allSquadMembers } = useProjectContext();
-  const [showMembers, setShowMembers] = useState<string | null>(null);
+  const {
+    agents,
+    issues,
+    squads,
+    squadMembers: allSquadMembers,
+  } = useProjectContext();
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState('');
-  const [leaderId, setLeaderId] = useState('');
+  const [draft, setDraft] = useState<SquadEditorDraft | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [showMembers, setShowMembers] = useState<string | null>(null);
   const [addingMemberSquadId, setAddingMemberSquadId] = useState<string | null>(
     null
   );
   const [newMemberAgentId, setNewMemberAgentId] = useState('');
   const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
 
   const membersFor = useCallback(
     (squadId: string) => allSquadMembers.filter((m) => m.squad_id === squadId),
     [allSquadMembers]
   );
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
+  const openCreate = () => {
+    setCreating(true);
+    setEditingId(null);
+    setChatOpen(false);
+    setDraft({
+      name: '',
+      leader_agent_id: null,
+      target_type: 'issue_and_path',
+      issue_id: null,
+      working_directory: null,
+      pipeline: { nodes: [], edges: [] },
+    });
+    setError(null);
+    setRunMsg(null);
+  };
+
+  const openChatCreate = () => {
+    setCreating(true);
+    setEditingId(null);
+    setChatOpen(true);
+    setDraft({
+      name: '',
+      leader_agent_id: null,
+      target_type: 'issue_and_path',
+      issue_id: null,
+      working_directory: null,
+      pipeline: { nodes: [], edges: [] },
+    });
+    setError(null);
+    setRunMsg(null);
+  };
+
+  const openEdit = (squadId: string) => {
+    const squad = squads.find((s) => s.id === squadId);
+    if (!squad) return;
+    setCreating(false);
+    setEditingId(squadId);
+    setChatOpen(false);
+    setDraft(squadToDraft(squad));
+    setError(null);
+    setRunMsg(null);
+  };
+
+  const closeEditor = () => {
+    setCreating(false);
+    setEditingId(null);
+    setDraft(null);
+    setChatOpen(false);
+  };
+
+  const handleSave = async () => {
+    if (!draft || !draft.name.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      await boardAgentsApi.createSquad({
-        project_id: projectId,
-        name: name.trim(),
-        leader_agent_id: leaderId || null,
-      });
-      setCreating(false);
-      setName('');
-      setLeaderId('');
+      if (creating) {
+        await boardAgentsApi.createSquad({
+          project_id: projectId,
+          name: draft.name.trim(),
+          leader_agent_id: draft.leader_agent_id ?? undefined,
+          target_type: draft.target_type,
+          issue_id: draft.issue_id ?? undefined,
+          working_directory: draft.working_directory ?? undefined,
+          pipeline: draft.pipeline,
+        });
+      } else if (editingId) {
+        await boardAgentsApi.updateSquad(editingId, {
+          name: draft.name.trim(),
+          leader_agent_id: draft.leader_agent_id,
+          target_type: draft.target_type,
+          issue_id: draft.issue_id,
+          working_directory: draft.working_directory,
+          pipeline: draft.pipeline,
+        } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
+      }
+      closeEditor();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -643,17 +812,43 @@ function SquadsTab({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleRun = async (squadId: string) => {
+    setRunning(true);
+    setError(null);
+    setRunMsg(null);
+    try {
+      // Persist draft first if editing this squad
+      if (editingId === squadId && draft) {
+        await boardAgentsApi.updateSquad(squadId, {
+          name: draft.name.trim(),
+          leader_agent_id: draft.leader_agent_id,
+          target_type: draft.target_type,
+          issue_id: draft.issue_id,
+          working_directory: draft.working_directory,
+          pipeline: draft.pipeline,
+        } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
+      }
+      const result = await boardAgentsApi.runSquad(squadId);
+      setRunMsg(
+        `已入队 ${result.agent_task_ids.length} 个任务（Issue ${result.issue_id.slice(0, 8)}…，目标 ${result.target_type}${
+          result.working_directory ? ` @ ${result.working_directory}` : ''
+        }）`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const handleDelete = async (id: string, squadName: string) => {
     if (!window.confirm(`确定删除 Squad「${squadName}」？`)) return;
     try {
       await boardAgentsApi.deleteSquad(id);
+      if (editingId === id) closeEditor();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  };
-
-  const handleShowMembers = (id: string) => {
-    setShowMembers((prev) => (prev === id ? null : id));
   };
 
   const handleAddMember = async (squadId: string) => {
@@ -677,63 +872,101 @@ function SquadsTab({ projectId }: { projectId: string }) {
     }
   };
 
+  const targetLabel = (s: (typeof squads)[0]) => {
+    const t = s.target_type ?? 'path';
+    if (t === 'issue') return 'Issue';
+    if (t === 'issue_and_path') return 'Issue+目录';
+    return '目录';
+  };
+
   return (
     <div className="p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-sm text-low">
-          Squad：Agent 团队，支持 Leader + 成员协作执行任务。
-        </p>
-        <PrimaryButton onClick={() => setCreating(true)}>
-          <PlusIcon className="size-4" />
-          新建 Squad
-        </PrimaryButton>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="max-w-2xl space-y-1">
+          <p className="text-sm text-low">
+            Squad = Agent 团队 +{' '}
+            <span className="text-normal">可编辑流水线（DAG）</span>
+            。可用「对话创建」用自然语言生成流水线，再在画布微调；也可手动编排后「运行一次」或交给
+            Autopilot。
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/15"
+            onClick={openChatCreate}
+          >
+            <ChatCircleIcon className="size-4" />
+            对话创建
+          </button>
+          <PrimaryButton onClick={openCreate}>
+            <PlusIcon className="size-4" />
+            新建 Squad
+          </PrimaryButton>
+        </div>
       </div>
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+      {runMsg && <p className="mb-4 text-sm text-brand">{runMsg}</p>}
 
-      {creating && (
-        <div className="mb-6 max-w-xl space-y-3 rounded-lg border border-border bg-secondary p-4">
-          <h2 className="font-medium text-normal">创建 Squad</h2>
-          <input
-            className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
-            placeholder="名称"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <label className="block text-xs text-low">
-            Leader Agent（可选）
-            <select
-              className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
-              value={leaderId}
-              onChange={(e) => setLeaderId(e.target.value)}
-            >
-              <option value="">（无）</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex gap-2">
-            <PrimaryButton disabled={busy} onClick={() => void handleCreate()}>
-              {busy ? '创建中…' : '创建'}
-            </PrimaryButton>
+      {draft && (creating || editingId) && (
+        <div className="mb-6 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-medium text-normal">
+              {creating ? '创建 Squad' : '编辑流水线'}
+            </h2>
             <button
               type="button"
-              className="rounded-md px-3 py-1.5 text-sm text-low"
-              onClick={() => setCreating(false)}
+              className="text-xs text-brand hover:underline"
+              onClick={() => setChatOpen((v) => !v)}
             >
-              取消
+              {chatOpen ? '收起对话' : '对话改流水线'}
             </button>
           </div>
+          {chatOpen && (
+            <SquadChatCreatePanel
+              projectId={projectId}
+              agents={agents}
+              issues={issues}
+              draft={draft}
+              compact={!creating || draft.pipeline.nodes.length > 0}
+              onApply={(next) => {
+                setDraft(next);
+              }}
+              onClose={() => setChatOpen(false)}
+            />
+          )}
+          <SquadPipelineEditor
+            agents={agents}
+            issues={issues}
+            draft={draft}
+            onChange={setDraft}
+            onSave={() => void handleSave()}
+            onRun={editingId ? () => void handleRun(editingId) : undefined}
+            onCancel={closeEditor}
+            busy={busy}
+            running={running}
+            saveLabel={creating ? '创建' : '保存流水线'}
+          />
         </div>
       )}
 
-      {squads.length === 0 ? (
+      {squads.length === 0 && !creating ? (
         <div className="flex flex-col items-center justify-center gap-3 py-20 text-low">
           <UsersThreeIcon className="size-10" />
-          <p>还没有 Squad。</p>
+          <p className="font-medium text-normal">还没有 Squad</p>
+          <p className="max-w-md text-center text-sm">
+            用「对话创建」描述工作流即可生成 DAG，或手动新建后在画布编排。配置
+            Issue / 目录目标后可「运行一次」或交给 Autopilot。
+          </p>
+          <button
+            type="button"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/15"
+            onClick={openChatCreate}
+          >
+            <ChatCircleIcon className="size-4" />
+            对话创建
+          </button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -741,6 +974,10 @@ function SquadsTab({ projectId }: { projectId: string }) {
             const leaderName = agents.find(
               (a) => a.id === squad.leader_agent_id
             )?.name;
+            const stepCount = squad.pipeline?.nodes?.length ?? 0;
+            const issueTitle = squad.issue_id
+              ? issues.find((i) => i.id === squad.issue_id)?.title
+              : null;
             return (
               <div
                 key={squad.id}
@@ -753,21 +990,47 @@ function SquadsTab({ projectId }: { projectId: string }) {
                       <span className="font-medium text-normal">
                         {squad.name}
                       </span>
+                      <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] text-low">
+                        {targetLabel(squad)}
+                      </span>
                     </div>
-                    {leaderName && (
-                      <p className="mt-1 text-xs text-low">
-                        Leader: {leaderName}
-                      </p>
-                    )}
+                    <p className="mt-1 text-xs text-low">
+                      {stepCount} 步
+                      {leaderName ? ` · Leader: ${leaderName}` : ''}
+                      {issueTitle ? ` · Issue: ${issueTitle}` : ''}
+                      {squad.working_directory
+                        ? ` · ${squad.working_directory}`
+                        : ''}
+                    </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex shrink-0 flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      className="rounded-md px-2 py-1 text-xs text-brand hover:bg-brand/10"
+                      onClick={() => openEdit(squad.id)}
+                    >
+                      编辑流水线
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md px-2 py-1 text-xs text-low hover:bg-primary"
+                      disabled={running}
+                      onClick={() => void handleRun(squad.id)}
+                    >
+                      <PlayIcon className="mr-0.5 inline size-3" />
+                      运行一次
+                    </button>
                     <button
                       type="button"
                       className={cn(
                         'rounded-md px-2 py-1 text-xs hover:bg-primary',
                         showMembers === squad.id ? 'text-brand' : 'text-low'
                       )}
-                      onClick={() => void handleShowMembers(squad.id)}
+                      onClick={() =>
+                        setShowMembers((prev) =>
+                          prev === squad.id ? null : squad.id
+                        )
+                      }
                     >
                       成员
                     </button>

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            FROM autopilots\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                squad_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            FROM autopilots\n            WHERE project_id = $1\n            ORDER BY name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
         "name": "enabled!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "execution_mode!: AutopilotExecutionMode",
         "type_info": {
           "Custom": {
@@ -44,17 +49,17 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "cron_expression!",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "timezone!",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "concurrency_policy!: AutopilotConcurrencyPolicy",
         "type_info": {
           "Custom": {
@@ -69,32 +74,32 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "issue_title_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "issue_description_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "next_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "last_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -109,6 +114,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -122,5 +128,5 @@
       false
     ]
   },
-  "hash": "a0ce387123a59b82ca449b3aebf3786c84526c9944a40622cbc95e30fdceb5a3"
+  "hash": "8a59e17592155b4d58408c1ca5df4e992df3096aa29ca89d6950b83f155d4341"
 }

@@ -8,6 +8,9 @@ import type {
   Squad,
   SquadMember,
   CreateSquadRequest,
+  UpdateSquadRequest,
+  RunSquadRequest,
+  RunSquadResponse,
   WebhookEndpoint,
   CreateWebhookEndpointRequest,
   FeishuBotBinding,
@@ -26,6 +29,7 @@ export type AgentLlmSettings = {
   has_api_key: boolean;
   base_url: string | null;
   model_name: string | null;
+  working_directory: string | null;
   updated_at: string;
 };
 
@@ -67,6 +71,7 @@ export const boardAgentsApi = {
     api_key?: string;
     base_url?: string;
     model_name?: string;
+    working_directory?: string;
   }): Promise<{ id: string } & Record<string, unknown>> {
     const data = await json<{ data: { id: string } & Record<string, unknown> }>(
       await makeRequest('/v1/agents', {
@@ -83,7 +88,12 @@ export const boardAgentsApi = {
 
   async upsertLlmSettings(
     agentId: string,
-    body: { api_key?: string; base_url?: string; model_name?: string }
+    body: {
+      api_key?: string;
+      base_url?: string;
+      model_name?: string;
+      working_directory?: string;
+    }
   ): Promise<AgentLlmSettings> {
     return json(
       await makeRequest(`/v1/agents/${agentId}/llm_settings`, {
@@ -238,6 +248,28 @@ export const boardAgentsApi = {
     return data.data;
   },
 
+  async updateSquad(id: string, body: UpdateSquadRequest): Promise<Squad> {
+    const data = await json<{ data: Squad }>(
+      await makeRequest(`/v1/squads/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
+    return data.data;
+  },
+
+  async runSquad(
+    id: string,
+    body?: RunSquadRequest
+  ): Promise<RunSquadResponse> {
+    return json<RunSquadResponse>(
+      await makeRequest(`/v1/squads/${id}/run`, {
+        method: 'POST',
+        body: JSON.stringify(body ?? {}),
+      })
+    );
+  },
+
   async deleteSquad(id: string): Promise<void> {
     await json<unknown>(
       await makeRequest(`/v1/squads/${id}`, { method: 'DELETE' })
@@ -359,17 +391,74 @@ export const boardAgentsApi = {
     );
   },
 
+  async getDefaultCwd(): Promise<string> {
+    const res = await fetch(`${SIDECAR_BASE}/cwd`);
+    if (!res.ok) {
+      throw new Error(`sidecar ${res.status}: ${await res.text()}`);
+    }
+    const data = (await res.json()) as { default_cwd?: string };
+    return data.default_cwd ?? '';
+  },
+
+  /**
+   * List models via sidecar.
+   * - With base_url: OpenAI-compatible gateway listing.
+   * - Without base_url: Cursor SDK `Cursor.models.list()` (not CLI --list-models).
+   * Pass api_key and/or agent_id to reuse saved LLM secrets.
+   */
+  async listModels(params: {
+    api_key?: string;
+    base_url?: string;
+    agent_id?: string | null;
+    token?: string;
+  }): Promise<Array<{ id: string; name?: string }>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (params.token) {
+      headers.Authorization = `Bearer ${params.token}`;
+    }
+    const res = await fetch(`${SIDECAR_BASE}/models`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        api_key: params.api_key || null,
+        base_url: params.base_url || null,
+        agent_id: params.agent_id ?? null,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`sidecar ${res.status}: ${text}`);
+    }
+    const data = (await res.json()) as {
+      models?: Array<{ id: string; name?: string }>;
+    };
+    return data.models ?? [];
+  },
+
   async chatStream(params: {
     project_id: string;
     session_id: string;
     agent_id?: string | null;
     message: string;
+    cwd?: string | null;
     onDelta?: (text: string) => void;
     onEvent?: (event: unknown) => void;
+    onStatus?: (status: {
+      runtime?: string;
+      cwd?: string;
+      cwd_source?: 'request' | 'saved' | 'default';
+    }) => void;
     onToolStart?: (toolName: string) => void;
     onToolResult?: (toolName: string, ok: boolean) => void;
     token: string;
-  }): Promise<{ reply: string; external_agent_id?: string }> {
+  }): Promise<{
+    reply: string;
+    external_agent_id?: string;
+    cwd?: string;
+    cwd_source?: 'request' | 'saved' | 'default';
+  }> {
     const res = await fetch(`${SIDECAR_BASE}/copilot/chat`, {
       method: 'POST',
       headers: {
@@ -381,6 +470,7 @@ export const boardAgentsApi = {
         session_id: params.session_id,
         agent_id: params.agent_id ?? null,
         message: params.message,
+        cwd: params.cwd?.trim() || undefined,
       }),
     });
     if (!res.ok || !res.body) {
@@ -392,6 +482,9 @@ export const boardAgentsApi = {
     let buffer = '';
     let reply = '';
     let external_agent_id: string | undefined;
+    let cwd: string | undefined;
+    let cwd_source: 'request' | 'saved' | 'default' | undefined;
+    let sawTerminal = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -411,25 +504,67 @@ export const boardAgentsApi = {
           event?: unknown;
           tool_name?: string;
           ok?: boolean;
+          runtime?: string;
+          cwd?: string;
+          cwd_source?: 'request' | 'saved' | 'default';
         };
         if (payload.type === 'delta' && payload.text) {
           params.onDelta?.(payload.text);
           reply += payload.text;
+        } else if (payload.type === 'status') {
+          if (payload.cwd) cwd = payload.cwd;
+          if (payload.cwd_source) cwd_source = payload.cwd_source;
+          params.onStatus?.({
+            runtime: payload.runtime,
+            cwd: payload.cwd,
+            cwd_source: payload.cwd_source,
+          });
         } else if (payload.type === 'event') {
           params.onEvent?.(payload.event);
+          const ev = payload.event as Record<string, unknown> | undefined;
+          if (ev && typeof ev === 'object') {
+            const et = String(ev.type ?? '');
+            if (et === 'tool_call' || et === 'tool-call') {
+              const name =
+                (typeof ev.name === 'string' && ev.name) ||
+                (typeof ev.tool_name === 'string' && ev.tool_name) ||
+                (typeof ev.toolName === 'string' && ev.toolName) ||
+                'tool';
+              const status = String(ev.status ?? ev.phase ?? '');
+              if (
+                status === 'completed' ||
+                status === 'done' ||
+                status === 'result'
+              ) {
+                params.onToolResult?.(name, ev.ok !== false);
+              } else {
+                params.onToolStart?.(name);
+              }
+            }
+          }
         } else if (payload.type === 'tool_start') {
           params.onToolStart?.(payload.tool_name ?? '');
         } else if (payload.type === 'tool_result') {
           params.onToolResult?.(payload.tool_name ?? '', payload.ok !== false);
         } else if (payload.type === 'done') {
+          sawTerminal = true;
           reply = payload.reply || reply;
           external_agent_id = payload.external_agent_id;
+          if (payload.cwd) cwd = payload.cwd;
+          if (payload.cwd_source) cwd_source = payload.cwd_source;
         } else if (payload.type === 'error') {
+          sawTerminal = true;
           throw new Error(payload.message || 'sidecar error');
         }
       }
     }
 
-    return { reply, external_agent_id };
+    if (!sawTerminal) {
+      throw new Error(
+        '连接已断开，未收到完成信号。Agent 可能仍在运行，请稍后刷新会话或重试。'
+      );
+    }
+
+    return { reply, external_agent_id, cwd, cwd_source };
   },
 };

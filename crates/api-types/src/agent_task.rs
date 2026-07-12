@@ -55,7 +55,10 @@ pub struct AgentTask {
     pub squad_id: Option<Uuid>,
     pub is_leader_task: bool,
     /// Preferred local repo path/id hint for the executor.
+    /// May also be an absolute working-directory path (squad path target).
     pub preferred_repo_id: Option<String>,
+    /// Optional per-step prompt (squad pipeline role/prompt/handoff).
+    pub execution_prompt: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -80,6 +83,8 @@ pub struct CreateAgentTaskRequest {
     pub is_leader_task: Option<bool>,
     #[ts(optional)]
     pub preferred_repo_id: Option<String>,
+    #[ts(optional)]
+    pub execution_prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -40,6 +40,7 @@ impl AgentTaskRepository {
                 squad_id,
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
+                execution_prompt,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks
@@ -81,6 +82,7 @@ impl AgentTaskRepository {
                 t.squad_id,
                 t.is_leader_task          AS "is_leader_task!",
                 t.preferred_repo_id,
+                t.execution_prompt,
                 t.created_at              AS "created_at!: DateTime<Utc>",
                 t.updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks t
@@ -124,6 +126,7 @@ impl AgentTaskRepository {
                 squad_id,
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
+                execution_prompt,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks
@@ -149,55 +152,61 @@ impl AgentTaskRepository {
         squad_id: Option<Uuid>,
         is_leader_task: bool,
         preferred_repo_id: Option<String>,
+        execution_prompt: Option<String>,
     ) -> Result<MutationResponse<AgentTask>, AgentTaskError> {
         let id = id.unwrap_or_else(Uuid::new_v4);
         let mut tx = super::begin_tx(pool).await?;
 
-        // If an active task already exists, return it instead of inserting.
-        if let Some(existing) = sqlx::query_as!(
-            AgentTask,
-            r#"
-            SELECT
-                id                      AS "id!: Uuid",
-                agent_id                AS "agent_id!: Uuid",
-                issue_id                AS "issue_id!: Uuid",
-                status                  AS "status!: AgentTaskStatus",
-                trigger                 AS "trigger!: AgentTaskTrigger",
-                priority                AS "priority!",
-                attempt                 AS "attempt!",
-                max_attempts            AS "max_attempts!",
-                failure_reason,
-                local_workspace_id,
-                local_session_id,
-                claimed_by_host,
-                claimed_at,
-                started_at,
-                completed_at,
-                force_fresh_session     AS "force_fresh_session!",
-                resume_session_id,
-                squad_id,
-                is_leader_task          AS "is_leader_task!",
-                preferred_repo_id,
-                created_at              AS "created_at!: DateTime<Utc>",
-                updated_at              AS "updated_at!: DateTime<Utc>"
-            FROM agent_tasks
-            WHERE agent_id = $1
-              AND issue_id = $2
-              AND status IN ('queued', 'dispatched', 'running')
-            LIMIT 1
-            "#,
-            agent_id,
-            issue_id
-        )
-        .fetch_optional(&mut *tx)
-        .await?
-        {
-            let txid = get_txid(&mut *tx).await?;
-            tx.commit().await?;
-            return Ok(MutationResponse {
-                data: existing,
-                txid,
-            });
+        // Soft-dedupe only for non-squad tasks (squad pipelines need serial/parallel
+        // steps on the same agent+issue). Unique index also scopes to squad_id IS NULL.
+        if squad_id.is_none() {
+            if let Some(existing) = sqlx::query_as!(
+                AgentTask,
+                r#"
+                SELECT
+                    id                      AS "id!: Uuid",
+                    agent_id                AS "agent_id!: Uuid",
+                    issue_id                AS "issue_id!: Uuid",
+                    status                  AS "status!: AgentTaskStatus",
+                    trigger                 AS "trigger!: AgentTaskTrigger",
+                    priority                AS "priority!",
+                    attempt                 AS "attempt!",
+                    max_attempts            AS "max_attempts!",
+                    failure_reason,
+                    local_workspace_id,
+                    local_session_id,
+                    claimed_by_host,
+                    claimed_at,
+                    started_at,
+                    completed_at,
+                    force_fresh_session     AS "force_fresh_session!",
+                    resume_session_id,
+                    squad_id,
+                    is_leader_task          AS "is_leader_task!",
+                    preferred_repo_id,
+                    execution_prompt,
+                    created_at              AS "created_at!: DateTime<Utc>",
+                    updated_at              AS "updated_at!: DateTime<Utc>"
+                FROM agent_tasks
+                WHERE agent_id = $1
+                  AND issue_id = $2
+                  AND status IN ('queued', 'dispatched', 'running')
+                  AND squad_id IS NULL
+                LIMIT 1
+                "#,
+                agent_id,
+                issue_id
+            )
+            .fetch_optional(&mut *tx)
+            .await?
+            {
+                let txid = get_txid(&mut *tx).await?;
+                tx.commit().await?;
+                return Ok(MutationResponse {
+                    data: existing,
+                    txid,
+                });
+            }
         }
 
         let data = sqlx::query_as!(
@@ -205,9 +214,10 @@ impl AgentTaskRepository {
             r#"
             INSERT INTO agent_tasks (
                 id, agent_id, issue_id, trigger, priority,
-                force_fresh_session, squad_id, is_leader_task, preferred_repo_id
+                force_fresh_session, squad_id, is_leader_task, preferred_repo_id,
+                execution_prompt
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING
                 id                      AS "id!: Uuid",
                 agent_id                AS "agent_id!: Uuid",
@@ -229,6 +239,7 @@ impl AgentTaskRepository {
                 squad_id,
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
+                execution_prompt,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,
@@ -240,7 +251,8 @@ impl AgentTaskRepository {
             force_fresh_session,
             squad_id,
             is_leader_task,
-            preferred_repo_id
+            preferred_repo_id,
+            execution_prompt
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -283,6 +295,7 @@ impl AgentTaskRepository {
                 t.squad_id,
                 t.is_leader_task          AS "is_leader_task!",
                 t.preferred_repo_id,
+                t.execution_prompt,
                 t.created_at              AS "created_at!: DateTime<Utc>",
                 t.updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks t
@@ -351,6 +364,7 @@ impl AgentTaskRepository {
                 squad_id,
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
+                execution_prompt,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,
@@ -443,6 +457,7 @@ impl AgentTaskRepository {
                 squad_id,
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
+                execution_prompt,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,

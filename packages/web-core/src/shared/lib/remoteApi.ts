@@ -57,6 +57,31 @@ export function resolveSharedRemoteApiBase(
     return apiBase;
   }
 
+  // Desktop vite is http://localhost:13001 while VITE_VK_SHARED_API_BASE is the
+  // Caddy h2 front door (https://localhost:13443). Prefer that https build-time
+  // base over VK_BROWSER_SHARED_API_BASE (plaintext Tailscale/LAN :13000), or
+  // ConfigProvider would force HTTP/1.1 and stall Electric shapes.
+  if (
+    buildTimeBase &&
+    buildTimeBase.startsWith('https:') &&
+    apiBase.startsWith('http:') &&
+    window.location.protocol === 'http:' &&
+    (window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1')
+  ) {
+    try {
+      const buildUrl = new URL(buildTimeBase);
+      if (
+        buildUrl.hostname === 'localhost' ||
+        buildUrl.hostname === '127.0.0.1'
+      ) {
+        return buildTimeBase;
+      }
+    } catch {
+      // fall through
+    }
+  }
+
   if (window.location.protocol === 'https:' && apiBase.startsWith('http:')) {
     return window.location.origin;
   }

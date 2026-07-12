@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                agent_id AS \"agent_id!: Uuid\",\n                api_key,\n                base_url,\n                model_name,\n                updated_at AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_llm_settings\n            WHERE agent_id = $1\n            ",
+  "query": "\n            SELECT\n                agent_id AS \"agent_id!: Uuid\",\n                api_key,\n                base_url,\n                model_name,\n                working_directory,\n                updated_at AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_llm_settings\n            WHERE agent_id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,11 @@
       },
       {
         "ordinal": 4,
+        "name": "working_directory",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -39,8 +44,9 @@
       true,
       true,
       true,
+      true,
       false
     ]
   },
-  "hash": "975eaae66ef236d39d25c5274af31e00abb7ecc778b63fe6d803c0d281026545"
+  "hash": "e778d7aa7637a792404e444c85f5ba87b44bcdbc33be1a2feb74aeedbf6e5aa6"
 }

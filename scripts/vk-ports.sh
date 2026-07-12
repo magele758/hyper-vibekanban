@@ -19,6 +19,8 @@
 # relay front door (18443) but for localhost + Caddy local CA.
 : "${VK_DESKTOP_RELAY_HTTPS_PORT:=13445}"
 : "${VK_DESKTOP_H2:=1}"
+# Board Agent chat sidecar (Cursor SDK / Pi / OpenCode). Vite proxies /agent-sidecar → this port.
+: "${VK_AGENT_SIDECAR_PORT:=13110}"
 # Tailscale mobile HTTPS front door is opt-in: it binds the mobile HTTPS port,
 # which by default collides with the Vite frontend port (both 13001). Enable
 # with VK_MOBILE=1 (and ensure VK_MOBILE_HTTPS_PORT differs from the frontend).
@@ -28,4 +30,5 @@ export VK_FRONTEND_PORT VK_BACKEND_PORT VK_PREVIEW_PROXY_PORT
 export VK_REMOTE_PORT VK_RELAY_PORT VK_REMOTE_DB_PORT
 export VK_MOBILE_HTTPS_PORT VK_MOBILE_RELAY_HTTPS_PORT
 export VK_DESKTOP_HTTPS_PORT VK_DESKTOP_RELAY_HTTPS_PORT VK_DESKTOP_H2 VK_MOBILE
+export VK_AGENT_SIDECAR_PORT
 export VK_BIND_ADDR

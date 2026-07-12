@@ -27,6 +27,7 @@ impl AutopilotRepository {
                 project_id      AS "project_id!: Uuid",
                 name            AS "name!",
                 agent_id,
+                squad_id,
                 enabled         AS "enabled!",
                 execution_mode  AS "execution_mode!: AutopilotExecutionMode",
                 cron_expression AS "cron_expression!",
@@ -61,6 +62,7 @@ impl AutopilotRepository {
                 project_id      AS "project_id!: Uuid",
                 name            AS "name!",
                 agent_id,
+                squad_id,
                 enabled         AS "enabled!",
                 execution_mode  AS "execution_mode!: AutopilotExecutionMode",
                 cron_expression AS "cron_expression!",
@@ -90,6 +92,7 @@ impl AutopilotRepository {
         project_id: Uuid,
         name: String,
         agent_id: Option<Uuid>,
+        squad_id: Option<Uuid>,
         enabled: bool,
         execution_mode: AutopilotExecutionMode,
         cron_expression: String,
@@ -106,17 +109,18 @@ impl AutopilotRepository {
             Autopilot,
             r#"
             INSERT INTO autopilots (
-                id, project_id, name, agent_id, enabled,
+                id, project_id, name, agent_id, squad_id, enabled,
                 execution_mode, cron_expression, timezone,
                 concurrency_policy, issue_title_template, issue_description_template,
                 next_run_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING
                 id              AS "id!: Uuid",
                 project_id      AS "project_id!: Uuid",
                 name            AS "name!",
                 agent_id,
+                squad_id,
                 enabled         AS "enabled!",
                 execution_mode  AS "execution_mode!: AutopilotExecutionMode",
                 cron_expression AS "cron_expression!",
@@ -133,6 +137,7 @@ impl AutopilotRepository {
             project_id,
             name,
             agent_id,
+            squad_id,
             enabled,
             execution_mode as AutopilotExecutionMode,
             cron_expression,
@@ -155,6 +160,7 @@ impl AutopilotRepository {
         id: Uuid,
         name: Option<String>,
         agent_id: Option<Option<Uuid>>,
+        squad_id: Option<Option<Uuid>>,
         enabled: Option<bool>,
         execution_mode: Option<AutopilotExecutionMode>,
         cron_expression: Option<String>,
@@ -167,6 +173,8 @@ impl AutopilotRepository {
 
         let clear_agent = matches!(agent_id, Some(None));
         let set_agent = agent_id.flatten();
+        let clear_squad = matches!(squad_id, Some(None));
+        let set_squad = squad_id.flatten();
 
         let mut data = sqlx::query_as!(
             Autopilot,
@@ -179,13 +187,18 @@ impl AutopilotRepository {
                     WHEN $4::uuid IS NOT NULL THEN $4
                     ELSE agent_id
                 END,
-                enabled = COALESCE($5, enabled),
-                execution_mode = COALESCE($6, execution_mode),
-                cron_expression = COALESCE($7, cron_expression),
-                timezone = COALESCE($8, timezone),
-                concurrency_policy = COALESCE($9, concurrency_policy),
-                issue_title_template = COALESCE($10, issue_title_template),
-                issue_description_template = COALESCE($11, issue_description_template),
+                squad_id = CASE
+                    WHEN $5 THEN NULL
+                    WHEN $6::uuid IS NOT NULL THEN $6
+                    ELSE squad_id
+                END,
+                enabled = COALESCE($7, enabled),
+                execution_mode = COALESCE($8, execution_mode),
+                cron_expression = COALESCE($9, cron_expression),
+                timezone = COALESCE($10, timezone),
+                concurrency_policy = COALESCE($11, concurrency_policy),
+                issue_title_template = COALESCE($12, issue_title_template),
+                issue_description_template = COALESCE($13, issue_description_template),
                 updated_at = NOW()
             WHERE id = $1
             RETURNING
@@ -193,6 +206,7 @@ impl AutopilotRepository {
                 project_id      AS "project_id!: Uuid",
                 name            AS "name!",
                 agent_id,
+                squad_id,
                 enabled         AS "enabled!",
                 execution_mode  AS "execution_mode!: AutopilotExecutionMode",
                 cron_expression AS "cron_expression!",
@@ -209,6 +223,8 @@ impl AutopilotRepository {
             name,
             clear_agent,
             set_agent,
+            clear_squad,
+            set_squad,
             enabled,
             execution_mode as Option<AutopilotExecutionMode>,
             cron_expression,
@@ -259,6 +275,7 @@ impl AutopilotRepository {
                 project_id      AS "project_id!: Uuid",
                 name            AS "name!",
                 agent_id,
+                squad_id,
                 enabled         AS "enabled!",
                 execution_mode  AS "execution_mode!: AutopilotExecutionMode",
                 cron_expression AS "cron_expression!",

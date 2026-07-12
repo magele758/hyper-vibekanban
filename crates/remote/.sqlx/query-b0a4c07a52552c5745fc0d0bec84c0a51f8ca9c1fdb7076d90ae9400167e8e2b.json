@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE agent_tasks\n            SET\n                status = 'dispatched',\n                claimed_by_host = $2,\n                claimed_at = NOW(),\n                attempt = attempt + 1,\n                resume_session_id = CASE\n                    WHEN NOT force_fresh_session THEN (\n                        SELECT prev.local_session_id\n                        FROM agent_tasks prev\n                        WHERE prev.agent_id = agent_tasks.agent_id\n                          AND prev.issue_id = agent_tasks.issue_id\n                          AND prev.status = 'completed'\n                          AND prev.local_session_id IS NOT NULL\n                        ORDER BY prev.completed_at DESC\n                        LIMIT 1\n                    )\n                    ELSE NULL\n                END,\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            SELECT\n                t.id                      AS \"id!: Uuid\",\n                t.agent_id                AS \"agent_id!: Uuid\",\n                t.issue_id                AS \"issue_id!: Uuid\",\n                t.status                  AS \"status!: AgentTaskStatus\",\n                t.trigger                 AS \"trigger!: AgentTaskTrigger\",\n                t.priority                AS \"priority!\",\n                t.attempt                 AS \"attempt!\",\n                t.max_attempts            AS \"max_attempts!\",\n                t.failure_reason,\n                t.local_workspace_id,\n                t.local_session_id,\n                t.claimed_by_host,\n                t.claimed_at,\n                t.started_at,\n                t.completed_at,\n                t.force_fresh_session     AS \"force_fresh_session!\",\n                t.resume_session_id,\n                t.squad_id,\n                t.is_leader_task          AS \"is_leader_task!\",\n                t.preferred_repo_id,\n                t.execution_prompt,\n                t.created_at              AS \"created_at!: DateTime<Utc>\",\n                t.updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agent_tasks t\n            JOIN agents a ON a.id = t.agent_id\n            WHERE t.status = 'queued'\n              AND (\n                SELECT COUNT(*) FROM agent_tasks active\n                WHERE active.agent_id = t.agent_id\n                  AND active.status IN ('dispatched', 'running')\n              ) < a.max_concurrent_tasks\n            ORDER BY t.priority DESC, t.created_at ASC\n            LIMIT 1\n            FOR UPDATE OF t SKIP LOCKED\n            ",
   "describe": {
     "columns": [
       {
@@ -49,7 +49,8 @@
                 "mention",
                 "manual",
                 "copilot",
-                "autopilot"
+                "autopilot",
+                "feishu"
               ]
             }
           }
@@ -132,20 +133,22 @@
       },
       {
         "ordinal": 20,
+        "name": "execution_prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 22,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": [
-        "Uuid",
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
       false,
@@ -168,9 +171,10 @@
       true,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "779ac302d701d56ca5e0b29ab3bfe772dd4347d9130246c7a50605007e13b94f"
+  "hash": "b0a4c07a52552c5745fc0d0bec84c0a51f8ca9c1fdb7076d90ae9400167e8e2b"
 }

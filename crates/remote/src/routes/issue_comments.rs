@@ -286,6 +286,7 @@ async fn enqueue_mention_tasks(pool: &sqlx::PgPool, message: &str, issue_id: uui
                 None,
                 false,
                 None,
+                None,
             )
             .await
             {

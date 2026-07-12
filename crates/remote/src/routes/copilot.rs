@@ -260,6 +260,7 @@ async fn get_llm_settings(
             has_api_key: false,
             base_url: None,
             model_name: None,
+            working_directory: None,
             updated_at: agent.updated_at,
         });
     Ok(Json(settings))
@@ -291,6 +292,7 @@ async fn get_llm_settings_secret(
             api_key: None,
             base_url: None,
             model_name: None,
+            working_directory: None,
         });
     Ok(Json(settings))
 }
@@ -312,6 +314,7 @@ async fn upsert_llm_settings(
     ensure_project_access(state.pool(), ctx.user.id, agent.project_id).await?;
 
     let update_api_key = payload.api_key.is_some();
+    let update_working_directory = payload.working_directory.is_some();
     let api_key = payload.api_key.and_then(|k| {
         let t = k.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
@@ -324,6 +327,10 @@ async fn upsert_llm_settings(
         let t = m.trim().to_string();
         if t.is_empty() { None } else { Some(t) }
     });
+    let working_directory = payload.working_directory.map(|d| {
+        let t = d.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    });
 
     let settings = CopilotRepository::upsert_llm_settings(
         state.pool(),
@@ -331,7 +338,9 @@ async fn upsert_llm_settings(
         api_key,
         base_url.flatten(),
         model_name.flatten(),
+        working_directory.flatten(),
         update_api_key,
+        update_working_directory,
     )
     .await
     .map_err(|e| {

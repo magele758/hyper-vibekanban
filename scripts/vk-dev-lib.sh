@@ -281,8 +281,96 @@ vk_stop_local_dev() {
   pkill -f "(hyper-vibekanban|vibe-kanban).*concurrently.*backend:dev:watch" 2>/dev/null || true
   pkill -f "${root}/packages/local-web.*vite" 2>/dev/null || true
   pkill -f "${root}/target/debug/server" 2>/dev/null || true
+  vk_stop_agent_sidecar "${root}" "${pid_dir}"
   sleep 2
   node "${root}/scripts/setup-dev-environment.js" clear >/dev/null 2>&1 || true
+}
+
+vk_stop_agent_sidecar() {
+  local root="${1:?root required}"
+  local pid_dir="${2:?pid_dir required}"
+  local port="${VK_AGENT_SIDECAR_PORT:-13110}"
+
+  if [[ -f "${pid_dir}/agent-sidecar.pid" ]]; then
+    local pid
+    pid="$(cat "${pid_dir}/agent-sidecar.pid" 2>/dev/null || true)"
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+      # Kill the whole process group so pnpm + tsx both exit.
+      kill -- "-${pid}" 2>/dev/null || kill "${pid}" 2>/dev/null || true
+      sleep 0.5
+      kill -9 -- "-${pid}" 2>/dev/null || kill -9 "${pid}" 2>/dev/null || true
+    fi
+    rm -f "${pid_dir}/agent-sidecar.pid"
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids="$(lsof -tiTCP:"${port}" -sTCP:LISTEN 2>/dev/null || true)"
+    if [[ -n "${pids}" ]]; then
+      # shellcheck disable=SC2086
+      kill ${pids} 2>/dev/null || true
+      sleep 0.3
+      # shellcheck disable=SC2086
+      kill -9 ${pids} 2>/dev/null || true
+    fi
+  fi
+  pkill -f "${root}/packages/agent-sidecar" 2>/dev/null || true
+}
+
+# Start board-agent sidecar if missing. Used by Agents chat (Cursor SDK).
+vk_start_agent_sidecar() {
+  local root="${1:?root required}"
+  local pid_dir="${2:?pid_dir required}"
+  local log_dir="${3:?log_dir required}"
+  local port="${VK_AGENT_SIDECAR_PORT:-13110}"
+  local remote_port="${VK_REMOTE_PORT:-13000}"
+  local backend_port="${VK_BACKEND_PORT:-13002}"
+  local state_dir
+  state_dir="$(cd "${pid_dir}/.." && pwd)"
+  local runner="${state_dir}/run-agent-sidecar.sh"
+
+  mkdir -p "${log_dir}" "${pid_dir}"
+  if vk_http_ok "http://127.0.0.1:${port}/health"; then
+    echo "==> agent-sidecar 已在运行 (:${port})"
+    return 0
+  fi
+
+  echo "==> Starting agent-sidecar (:${port})..."
+  vk_stop_agent_sidecar "${root}" "${pid_dir}"
+
+  cat > "${runner}" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
+export VK_REMOTE_API_BASE="http://127.0.0.1:${remote_port}"
+export VK_LOCAL_API_BASE="http://127.0.0.1:${backend_port}"
+export PORT="${port}"
+cd "${root}/packages/agent-sidecar"
+exec pnpm start
+EOF
+  chmod +x "${runner}"
+
+  # Detach into a new session so Agent/tool shell killpg cannot take down
+  # the sidecar (macOS has no setsid(1); use python os.setsid).
+  (
+    cd /
+    if command -v setsid >/dev/null 2>&1; then
+      setsid bash "${runner}" >>"${log_dir}/agent-sidecar.log" 2>&1 </dev/null &
+    else
+      nohup python3 -c "import os; os.setsid(); os.execvp('bash', ['bash', '${runner}'])" \
+        >>"${log_dir}/agent-sidecar.log" 2>&1 </dev/null &
+    fi
+    echo $! >"${pid_dir}/agent-sidecar.pid"
+  )
+
+  for _ in $(seq 1 30); do
+    if vk_http_ok "http://127.0.0.1:${port}/health"; then
+      echo "==> agent-sidecar OK"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "WARN: agent-sidecar 未在 ${port} 就绪，见 ${log_dir}/agent-sidecar.log" >&2
+  return 1
 }
 
 vk_read_ports() {

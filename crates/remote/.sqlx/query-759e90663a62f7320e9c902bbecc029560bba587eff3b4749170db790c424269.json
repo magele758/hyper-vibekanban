@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO autopilots (\n                id, project_id, name, agent_id, enabled,\n                execution_mode, cron_expression, timezone,\n                concurrency_policy, issue_title_template, issue_description_template,\n                next_run_at\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            RETURNING\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            INSERT INTO autopilots (\n                id, project_id, name, agent_id, squad_id, enabled,\n                execution_mode, cron_expression, timezone,\n                concurrency_policy, issue_title_template, issue_description_template,\n                next_run_at\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)\n            RETURNING\n                id              AS \"id!: Uuid\",\n                project_id      AS \"project_id!: Uuid\",\n                name            AS \"name!\",\n                agent_id,\n                squad_id,\n                enabled         AS \"enabled!\",\n                execution_mode  AS \"execution_mode!: AutopilotExecutionMode\",\n                cron_expression AS \"cron_expression!\",\n                timezone        AS \"timezone!\",\n                concurrency_policy AS \"concurrency_policy!: AutopilotConcurrencyPolicy\",\n                issue_title_template AS \"issue_title_template!\",\n                issue_description_template AS \"issue_description_template!\",\n                next_run_at,\n                last_run_at,\n                created_at      AS \"created_at!: DateTime<Utc>\",\n                updated_at      AS \"updated_at!: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
@@ -25,11 +25,16 @@
       },
       {
         "ordinal": 4,
+        "name": "squad_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
         "name": "enabled!",
         "type_info": "Bool"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "execution_mode!: AutopilotExecutionMode",
         "type_info": {
           "Custom": {
@@ -44,17 +49,17 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "cron_expression!",
         "type_info": "Text"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "timezone!",
         "type_info": "Text"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "concurrency_policy!: AutopilotConcurrencyPolicy",
         "type_info": {
           "Custom": {
@@ -69,32 +74,32 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "issue_title_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "issue_description_template!",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "next_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "last_run_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -104,6 +109,7 @@
         "Uuid",
         "Uuid",
         "Text",
+        "Uuid",
         "Uuid",
         "Bool",
         {
@@ -140,6 +146,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -153,5 +160,5 @@
       false
     ]
   },
-  "hash": "0166f93d50622e758ae27d2d4ca2af320aa17c85d92be7e198d72e7ac4a5b16b"
+  "hash": "759e90663a62f7320e9c902bbecc029560bba587eff3b4749170db790c424269"
 }

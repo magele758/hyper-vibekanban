@@ -217,6 +217,7 @@ async fn create_issue_assignee(
             squad_id,
             is_leader_task,
             preferred_repo_hint,
+            None,
         )
         .await
     {

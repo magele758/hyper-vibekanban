@@ -77,7 +77,9 @@ export function IssueAgentTasksSectionContainer({
                     {agent?.name ?? task.agent_id.slice(0, 8)}
                   </span>
                 </span>
-                <span className={cn('shrink-0 text-xs', statusClass(task.status))}>
+                <span
+                  className={cn('shrink-0 text-xs', statusClass(task.status))}
+                >
                   {STATUS_LABEL[task.status] ?? task.status}
                 </span>
               </div>

@@ -443,6 +443,7 @@ async fn handle_message_event(
         None,
         false,
         None,
+        None,
     )
     .await?;
 

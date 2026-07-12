@@ -205,7 +205,12 @@ function AssigneeSelectionContent({
       return [...squadOptions, ...agentOptions, ...userOptions];
     }
 
-    return [...additionalOptions, ...squadOptions, ...agentOptions, ...userOptions];
+    return [
+      ...additionalOptions,
+      ...squadOptions,
+      ...agentOptions,
+      ...userOptions,
+    ];
   }, [users, agents, squads, isCreateMode, additionalOptions]);
 
   const handleToggle = useCallback(

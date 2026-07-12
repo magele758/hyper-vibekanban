@@ -66,13 +66,15 @@ function InboxInner({ projectId }: { projectId: string }) {
   const handleMarkAllRead = async () => {
     const unread = items.filter((item) => !item.read_at);
     try {
-      await Promise.all(unread.map((item) => boardAgentsApi.markInboxRead(item.id)));
+      await Promise.all(
+        unread.map((item) => boardAgentsApi.markInboxRead(item.id))
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const displayError = error ?? (syncError?.message ?? null);
+  const displayError = error ?? syncError?.message ?? null;
 
   return (
     <div className="flex h-full flex-col">

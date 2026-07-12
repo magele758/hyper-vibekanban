@@ -66,6 +66,10 @@ pub struct CreateAgentRequest {
     #[serde(default)]
     #[ts(optional)]
     pub model_name: Option<String>,
+    /// Optional local cwd for Cursor SDK file ops.
+    #[serde(default)]
+    #[ts(optional)]
+    pub working_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]

@@ -39,6 +39,8 @@ pub struct Autopilot {
     pub project_id: Uuid,
     pub name: String,
     pub agent_id: Option<Uuid>,
+    /// When set, scheduler runs the squad pipeline instead of a single agent.
+    pub squad_id: Option<Uuid>,
     pub enabled: bool,
     pub execution_mode: AutopilotExecutionMode,
     pub cron_expression: String,
@@ -74,6 +76,8 @@ pub struct CreateAutopilotRequest {
     pub name: String,
     #[ts(optional)]
     pub agent_id: Option<Uuid>,
+    #[ts(optional)]
+    pub squad_id: Option<Uuid>,
     #[serde(default = "default_true")]
     #[ts(optional)]
     pub enabled: Option<bool>,
@@ -101,6 +105,8 @@ pub struct UpdateAutopilotRequest {
     pub name: Option<String>,
     #[serde(default, deserialize_with = "some_if_present")]
     pub agent_id: Option<Option<Uuid>>,
+    #[serde(default, deserialize_with = "some_if_present")]
+    pub squad_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "some_if_present")]
     pub enabled: Option<bool>,
     #[serde(default, deserialize_with = "some_if_present")]

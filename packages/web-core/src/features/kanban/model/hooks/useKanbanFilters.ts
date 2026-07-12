@@ -84,16 +84,18 @@ export function useKanbanFilters({
     const query = filters.searchQuery.trim().toLowerCase();
     if (query) {
       result = result.filter((issue) => {
-        if (issue.title.toLowerCase().includes(query)) {
+        const title = (issue.title ?? '').toLowerCase();
+        if (title.includes(query)) {
           return true;
         }
 
-        const simpleId = issue.simple_id.toLowerCase();
+        // simple_id is often unset on optimistic creates until the server assigns it
+        const simpleId = (issue.simple_id ?? '').toLowerCase();
         if (simpleId.includes(query)) {
           return true;
         }
 
-        const issueNumber = String(issue.issue_number);
+        const issueNumber = String(issue.issue_number ?? '');
         return issueNumber.includes(query);
       });
     }

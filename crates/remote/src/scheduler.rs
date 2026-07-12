@@ -40,18 +40,31 @@ async fn run_scheduler_tick(pool: &PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Dispatch a single autopilot: create an issue (if create_issue mode) or
-/// find the most recent open issue assigned to the agent (run_only mode),
-/// then enqueue an agent task.
+/// Dispatch a single autopilot: either run a squad pipeline, or create/find an
+/// issue and enqueue a single-agent task.
 pub async fn dispatch_autopilot(pool: &PgPool, ap: &Autopilot) -> anyhow::Result<()> {
-    let Some(agent_id) = ap.agent_id else {
-        tracing::debug!(autopilot_id = %ap.id, "autopilot has no agent assigned, skipping");
-        return Ok(());
-    };
-
     let run = AutopilotRepository::create_run(pool, ap.id).await?;
 
-    let result = do_dispatch(pool, ap, agent_id, run.id).await;
+    let result = if let Some(squad_id) = ap.squad_id {
+        do_dispatch_squad(pool, ap, squad_id, run.id).await
+    } else if let Some(agent_id) = ap.agent_id {
+        do_dispatch(pool, ap, agent_id, run.id).await
+    } else {
+        tracing::debug!(
+            autopilot_id = %ap.id,
+            "autopilot has neither squad nor agent, skipping"
+        );
+        let _ = AutopilotRepository::update_run(
+            pool,
+            run.id,
+            AutopilotRunStatus::Skipped,
+            None,
+            None,
+            Some("skipped: no squad_id or agent_id".to_string()),
+        )
+        .await;
+        return Ok(());
+    };
 
     if let Err(ref e) = result {
         let _ = AutopilotRepository::update_run(
@@ -66,6 +79,50 @@ pub async fn dispatch_autopilot(pool: &PgPool, ap: &Autopilot) -> anyhow::Result
     }
 
     result
+}
+
+async fn do_dispatch_squad(
+    pool: &PgPool,
+    ap: &Autopilot,
+    squad_id: Uuid,
+    run_id: Uuid,
+) -> anyhow::Result<()> {
+    use api_types::RunSquadRequest;
+
+    use crate::{db::squads::SquadRepository, routes::squads::execute_squad_pipeline};
+
+    let _ = AutopilotRepository::update_run(
+        pool,
+        run_id,
+        AutopilotRunStatus::Running,
+        None,
+        None,
+        None,
+    )
+    .await;
+
+    let squad = SquadRepository::find_by_id(pool, squad_id)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("squad {squad_id} not found"))?;
+
+    if squad.project_id != ap.project_id {
+        anyhow::bail!("squad does not belong to autopilot project");
+    }
+
+    let result = execute_squad_pipeline(pool, &squad, &RunSquadRequest::default()).await?;
+
+    let first_task = result.agent_task_ids.first().copied();
+    let _ = AutopilotRepository::update_run(
+        pool,
+        run_id,
+        AutopilotRunStatus::Completed,
+        Some(result.issue_id),
+        first_task,
+        None,
+    )
+    .await;
+
+    Ok(())
 }
 
 async fn do_dispatch(
@@ -126,6 +183,7 @@ async fn do_dispatch(
         false,
         None,
         false,
+        None,
         None,
     )
     .await?;

@@ -96,6 +96,8 @@ pub struct AgentLlmSettings {
     pub has_api_key: bool,
     pub base_url: Option<String>,
     pub model_name: Option<String>,
+    /// Local filesystem cwd for Cursor SDK (optional).
+    pub working_directory: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -111,6 +113,10 @@ pub struct UpsertAgentLlmSettingsRequest {
     #[serde(default)]
     #[ts(optional)]
     pub model_name: Option<String>,
+    /// Omit to leave unchanged; empty string clears.
+    #[serde(default)]
+    #[ts(optional)]
+    pub working_directory: Option<String>,
 }
 
 /// Internal/sidecar view including api_key (auth required).
@@ -120,4 +126,5 @@ pub struct AgentLlmSettingsSecret {
     pub api_key: Option<String>,
     pub base_url: Option<String>,
     pub model_name: Option<String>,
+    pub working_directory: Option<String>,
 }

@@ -307,6 +307,9 @@ else
   fi
 fi
 
+# Board Agents chat depends on the local sidecar (Vite proxies /agent-sidecar).
+vk_start_agent_sidecar "${ROOT}" "${PID_DIR}" "${LOG_DIR}" || true
+
 echo ""
 echo "━━━━━━━━ Vibe Kanban 已启动 ━━━━━━━━"
 if [[ "${DESKTOP_H2_UP}" -eq 1 ]]; then
