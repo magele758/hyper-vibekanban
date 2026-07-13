@@ -63,3 +63,14 @@
 - [ ] compose project 为 `vk-preview`，端口为 23xxx/28xxx
 - [ ] 本机 `vk-status` 主服务仍 OK
 - [ ] 向用户返回可访问 URL（Tailscale），不把私钥/完整 `.env` 贴进对话或 commit
+
+## 开发机无法访问 GitHub 时
+
+Docker 构建若依赖 `git` 源（如 `ts-rs`）且预览机访问不了 `github.com`：
+
+1. 在**能访问 GitHub 的机器**上从 `~/.cargo/git/checkouts/` 取出对应 crate，放到预览机仓库的 `vendor/`（仅预览机本地，勿提交）。
+2. 预览机临时把 workspace/`crates/remote` 的 `ts-rs` 改成 `path = "..."`，并 `COPY vendor` 进 Dockerfile；或用 `rsync` 从开发本机同步 `vendor/` + 临时 patch。
+3. 构建仍用 `COMPOSE_PROJECT_NAME=vk-preview` 与 23xxx 端口。
+4. 这些 patch **不要 push 进业务分支**；业务分支继续用正常 git remote 依赖。
+
+预览机若也拉不下 `origin`，改用本机 `git push` 后经 Tailscale `rsync`/`scp` 同步当前 worktree 文件（仍以当前分支内容为准）。
