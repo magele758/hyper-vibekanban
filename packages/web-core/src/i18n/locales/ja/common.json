@@ -414,6 +414,10 @@
       "active": "アクティブ",
       "all": "すべて"
     },
+    "mobileLayout": {
+      "single": "1列表示",
+      "columns": "複数列表示"
+    },
     "loginRequired": {
       "title": "サインインが必要です",
       "description": "このプロジェクトを表示するにはサインインしてください。",

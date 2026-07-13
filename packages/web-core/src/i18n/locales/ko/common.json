@@ -414,6 +414,10 @@
       "active": "활성",
       "all": "전체"
     },
+    "mobileLayout": {
+      "single": "단일 열",
+      "columns": "다중 열"
+    },
     "loginRequired": {
       "title": "로그인 필요",
       "description": "이 프로젝트를 보려면 로그인하세요.",

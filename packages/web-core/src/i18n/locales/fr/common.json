@@ -414,6 +414,10 @@
       "active": "Actif",
       "all": "Tout"
     },
+    "mobileLayout": {
+      "single": "Colonne unique",
+      "columns": "Colonnes multiples"
+    },
     "loginRequired": {
       "title": "Connexion requise",
       "description": "Veuillez vous connecter pour voir ce projet.",

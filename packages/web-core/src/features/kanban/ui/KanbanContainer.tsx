@@ -32,7 +32,12 @@ import {
   bulkUpdateIssues,
   type BulkUpdateIssueItem,
 } from '@/shared/lib/remoteApi';
-import { PlusIcon, DotsThreeIcon } from '@phosphor-icons/react';
+import {
+  PlusIcon,
+  DotsThreeIcon,
+  Columns as ColumnsIcon,
+  Rows as RowsIcon,
+} from '@phosphor-icons/react';
 import { Actions } from '@/shared/actions';
 import {
   buildKanbanIssueComposerKey,
@@ -59,7 +64,12 @@ import {
 import { resolveRelationshipsForIssue } from '@/shared/lib/resolveRelationships';
 import { KanbanFilterBar } from '@vibe/ui/components/KanbanFilterBar';
 import { ViewNavTabs } from '@vibe/ui/components/ViewNavTabs';
+import { KanbanMobileStatusBar } from '@vibe/ui/components/KanbanMobileStatusBar';
 import { IssueListView } from '@vibe/ui/components/IssueListView';
+import {
+  ButtonGroup,
+  IconButtonGroupItem,
+} from '@vibe/ui/components/IconButtonGroup';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { KanbanFiltersDialog } from '@/shared/dialogs/kanban/KanbanFiltersDialog';
 import {
@@ -390,6 +400,16 @@ export function KanbanContainer() {
   const setListViewStatusFilter = useUiPreferencesStore(
     (s) => s.setListViewStatusFilter
   );
+  const mobileBoardLayout = useUiPreferencesStore((s) => s.mobileBoardLayout);
+  const setMobileBoardLayout = useUiPreferencesStore(
+    (s) => s.setMobileBoardLayout
+  );
+  const mobileKanbanStatusId = useUiPreferencesStore(
+    (s) => s.mobileKanbanStatusId
+  );
+  const setMobileKanbanStatusId = useUiPreferencesStore(
+    (s) => s.setMobileKanbanStatusId
+  );
   // Reset view mode when navigating projects
   const prevProjectIdRef = useRef<string | null>(null);
 
@@ -403,10 +423,16 @@ export function KanbanContainer() {
     ) {
       setKanbanViewMode('kanban');
       setListViewStatusFilter(null);
+      setMobileKanbanStatusId(null);
     }
 
     prevProjectIdRef.current = projectId;
-  }, [projectId, setKanbanViewMode, setListViewStatusFilter]);
+  }, [
+    projectId,
+    setKanbanViewMode,
+    setListViewStatusFilter,
+    setMobileKanbanStatusId,
+  ]);
 
   // Sort all statuses for display settings
   const sortedStatuses = useMemo(
@@ -419,6 +445,44 @@ export function KanbanContainer() {
     () => sortedStatuses.filter((s) => !s.hidden),
     [sortedStatuses]
   );
+
+  const isMobileSingleBoard =
+    isMobile &&
+    kanbanViewMode === 'kanban' &&
+    mobileBoardLayout === 'single';
+
+  // Keep mobile single-column status selection valid
+  useEffect(() => {
+    if (!isMobileSingleBoard || visibleStatuses.length === 0) {
+      return;
+    }
+    const stillValid = visibleStatuses.some(
+      (status) => status.id === mobileKanbanStatusId
+    );
+    if (!stillValid) {
+      setMobileKanbanStatusId(visibleStatuses[0].id);
+    }
+  }, [
+    isMobileSingleBoard,
+    mobileKanbanStatusId,
+    setMobileKanbanStatusId,
+    visibleStatuses,
+  ]);
+
+  const activeMobileStatusId =
+    mobileKanbanStatusId &&
+    visibleStatuses.some((status) => status.id === mobileKanbanStatusId)
+      ? mobileKanbanStatusId
+      : (visibleStatuses[0]?.id ?? null);
+
+  const boardStatuses = useMemo(() => {
+    if (!isMobileSingleBoard || !activeMobileStatusId) {
+      return visibleStatuses;
+    }
+    return visibleStatuses.filter(
+      (status) => status.id === activeMobileStatusId
+    );
+  }, [activeMobileStatusId, isMobileSingleBoard, visibleStatuses]);
 
   // Map status ID to 1-based column index for sort_order calculation
   const statusColumnIndexMap = useMemo(() => {
@@ -436,13 +500,23 @@ export function KanbanContainer() {
 
   const defaultCreateStatusId = useMemo(() => {
     if (kanbanViewMode === 'kanban') {
+      if (isMobileSingleBoard && activeMobileStatusId) {
+        return activeMobileStatusId;
+      }
       return visibleStatuses[0]?.id;
     }
     if (listViewStatusFilter) {
       return listViewStatusFilter;
     }
     return sortedStatuses[0]?.id;
-  }, [kanbanViewMode, visibleStatuses, listViewStatusFilter, sortedStatuses]);
+  }, [
+    activeMobileStatusId,
+    isMobileSingleBoard,
+    kanbanViewMode,
+    visibleStatuses,
+    listViewStatusFilter,
+    sortedStatuses,
+  ]);
 
   // Update default create status for command bar based on current tab
   useEffect(() => {
@@ -976,13 +1050,39 @@ export function KanbanContainer() {
             isMobile ? 'flex-col' : 'flex-wrap'
           )}
         >
-          <ViewNavTabs
-            activeView={kanbanViewMode}
-            onViewChange={setKanbanViewMode}
-            hiddenStatuses={hiddenStatuses}
-            selectedStatusId={listViewStatusFilter}
-            onStatusSelect={setListViewStatusFilter}
-          />
+          <div className="flex min-w-0 flex-wrap items-center gap-base">
+            <ViewNavTabs
+              activeView={kanbanViewMode}
+              onViewChange={setKanbanViewMode}
+              hiddenStatuses={hiddenStatuses}
+              selectedStatusId={listViewStatusFilter}
+              onStatusSelect={setListViewStatusFilter}
+            />
+            {isMobile && kanbanViewMode === 'kanban' && (
+              <ButtonGroup>
+                <IconButtonGroupItem
+                  icon={RowsIcon}
+                  active={mobileBoardLayout === 'single'}
+                  onClick={() => setMobileBoardLayout('single')}
+                  aria-label={t(
+                    'kanban.mobileLayout.single',
+                    'Single column'
+                  )}
+                  title={t('kanban.mobileLayout.single', 'Single column')}
+                />
+                <IconButtonGroupItem
+                  icon={ColumnsIcon}
+                  active={mobileBoardLayout === 'columns'}
+                  onClick={() => setMobileBoardLayout('columns')}
+                  aria-label={t(
+                    'kanban.mobileLayout.columns',
+                    'Multi column'
+                  )}
+                  title={t('kanban.mobileLayout.columns', 'Multi column')}
+                />
+              </ButtonGroup>
+            )}
+          </div>
           <KanbanFilterBar
             isFiltersDialogOpen={isFiltersDialogOpen}
             onFiltersDialogOpenChange={setIsFiltersDialogOpen}
@@ -1021,9 +1121,39 @@ export function KanbanContainer() {
             <p className="text-low">{t('kanban.noVisibleStatuses')}</p>
           </div>
         ) : (
-          <div className="flex-1 overflow-x-auto px-double">
-            <KanbanProvider onDragEnd={handleDragEnd}>
-              {visibleStatuses.map((status) => {
+          <div
+            className={cn(
+              'flex-1 min-h-0 flex flex-col',
+              isMobileSingleBoard
+                ? 'overflow-hidden px-base'
+                : 'overflow-x-auto px-double'
+            )}
+          >
+            {isMobileSingleBoard && activeMobileStatusId && (
+              <div className="shrink-0 pb-base">
+                <KanbanMobileStatusBar
+                  statuses={visibleStatuses.map((status) => ({
+                    id: status.id,
+                    name: status.name,
+                    color: status.color,
+                    count: (items[status.id] ?? []).length,
+                  }))}
+                  selectedStatusId={activeMobileStatusId}
+                  onSelect={setMobileKanbanStatusId}
+                />
+              </div>
+            )}
+            <div
+              className={cn(
+                'min-h-0 flex-1',
+                isMobileSingleBoard && 'overflow-y-auto'
+              )}
+            >
+              <KanbanProvider
+                onDragEnd={handleDragEnd}
+                singleColumn={isMobileSingleBoard}
+              >
+                {boardStatuses.map((status) => {
                 const issueIds = items[status.id] ?? [];
 
                 return (
@@ -1036,6 +1166,11 @@ export function KanbanContainer() {
                             style={{ backgroundColor: `hsl(${status.color})` }}
                           />
                           <p className="m-0 text-sm">{status.name}</p>
+                          {isMobileSingleBoard && (
+                            <span className="font-ibm-plex-mono text-xs text-low tabular-nums">
+                              {issueIds.length}
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
@@ -1166,7 +1301,8 @@ export function KanbanContainer() {
                   </KanbanBoard>
                 );
               })}
-            </KanbanProvider>
+              </KanbanProvider>
+            </div>
           </div>
         )
       ) : (

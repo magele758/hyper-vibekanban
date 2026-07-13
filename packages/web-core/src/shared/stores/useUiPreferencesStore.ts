@@ -25,7 +25,13 @@ export type MobileTab =
 export type MobileFontScale = 'default' | 'small' | 'smaller';
 export const DEFAULT_CREATE_DRAFT_WORKSPACE_BY_DEFAULT = false;
 
+export type KanbanViewMode = 'kanban' | 'list';
+
+/** Mobile kanban board layout: one status at a time vs classic horizontal columns */
+export type KanbanMobileBoardLayout = 'single' | 'columns';
+
 const MOBILE_FONT_SCALE_KEY = 'vk-mobile-font-scale';
+const MOBILE_BOARD_LAYOUT_KEY = 'vk-mobile-board-layout';
 
 const loadMobileFontScale = (): MobileFontScale => {
   try {
@@ -37,7 +43,15 @@ const loadMobileFontScale = (): MobileFontScale => {
   return 'default';
 };
 
-export type KanbanViewMode = 'kanban' | 'list';
+const loadMobileBoardLayout = (): KanbanMobileBoardLayout => {
+  try {
+    const stored = localStorage.getItem(MOBILE_BOARD_LAYOUT_KEY);
+    if (stored === 'single' || stored === 'columns') return stored;
+  } catch {
+    // localStorage may be unavailable
+  }
+  return 'single';
+};
 
 export type ContextBarPosition =
   | 'top-left'
@@ -344,6 +358,11 @@ type State = {
   kanbanViewMode: KanbanViewMode;
   listViewStatusFilter: string | null;
 
+  // Mobile kanban board layout (persisted)
+  mobileBoardLayout: KanbanMobileBoardLayout;
+  // Selected status column when mobileBoardLayout === 'single' (in-memory)
+  mobileKanbanStatusId: string | null;
+
   // Mobile tab state
   mobileActiveTab: MobileTab;
 
@@ -432,6 +451,10 @@ type State = {
   setKanbanViewMode: (mode: KanbanViewMode) => void;
   setListViewStatusFilter: (statusId: string | null) => void;
 
+  // Mobile kanban board layout actions
+  setMobileBoardLayout: (layout: KanbanMobileBoardLayout) => void;
+  setMobileKanbanStatusId: (statusId: string | null) => void;
+
   // Mobile tab actions
   setMobileActiveTab: (tab: MobileTab) => void;
 
@@ -475,6 +498,10 @@ export const useUiPreferencesStore = create<State>()((set, get) => ({
   // Kanban view mode state
   kanbanViewMode: 'kanban' as KanbanViewMode,
   listViewStatusFilter: null,
+
+  // Mobile kanban board layout
+  mobileBoardLayout: loadMobileBoardLayout(),
+  mobileKanbanStatusId: null,
 
   // Mobile tab state
   mobileActiveTab: 'chat' as MobileTab,
@@ -819,6 +846,18 @@ export const useUiPreferencesStore = create<State>()((set, get) => ({
   setListViewStatusFilter: (statusId) =>
     set({ listViewStatusFilter: statusId }),
 
+  setMobileBoardLayout: (layout) => {
+    try {
+      localStorage.setItem(MOBILE_BOARD_LAYOUT_KEY, layout);
+    } catch {
+      // localStorage may be unavailable
+    }
+    set({ mobileBoardLayout: layout });
+  },
+
+  setMobileKanbanStatusId: (statusId) =>
+    set({ mobileKanbanStatusId: statusId }),
+
   // Mobile tab actions
   setMobileActiveTab: (tab) => set({ mobileActiveTab: tab }),
 
@@ -945,6 +984,13 @@ export function useMobileFontScale() {
   const scale = useUiPreferencesStore((s) => s.mobileFontScale);
   const set = useUiPreferencesStore((s) => s.setMobileFontScale);
   return [scale, set] as const;
+}
+
+// Hook for mobile kanban board layout
+export function useMobileBoardLayout() {
+  const layout = useUiPreferencesStore((s) => s.mobileBoardLayout);
+  const set = useUiPreferencesStore((s) => s.setMobileBoardLayout);
+  return [layout, set] as const;
 }
 
 // Hook for workspace-specific panel state
