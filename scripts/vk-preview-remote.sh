@@ -46,30 +46,22 @@ cmd_up() {
         exit 1
     fi
 
-    # Check if pnpm is available (needed for building)
-    if ! command -v pnpm &>/dev/null; then
-        echo "WARN: pnpm not found. Attempting to enable via corepack..."
-        if command -v corepack &>/dev/null; then
-            corepack enable || true
-        else
-            echo "ERROR: pnpm and corepack not available. Install Node.js 18+ with corepack." >&2
-            exit 1
-        fi
-    fi
-
     export DOCKER_BUILDKIT=1
     export COMPOSE_DOCKER_CLI_BUILD=1
     export COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT"
     export REMOTE_DB_PORTS="127.0.0.1:${DB_PORT}:5432"
     export REMOTE_SERVER_PORTS="0.0.0.0:${REMOTE_PORT}:8081"
     export REMOTE_RELAY_PORTS="0.0.0.0:${RELAY_PORT}:8082"
-
-    # Build frontend first (needed for Remote Docker image)
-    echo "  Building frontend assets..."
-    cd "${ROOT}"
-    pnpm install --frozen-lockfile || pnpm install
-    cd "${ROOT}/packages/remote-web"
-    pnpm run build
+    # Self-hosted image build (FEATURES empty) still declares compose ssh mount.
+    if [[ -z "${SSH_AUTH_SOCK:-}" ]]; then
+        eval "$(ssh-agent -s)" >/dev/null
+        export SSH_AUTH_SOCK
+    fi
+    # Build mirrors (override via env). Frontend+Rust both build inside Docker.
+    export NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+    export APT_MIRROR="${APT_MIRROR:-mirrors.aliyun.com}"
+    export CARGO_RS_PROXY="${CARGO_RS_PROXY:-1}"
+    export FEATURES="${FEATURES:-}"
 
     cd "${ROOT}/crates/remote"
     docker compose --env-file .env.remote --profile relay \
@@ -77,7 +69,7 @@ cmd_up() {
 
     echo "  Waiting for health checks..."
     local remote_ok=0
-    for i in $(seq 1 30); do
+    for i in $(seq 1 90); do
         if curl -sf "http://127.0.0.1:${REMOTE_PORT}/v1/health" >/dev/null 2>&1 \
             && curl -sf "http://127.0.0.1:${RELAY_PORT}/health" >/dev/null 2>&1; then
             remote_ok=1
@@ -90,15 +82,22 @@ cmd_up() {
     echo ""
 
     if [[ "$remote_ok" -eq 0 ]]; then
-        echo "WARN: Health checks did not pass within 60s. Check logs." >&2
+        echo "WARN: Health checks did not pass within 180s. Check logs." >&2
     fi
+
+    local access_host="${VK_PREVIEW_ACCESS_HOST:-}"
+    if [[ -z "$access_host" ]] && command -v tailscale >/dev/null 2>&1; then
+        access_host="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+    fi
+    : "${access_host:=127.0.0.1}"
 
     echo ""
     echo "╔══ vk-preview (remote) ══════════════════════════════════╗"
-    echo "║  Remote:  http://0.0.0.0:${REMOTE_PORT}                            ║"
-    echo "║  Relay:   http://0.0.0.0:${RELAY_PORT}                            ║"
-    echo "║  DB:      127.0.0.1:${DB_PORT}                              ║"
-    echo "║  Project: ${COMPOSE_PROJECT}                                   ║"
+    printf "║  Remote UI  http://%s:%-5s                       ║\n" "$access_host" "$REMOTE_PORT"
+    printf "║  Relay      http://%s:%-5s                       ║\n" "$access_host" "$RELAY_PORT"
+    printf "║  Health     http://%s:%-5s/v1/health             ║\n" "$access_host" "$REMOTE_PORT"
+    echo "║  DB         127.0.0.1:${DB_PORT} (host-local only)         ║"
+    echo "║  Project    ${COMPOSE_PROJECT}                                   ║"
     echo "╚═════════════════════════════════════════════════════════╝"
     echo ""
 }
