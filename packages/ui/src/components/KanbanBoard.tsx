@@ -259,18 +259,23 @@ export type KanbanProviderProps = {
   children: ReactNode;
   onDragEnd: (result: DropResult) => void;
   className?: string;
+  /** Full-width single column layout for mobile */
+  singleColumn?: boolean;
 };
 
 export const KanbanProvider = ({
   children,
   onDragEnd,
   className,
+  singleColumn = false,
 }: KanbanProviderProps) => {
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <div
         className={cn(
-          'inline-grid grid-flow-col auto-cols-[minmax(200px,400px)] divide-x border-x items-stretch min-h-full',
+          singleColumn
+            ? 'flex w-full flex-col items-stretch min-h-full border-x'
+            : 'inline-grid grid-flow-col auto-cols-[minmax(200px,400px)] divide-x border-x items-stretch min-h-full',
           className
         )}
       >
