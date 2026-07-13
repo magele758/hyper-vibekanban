@@ -31,8 +31,9 @@ REMOTE_PORT="${PORTS_BASE}"
 FRONTEND_PORT="$((PORTS_BASE + 1))"
 BACKEND_PORT="$((PORTS_BASE + 2))"
 PREVIEW_PROXY_PORT="$((PORTS_BASE + 3))"
-RELAY_PORT="$((PORTS_BASE + 8082 - 13000))"  # 23000 + (18082 - 13000) = 28082
-DB_PORT="$((PORTS_BASE + 5433 - 13000))"     # 25433
+# Offset from main-stack ports (13000/18082/15433) so BASE=23000 → 23000/28082/25433.
+RELAY_PORT="$((PORTS_BASE + 18082 - 13000))"
+DB_PORT="$((PORTS_BASE + 15433 - 13000))"
 
 # ── Commands ──────────────────────────────────────────────────────────────────
 cmd_up() {

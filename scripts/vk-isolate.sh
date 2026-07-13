@@ -99,9 +99,15 @@ remote_cmd() {
         sync)
             sync_to_remote
             ;;
-        up|down|status|logs|smoke|clean)
-            # Run vk-preview-remote.sh on the remote machine
-            ssh -t "$VK_PREVIEW_HOST" "cd '$VK_PREVIEW_DIR' && bash scripts/vk-preview-remote.sh '$cmd'"
+        up)
+            # Always sync the current worktree branch before starting remote preview.
+            sync_to_remote
+            ssh -t "$VK_PREVIEW_HOST" \
+              "cd '$VK_PREVIEW_DIR' && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash scripts/vk-preview-remote.sh up"
+            ;;
+        down|status|logs|smoke|clean)
+            ssh -t "$VK_PREVIEW_HOST" \
+              "cd '$VK_PREVIEW_DIR' && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash scripts/vk-preview-remote.sh '$cmd'"
             ;;
         *)
             echo "Unknown preview command: $cmd" >&2
