@@ -1,6 +1,9 @@
 # vk-test-feature isolated test instance (data + logs, never commit)
 .vk-test/
 
+# Preview-machine local vendor / patches (never commit)
+/vendor/
+
 # Rust
 target/
 **/*.rs.bk

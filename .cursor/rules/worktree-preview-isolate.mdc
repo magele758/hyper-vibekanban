@@ -1,0 +1,17 @@
+---
+description: Worktree 功能测试走隔离预览，禁止本机主栈；个人 Host/路径不入库
+alwaysApply: true
+---
+
+# Worktree 预览与测试（隐私安全）
+
+测试 **当前 git worktree / feature 分支** 时：
+
+1. **禁止**用本机 `vk-start` / `:1300x` 验证该 worktree（本机主栈留给日常主仓）。
+2. **必须**用 `scripts/vk-isolate.sh preview-remote`（或 `preview-full`）在**预览机**上部署；端口约 `23xxx`，勿动本机 `1300x`。
+3. **仓库内规则不得写入**：SSH Host 别名、用户名、家目录、绝对路径、Tailscale IP、密码、JWT。这些只放在**本机用户级** Cursor 规则（`~/.cursor/rules/`，不进 git），或对话里临时提供。
+4. 若会话里尚未明确 Host / 远端仓库路径：先读用户级规则；仍没有则**当面询问**，禁止猜测、禁止读写未授权的 config 文件。
+5. 流程：当前 worktree 根 → push 当前分支 → 远端同名分支 sync → `preview-remote up` → 回报访问 URL（可用探测到的 Tailscale IP，**不要把 IP 写回仓库文件**）。
+6. 远端 `git fetch` 失败时，询问是否改用 `VK_PREVIEW_SYNC_METHOD=rsync`。
+
+参考：`.cursor/skills/vk-worktree-preview/SKILL.md`
