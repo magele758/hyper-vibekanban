@@ -414,6 +414,10 @@
       "active": "活动",
       "all": "全部"
     },
+    "mobileLayout": {
+      "single": "单列视图",
+      "columns": "多列视图"
+    },
     "loginRequired": {
       "title": "需要登录",
       "description": "请登录以查看此项目。",

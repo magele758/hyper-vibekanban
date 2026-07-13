@@ -428,6 +428,10 @@
       "active": "Active",
       "all": "All"
     },
+    "mobileLayout": {
+      "single": "Single column",
+      "columns": "Multi column"
+    },
     "loginRequired": {
       "title": "Sign in required",
       "description": "Please sign in to view this project.",
