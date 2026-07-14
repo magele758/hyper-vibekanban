@@ -344,6 +344,11 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
 export VK_REMOTE_API_BASE="http://127.0.0.1:${remote_port}"
 export VK_LOCAL_API_BASE="http://127.0.0.1:${backend_port}"
 export PORT="${port}"
+# Keep sidecar on direct http Remote — never the Caddy h2 URL.
+CADDY_ROOT_CA="\${HOME}/.vk-kanban/certs/caddy-root.crt"
+if [[ -f "\${CADDY_ROOT_CA}" ]]; then
+  export NODE_EXTRA_CA_CERTS="\${NODE_EXTRA_CA_CERTS:-\${CADDY_ROOT_CA}}"
+fi
 cd "${root}/packages/agent-sidecar"
 exec pnpm start
 EOF
