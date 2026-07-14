@@ -138,10 +138,14 @@ export function PreviewBrowser({
 }: PreviewBrowserProps) {
   const { t } = useTranslation(['tasks', 'common']);
   const isLoading = isStarting || (isServerRunning && !url);
-  // Use the showIframe prop from container which handles the 2-second delay
-  const showIframeContent = showIframe && url && !isLoading && isServerRunning;
-  // Show loading when URL detected but waiting for delay
-  const isWaitingForDelay = isServerRunning && url && !showIframe;
+  // Show iframe whenever we have a resolved preview URL (auto-detected or
+  // manual override). Do not gate on isServerRunning — users may paste any
+  // URL without starting VK's managed dev server.
+  const showIframeContent = Boolean(showIframe && url && !isLoading);
+  // Show loading when URL is ready but waiting for the display delay
+  const isWaitingForDelay = Boolean(url && !showIframe);
+  // Toolbar actions that need a resolved preview URL (may still be in delay)
+  const hasActivePreview = Boolean(url && !isLoading);
 
   const hasDevScript = repos.some(
     (repo) => repo.dev_server_script && repo.dev_server_script.trim() !== ''
@@ -199,13 +203,11 @@ export function PreviewBrowser({
                     }
                   }}
                   placeholder={autoDetectedUrl ?? 'Enter URL...'}
-                  disabled={!isServerRunning}
                   className={cn(
                     'flex-1 font-mono text-sm bg-transparent border-none outline-none min-w-0',
                     isUsingOverride
                       ? 'text-normal'
-                      : 'text-low placeholder:text-low',
-                    !isServerRunning && 'cursor-not-allowed'
+                      : 'text-low placeholder:text-low'
                   )}
                   autoFocus
                 />
@@ -217,7 +219,6 @@ export function PreviewBrowser({
                     onUrlSubmit();
                     onMobileUrlExpandedChange?.(false);
                   }}
-                  disabled={!isServerRunning}
                   aria-label={t('preview.toolbar.submitUrl')}
                   title={t('preview.toolbar.submitUrl')}
                 />
@@ -236,7 +237,6 @@ export function PreviewBrowser({
                 <IconButtonGroupItem
                   icon={GlobeIcon}
                   onClick={() => onMobileUrlExpandedChange?.(true)}
-                  disabled={!isServerRunning}
                   aria-label="Show URL"
                   title="Show URL"
                 />
@@ -246,14 +246,14 @@ export function PreviewBrowser({
                 <IconButtonGroupItem
                   icon={ArrowClockwiseIcon}
                   onClick={onRefresh}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.refresh')}
                   title={t('preview.toolbar.refresh')}
                 />
                 <IconButtonGroupItem
                   icon={ArrowSquareOutIcon}
                   onClick={onOpenInNewTab}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.openInTab')}
                   title={t('preview.toolbar.openInTab')}
                 />
@@ -303,7 +303,7 @@ export function PreviewBrowser({
                 navigation={navigation}
                 onBack={onNavigateBack}
                 onForward={onNavigateForward}
-                disabled={!isServerRunning}
+                disabled={!hasActivePreview}
               />
 
               {/* Inspect Mode & DevTools */}
@@ -312,7 +312,7 @@ export function PreviewBrowser({
                   icon={CrosshairIcon}
                   onClick={onToggleInspectMode}
                   active={isInspectMode}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label="Select element as context"
                   title="Select element as context"
                 />
@@ -320,19 +320,14 @@ export function PreviewBrowser({
                   icon={TerminalIcon}
                   onClick={onToggleEruda}
                   active={isErudaVisible}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.toggleDevTools')}
                   title={t('preview.toolbar.toggleDevTools')}
                 />
               </IconButtonGroup>
 
-              {/* URL Input */}
-              <div
-                className={cn(
-                  'flex items-center gap-half rounded-sm px-base py-half flex-1 min-w-0',
-                  !isServerRunning && 'opacity-50'
-                )}
-              >
+              {/* URL Input — always editable for free-form navigation */}
+              <div className="flex items-center gap-half rounded-sm px-base py-half flex-1 min-w-0">
                 <input
                   ref={urlInputRef}
                   type="text"
@@ -346,13 +341,11 @@ export function PreviewBrowser({
                     }
                   }}
                   placeholder={autoDetectedUrl ?? 'Enter URL...'}
-                  disabled={!isServerRunning}
                   className={cn(
                     'flex-1 font-mono text-sm bg-transparent border-none outline-none min-w-0',
                     isUsingOverride
                       ? 'text-normal'
-                      : 'text-low placeholder:text-low',
-                    !isServerRunning && 'cursor-not-allowed'
+                      : 'text-low placeholder:text-low'
                   )}
                 />
               </div>
@@ -362,7 +355,6 @@ export function PreviewBrowser({
                 <IconButtonGroupItem
                   icon={CheckIcon}
                   onClick={onUrlSubmit}
-                  disabled={!isServerRunning}
                   aria-label={t('preview.toolbar.submitUrl')}
                   title={t('preview.toolbar.submitUrl')}
                 />
@@ -370,7 +362,6 @@ export function PreviewBrowser({
                   <IconButtonGroupItem
                     icon={XIcon}
                     onClick={onClearOverride}
-                    disabled={!isServerRunning}
                     aria-label={t('preview.toolbar.clearUrlOverride')}
                     title={t('preview.toolbar.resetUrl')}
                   />
@@ -378,21 +369,21 @@ export function PreviewBrowser({
                 <IconButtonGroupItem
                   icon={CopyIcon}
                   onClick={onCopyUrl}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.copyUrl')}
                   title={t('preview.toolbar.copyUrl')}
                 />
                 <IconButtonGroupItem
                   icon={ArrowSquareOutIcon}
                   onClick={onOpenInNewTab}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.openInTab')}
                   title={t('preview.toolbar.openInTab')}
                 />
                 <IconButtonGroupItem
                   icon={ArrowClockwiseIcon}
                   onClick={onRefresh}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.refresh')}
                   title={t('preview.toolbar.refresh')}
                 />
@@ -404,7 +395,7 @@ export function PreviewBrowser({
                   icon={MonitorIcon}
                   onClick={() => onScreenSizeChange('desktop')}
                   active={screenSize === 'desktop'}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.desktopView')}
                   title={t('preview.toolbar.desktopView')}
                 />
@@ -412,7 +403,7 @@ export function PreviewBrowser({
                   icon={DeviceMobileIcon}
                   onClick={() => onScreenSizeChange('mobile')}
                   active={screenSize === 'mobile'}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.mobileView')}
                   title={t('preview.toolbar.mobileView')}
                 />
@@ -420,7 +411,7 @@ export function PreviewBrowser({
                   icon={ArrowsOutCardinalIcon}
                   onClick={() => onScreenSizeChange('responsive')}
                   active={screenSize === 'responsive'}
-                  disabled={!isServerRunning}
+                  disabled={!hasActivePreview}
                   aria-label={t('preview.toolbar.responsiveView')}
                   title={t('preview.toolbar.responsiveView')}
                 />

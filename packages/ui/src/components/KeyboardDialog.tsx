@@ -27,155 +27,168 @@ const Dialog = React.forwardRef<
     uncloseable?: boolean;
     size?: 'default' | 'fullscreen';
   }
->(({ className, open, onOpenChange, children, uncloseable, size = 'default', ...props }, ref) => {
-  const { enableScope, disableScope } = useHotkeysContext();
-  const dialogRef = React.useRef<HTMLDivElement | null>(null);
-
-  const setDialogRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      dialogRef.current = node;
-      assignRef(ref, node);
-    },
-    [ref]
-  );
-
-  // Manage dialog scope when open/closed
-  React.useEffect(() => {
-    if (open) {
-      enableScope(DIALOG_SCOPE);
-      disableScope(KANBAN_SCOPE);
-      disableScope(PROJECTS_SCOPE);
-    } else {
-      disableScope(DIALOG_SCOPE);
-      enableScope(KANBAN_SCOPE);
-      enableScope(PROJECTS_SCOPE);
-    }
-    return () => {
-      disableScope(DIALOG_SCOPE);
-      enableScope(KANBAN_SCOPE);
-      enableScope(PROJECTS_SCOPE);
-    };
-  }, [open, enableScope, disableScope]);
-
-  useHotkeys(
-    'esc',
-    (e) => {
-      if (!open) return;
-      if (uncloseable) return;
-
-      const activeElement = document.activeElement as HTMLElement;
-      if (
-        activeElement &&
-        (activeElement.tagName === 'INPUT' ||
-          activeElement.tagName === 'TEXTAREA' ||
-          activeElement.isContentEditable)
-      ) {
-        activeElement.blur();
-        e?.preventDefault();
-        return;
-      }
-
-      onOpenChange?.(false);
-    },
+>(
+  (
     {
-      enabled: !!open,
-      scopes: [DIALOG_SCOPE],
-      preventDefault: true,
+      className,
+      open,
+      onOpenChange,
+      children,
+      uncloseable,
+      size = 'default',
+      ...props
     },
-    [open, uncloseable, onOpenChange]
-  );
+    ref
+  ) => {
+    const { enableScope, disableScope } = useHotkeysContext();
+    const dialogRef = React.useRef<HTMLDivElement | null>(null);
 
-  useHotkeys(
-    'enter',
-    (e) => {
-      if (!open) return;
+    const setDialogRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        dialogRef.current = node;
+        assignRef(ref, node);
+      },
+      [ref]
+    );
 
-      const activeElement = document.activeElement as HTMLElement;
-      if (activeElement?.tagName === 'TEXTAREA') {
-        return;
+    // Manage dialog scope when open/closed
+    React.useEffect(() => {
+      if (open) {
+        enableScope(DIALOG_SCOPE);
+        disableScope(KANBAN_SCOPE);
+        disableScope(PROJECTS_SCOPE);
+      } else {
+        disableScope(DIALOG_SCOPE);
+        enableScope(KANBAN_SCOPE);
+        enableScope(PROJECTS_SCOPE);
       }
+      return () => {
+        disableScope(DIALOG_SCOPE);
+        enableScope(KANBAN_SCOPE);
+        enableScope(PROJECTS_SCOPE);
+      };
+    }, [open, enableScope, disableScope]);
 
-      const container = dialogRef.current;
-      if (!container) {
-        return;
-      }
+    useHotkeys(
+      'esc',
+      (e) => {
+        if (!open) return;
+        if (uncloseable) return;
 
-      const submitButton = container.querySelector(
-        'button[type="submit"]'
-      ) as HTMLButtonElement | null;
-      if (submitButton && !submitButton.disabled) {
-        e?.preventDefault();
-        submitButton.click();
-        return;
-      }
+        const activeElement = document.activeElement as HTMLElement;
+        if (
+          activeElement &&
+          (activeElement.tagName === 'INPUT' ||
+            activeElement.tagName === 'TEXTAREA' ||
+            activeElement.isContentEditable)
+        ) {
+          activeElement.blur();
+          e?.preventDefault();
+          return;
+        }
 
-      const buttons = Array.from(
-        container.querySelectorAll('button')
-      ) as HTMLButtonElement[];
-      const primaryButton = buttons.find(
-        (btn) =>
-          !btn.disabled &&
-          !btn.textContent?.toLowerCase().includes('cancel') &&
-          !btn.textContent?.toLowerCase().includes('close') &&
-          btn.type !== 'button'
-      );
+        onOpenChange?.(false);
+      },
+      {
+        enabled: !!open,
+        scopes: [DIALOG_SCOPE],
+        preventDefault: true,
+      },
+      [open, uncloseable, onOpenChange]
+    );
 
-      if (primaryButton) {
-        e?.preventDefault();
-        primaryButton.click();
-      }
-    },
-    {
-      enabled: !!open,
-      scopes: [DIALOG_SCOPE],
-    },
-    [open]
-  );
+    useHotkeys(
+      'enter',
+      (e) => {
+        if (!open) return;
 
-  if (!open) return null;
+        const activeElement = document.activeElement as HTMLElement;
+        if (activeElement?.tagName === 'TEXTAREA') {
+          return;
+        }
 
-  const isFullscreen = size === 'fullscreen';
+        const container = dialogRef.current;
+        if (!container) {
+          return;
+        }
 
-  return createPortal(
-    <div
-      className={cn(
-        'fixed inset-0 z-[10000] flex justify-center p-4',
-        isFullscreen
-          ? 'items-center overflow-hidden'
-          : 'items-start overflow-y-auto'
-      )}
-    >
+        const submitButton = container.querySelector(
+          'button[type="submit"]'
+        ) as HTMLButtonElement | null;
+        if (submitButton && !submitButton.disabled) {
+          e?.preventDefault();
+          submitButton.click();
+          return;
+        }
+
+        const buttons = Array.from(
+          container.querySelectorAll('button')
+        ) as HTMLButtonElement[];
+        const primaryButton = buttons.find(
+          (btn) =>
+            !btn.disabled &&
+            !btn.textContent?.toLowerCase().includes('cancel') &&
+            !btn.textContent?.toLowerCase().includes('close') &&
+            btn.type !== 'button'
+        );
+
+        if (primaryButton) {
+          e?.preventDefault();
+          primaryButton.click();
+        }
+      },
+      {
+        enabled: !!open,
+        scopes: [DIALOG_SCOPE],
+      },
+      [open]
+    );
+
+    if (!open) return null;
+
+    const isFullscreen = size === 'fullscreen';
+
+    return createPortal(
       <div
-        data-tauri-drag-region
-        className="fixed inset-0 bg-black/50"
-        onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
-      />
-      <div
-        ref={setDialogRef}
         className={cn(
-          'relative z-[10000] flex flex-col bg-primary shadow-lg duration-200 sm:rounded-lg',
+          'fixed inset-0 z-[10000] flex justify-center p-4',
           isFullscreen
-            ? 'h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden'
-            : 'my-8 w-full max-w-xl gap-4 p-6',
-          className
+            ? 'items-center overflow-hidden'
+            : 'items-start overflow-y-auto'
         )}
-        {...props}
       >
-        {!uncloseable && (
-          <button
-            className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
-            onClick={() => onOpenChange?.(false)}
-          >
-            <X className="h-4 w-4" />
-            <span className="sr-only">Close</span>
-          </button>
-        )}
-        {children}
-      </div>
-    </div>,
-    document.body
-  );
-});
+        <div
+          data-tauri-drag-region
+          className="fixed inset-0 bg-black/50"
+          onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
+        />
+        <div
+          ref={setDialogRef}
+          className={cn(
+            'relative z-[10000] flex flex-col bg-primary shadow-lg duration-200 sm:rounded-lg',
+            isFullscreen
+              ? 'h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-none overflow-hidden'
+              : 'my-8 w-full max-w-xl gap-4 p-6',
+            className
+          )}
+          {...props}
+        >
+          {!uncloseable && (
+            <button
+              className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 z-10"
+              onClick={() => onOpenChange?.(false)}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
+          )}
+          {children}
+        </div>
+      </div>,
+      document.body
+    );
+  }
+);
 Dialog.displayName = 'Dialog';
 
 const DialogHeader = ({

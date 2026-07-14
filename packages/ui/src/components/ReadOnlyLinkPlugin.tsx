@@ -100,7 +100,9 @@ export function ReadOnlyLinkPlugin({
       }
 
       // Relative markdown file link - keep clickable, open in preview panel
-      const mdPath = onMarkdownFileClick ? markdownFilePath(href ?? undefined) : null;
+      const mdPath = onMarkdownFileClick
+        ? markdownFilePath(href ?? undefined)
+        : null;
       if (mdPath && onMarkdownFileClick) {
         link.removeAttribute('href');
         link.style.cursor = 'pointer';
