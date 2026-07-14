@@ -258,8 +258,6 @@ export function IssueWorkspacesSectionContainer({
               (workspace) => workspace.localWorkspaceId === localWorkspaceId
             )
             ?.prs.some((pr) => pr.status === 'open') ?? false,
-        isLinkedToIssue: true,
-        linkedIssueSimpleId: getIssue(issueId)?.simple_id,
       });
 
       if (result.action !== 'confirmed') {
@@ -267,12 +265,8 @@ export function IssueWorkspacesSectionContainer({
       }
 
       try {
-        // Delete local workspace first
+        // Clears local workspace and the remote Issue link in one request.
         await workspacesApi.delete(localWorkspaceId, result.deleteBranches);
-        // Unlink from remote after successful deletion
-        if (result.unlinkFromIssue) {
-          await workspacesApi.unlinkFromIssue(localWorkspaceId);
-        }
       } catch (error) {
         ConfirmDialog.show({
           title: t('common:error'),
@@ -285,7 +279,7 @@ export function IssueWorkspacesSectionContainer({
         });
       }
     },
-    [localWorkspacesById, workspacesWithStats, t, issueId, getIssue]
+    [localWorkspacesById, workspacesWithStats, t]
   );
 
   // Actions for the section header

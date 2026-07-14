@@ -80,9 +80,7 @@ struct McpDeleteWorkspaceRequest {
         description = "Workspace ID to delete. Optional if running inside that workspace context."
     )]
     workspace_id: Option<Uuid>,
-    #[schemars(
-        description = "Also delete linked remote workspace when available (default: false)"
-    )]
+    #[schemars(description = "Also delete linked remote workspace when available (default: true)")]
     delete_remote: Option<bool>,
     #[schemars(description = "Also delete workspace branches from repos (default: false)")]
     delete_branches: Option<bool>,
@@ -226,7 +224,7 @@ impl McpServer {
             return Ok(Self::tool_error(error_result));
         }
 
-        let delete_remote = delete_remote.unwrap_or(false);
+        let delete_remote = delete_remote.unwrap_or(true);
         let delete_branches = delete_branches.unwrap_or(false);
 
         let url = self.url(&format!("/api/workspaces/{}", workspace_id));

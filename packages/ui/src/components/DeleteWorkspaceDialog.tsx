@@ -11,37 +11,24 @@ import {
 import { Button } from './Button';
 import { Checkbox } from './Checkbox';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
-import {
-  WarningIcon,
-  GitBranchIcon,
-  LinkBreakIcon,
-} from '@phosphor-icons/react';
+import { WarningIcon, GitBranchIcon } from '@phosphor-icons/react';
 import { defineModal } from '../lib/modals';
 
 export interface DeleteWorkspaceDialogProps {
   branchName: string;
   hasOpenPR?: boolean;
-  isLinkedToIssue?: boolean;
-  linkedIssueSimpleId?: string;
 }
 
 export type DeleteWorkspaceDialogResult = {
   action: 'confirmed' | 'canceled';
   deleteBranches?: boolean;
-  unlinkFromIssue?: boolean;
 };
 
 const DeleteWorkspaceDialogImpl = NiceModal.create<DeleteWorkspaceDialogProps>(
-  ({
-    branchName,
-    hasOpenPR = false,
-    isLinkedToIssue = false,
-    linkedIssueSimpleId,
-  }) => {
+  ({ branchName, hasOpenPR = false }) => {
     const modal = useModal();
     const { t } = useTranslation();
     const [deleteBranches, setDeleteBranches] = useState(false);
-    const [unlinkFromIssue, setUnlinkFromIssue] = useState(true);
 
     const canDeleteBranches = !hasOpenPR;
 
@@ -49,7 +36,6 @@ const DeleteWorkspaceDialogImpl = NiceModal.create<DeleteWorkspaceDialogProps>(
       modal.resolve({
         action: 'confirmed',
         deleteBranches: canDeleteBranches && deleteBranches,
-        unlinkFromIssue: isLinkedToIssue && unlinkFromIssue,
       } as DeleteWorkspaceDialogResult);
       modal.hide();
     };
@@ -113,29 +99,6 @@ const DeleteWorkspaceDialogImpl = NiceModal.create<DeleteWorkspaceDialogProps>(
                 </p>
               )}
             </div>
-            {isLinkedToIssue && (
-              <div
-                className="flex items-center gap-3 text-sm font-medium cursor-pointer select-none"
-                onClick={() => setUnlinkFromIssue((v) => !v)}
-              >
-                <Checkbox checked={unlinkFromIssue} />
-                <span className="flex items-center gap-2">
-                  <LinkBreakIcon className="h-4 w-4" />
-                  {t(
-                    'workspaces.deleteDialog.unlinkFromIssueLabel',
-                    'Also unlink from issue'
-                  )}
-                  {linkedIssueSimpleId && (
-                    <>
-                      {' '}
-                      <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">
-                        {linkedIssueSimpleId}
-                      </code>
-                    </>
-                  )}
-                </span>
-              </div>
-            )}
           </div>
 
           <DialogFooter className="gap-2">
