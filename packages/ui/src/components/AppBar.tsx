@@ -119,9 +119,7 @@ function AppBarSectionLabel({
     <p
       className={cn(
         'font-medium leading-none tracking-wide text-low',
-        expanded
-          ? 'px-2 text-[10px] text-left'
-          : 'w-10 text-center text-[9px]'
+        expanded ? 'px-2 text-[10px] text-left' : 'w-10 text-center text-[9px]'
       )}
     >
       {children}
@@ -407,10 +405,7 @@ export function AppBar({
             aria-label={item.label}
             title={expanded ? item.label : undefined}
           >
-            <item.icon
-              className="size-icon-base shrink-0"
-              weight="bold"
-            />
+            <item.icon className="size-icon-base shrink-0" weight="bold" />
             {expanded && <AppBarItemLabel>{item.label}</AppBarItemLabel>}
           </button>
         );
@@ -453,7 +448,9 @@ export function AppBar({
               <span
                 className={cn(
                   'flex shrink-0 items-center justify-center font-medium',
-                  expanded ? 'size-6 rounded-md bg-secondary text-xs' : 'text-sm'
+                  expanded
+                    ? 'size-6 rounded-md bg-secondary text-xs'
+                    : 'text-sm'
                 )}
               >
                 {getProjectInitials(item.host.name)}
@@ -482,10 +479,7 @@ export function AppBar({
               aria-label={item.label}
               title={expanded ? item.label : undefined}
             >
-              <KanbanIcon
-                className="size-icon-base shrink-0"
-                weight="bold"
-              />
+              <KanbanIcon className="size-icon-base shrink-0" weight="bold" />
               {expanded && <AppBarItemLabel>{item.label}</AppBarItemLabel>}
             </button>
           </PopoverTrigger>
@@ -529,13 +523,13 @@ export function AppBar({
           <div
             className={cn(
               'flex items-center',
-              expanded ? 'h-9 w-full justify-start gap-2 px-2.5' : 'h-10 w-10 justify-center'
+              expanded
+                ? 'h-9 w-full justify-start gap-2 px-2.5'
+                : 'h-10 w-10 justify-center'
             )}
           >
             <SpinnerIcon className="size-5 shrink-0 animate-spin text-muted" />
-            {expanded && (
-              <AppBarItemLabel>Loading…</AppBarItemLabel>
-            )}
+            {expanded && <AppBarItemLabel>Loading…</AppBarItemLabel>}
           </div>
         );
       case 'project-list':

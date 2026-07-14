@@ -490,19 +490,27 @@ export function PreviewBrowserContainer({
 
   // 2-second delay before showing iframe after URL detection
   // When there's an override URL from scratch, wait for server to detect a URL first
-  // unless user has triggered an immediate load (refresh/submit)
+  // unless user has triggered an immediate load (refresh/submit), or no managed
+  // server is running (manual URL / persisted override should load on its own).
   useEffect(() => {
     if (!effectiveUrl) {
       setShowIframe(false);
       return;
     }
 
-    // If user has triggered immediate load (refresh/submit), show immediately after delay
+    const noManagedServer = runningDevServers.length === 0;
+
+    // If user has triggered immediate load (refresh/submit), show after delay
     // OR if no override (normal flow), show after delay once effectiveUrl is set
-    // OR if we have both override and auto-detected URL (server is ready), show after delay
-    // OR after timeout fallback when URL auto-detection never resolves.
+    // OR if we have both override and auto-detected URL (server is ready)
+    // OR after timeout fallback when URL auto-detection never resolves
+    // OR when there is no managed server (free-form / persisted override URL).
     const shouldShow =
-      immediateLoad || !hasOverride || Boolean(urlInfo?.url) || allowManualUrl;
+      immediateLoad ||
+      !hasOverride ||
+      Boolean(urlInfo?.url) ||
+      allowManualUrl ||
+      noManagedServer;
 
     if (!shouldShow) {
       setShowIframe(false);
@@ -519,6 +527,7 @@ export function PreviewBrowserContainer({
     hasOverride,
     urlInfo?.url,
     allowManualUrl,
+    runningDevServers.length,
   ]);
 
   // Responsive resize state - use refs for values that shouldn't trigger re-renders
