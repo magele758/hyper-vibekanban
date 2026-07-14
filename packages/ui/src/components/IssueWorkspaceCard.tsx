@@ -43,6 +43,8 @@ export interface WorkspaceWithStats {
   hasUnseenActivity?: boolean;
   latestProcessCompletedAt?: string;
   latestProcessStatus?: 'running' | 'completed' | 'failed' | 'killed';
+  /** Local workspace kind when linked; used to distinguish console-mode issues. */
+  kind?: 'worktree' | 'in_place' | 'console';
 }
 
 export interface IssueWorkspaceCardProps {

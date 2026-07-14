@@ -736,6 +736,7 @@ export function KanbanContainer() {
             hasUnseenActivity: localWorkspace?.hasUnseenActivity,
             latestProcessCompletedAt: localWorkspace?.latestProcessCompletedAt,
             latestProcessStatus: localWorkspace?.latestProcessStatus,
+            kind: localWorkspace?.kind,
           };
         });
 
@@ -754,6 +755,29 @@ export function KanbanContainer() {
     membersWithProfilesById,
     userId,
   ]);
+
+  /** Issues that have at least one linked console-mode workspace. */
+  const consoleIssueIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const issue of issues) {
+      const hasConsole = getWorkspacesForIssue(issue.id).some((workspace) => {
+        if (workspace.archived || !workspace.local_workspace_id) {
+          return false;
+        }
+        return (
+          localWorkspacesById.get(workspace.local_workspace_id)?.kind ===
+          'console'
+        );
+      });
+
+      if (hasConsole) {
+        ids.add(issue.id);
+      }
+    }
+
+    return ids;
+  }, [issues, getWorkspacesForIssue, localWorkspacesById]);
 
   // Calculate sort_order based on column index and issue position
   // Formula: 1000 * [COLUMN_INDEX] + [ISSUE_INDEX] (both 1-based)
@@ -1205,7 +1229,12 @@ export function KanbanContainer() {
                               id={issue.id}
                               name={issue.title}
                               index={index}
-                              className="group"
+                              className={cn(
+                                'group',
+                                consoleIssueIds.has(issue.id) &&
+                                  !selectedIssueIds.has(issue.id) &&
+                                  '!bg-brand/5'
+                              )}
                               onClick={(e) => handleCardClick(issue.id, e)}
                               isOpen={selectedKanbanIssueId === issue.id}
                               isMobile={isMobile}
@@ -1318,6 +1347,7 @@ export function KanbanContainer() {
               selectedIssueIds={selectedIssueIds}
               isMultiSelectActive={isMultiSelectActive}
               onIssueCheckboxChange={handleCheckboxChange}
+              consoleIssueIds={consoleIssueIds}
             />
           </KanbanProvider>
         </div>

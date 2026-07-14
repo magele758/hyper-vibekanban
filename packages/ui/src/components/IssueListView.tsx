@@ -27,6 +27,7 @@ export interface IssueListViewProps {
   selectedIssueIds?: Set<string>;
   isMultiSelectActive?: boolean;
   onIssueCheckboxChange?: (issueId: string, checked: boolean) => void;
+  consoleIssueIds?: Set<string>;
   className?: string;
 }
 
@@ -42,6 +43,7 @@ export function IssueListView({
   selectedIssueIds,
   isMultiSelectActive,
   onIssueCheckboxChange,
+  consoleIssueIds,
   className,
 }: IssueListViewProps) {
   return (
@@ -60,6 +62,7 @@ export function IssueListView({
           selectedIssueIds={selectedIssueIds}
           isMultiSelectActive={isMultiSelectActive}
           onIssueCheckboxChange={onIssueCheckboxChange}
+          consoleIssueIds={consoleIssueIds}
         />
       ))}
     </div>
