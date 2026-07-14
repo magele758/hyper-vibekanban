@@ -354,11 +354,21 @@ async fn notify_agent_task_terminal(pool: &sqlx::PgPool, task: &AgentTask) {
             .map(|r| format!(": {r}"))
             .unwrap_or_default()
     );
+    let item_type = if task
+        .failure_reason
+        .as_deref()
+        .is_some_and(|r| r.to_lowercase().contains("rebase conflict"))
+    {
+        "rebase_conflict"
+    } else {
+        "agent_task"
+    };
     let payload = serde_json::json!({
         "agent_task_id": task.id,
         "agent_id": task.agent_id,
         "status": status_label,
         "trigger": format!("{:?}", task.trigger).to_lowercase(),
+        "local_workspace_id": task.local_workspace_id,
     });
 
     for user_id in recipients {
@@ -367,7 +377,7 @@ async fn notify_agent_task_terminal(pool: &sqlx::PgPool, task: &AgentTask) {
             user_id,
             Some(issue.project_id),
             Some(issue.id),
-            "agent_task",
+            item_type,
             &title,
             &body,
             payload.clone(),

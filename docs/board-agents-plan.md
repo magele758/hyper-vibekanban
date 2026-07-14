@@ -2,8 +2,9 @@
 
 > 状态：一二三期 MVP 可用（非严重缺口已补齐；官方 Pi/OpenCode SDK / 专用 IM 仍不做）  
 > 关联 Issue：EBE-72（父）、EBE-82 / EBE-83 / EBE-84  
+> 延伸：Feature 生命周期守护见 [`feature-babysitter-plan.md`](./feature-babysitter-plan.md)  
 > 参考：Multica（https://github.com/multica-ai/multica）、Pi Agent SDK（https://github.com/earendil-works/pi）、Cursor TypeScript SDK  
-> 更新：2026-07-11
+> 更新：2026-07-14
 
 本文档同时保留：**早期调研对比**、**已拍板产品决策**、**分期落地与实现入口**，避免调研结论只留在对话里。
 

@@ -125,9 +125,13 @@ wait_for?: string,
 /**
  * For `join`: require N of M inbound branches (default = all inbound edges).
  */
-join_count?: number, };
+join_count?: number, 
+/**
+ * For `human_gate`: `merge_approval` (default) or `completeness_qa`.
+ */
+gate_kind?: string, };
 
-export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "fork" | "join";
+export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "fork" | "join" | "rebase" | "human_gate";
 
 export type SquadPipelineEdge = { id: string, source: string, target: string, 
 /**
@@ -148,6 +152,19 @@ export type ListSquadMembersResponse = { members: Array<SquadMember>, };
 export type RunSquadResponse = { issue_id: string, agent_task_ids: Array<string>, ordered_node_ids: Array<string>, target_type: SquadTargetType, working_directory: string | null, };
 
 export type RunSquadRequest = { issue_id?: string, working_directory?: string, };
+
+/**
+ * Human decision gate used by Feature Babysitter (`human_gate` pipeline node).
+ */
+export type PipelineHumanGate = { id: string, project_id: string, issue_id: string, squad_id: string | null, gate_kind: string, local_workspace_id: string | null, question: string, status: string, payload: JsonValue, decision_note: string | null, decided_by: string | null, decided_at: string | null, created_at: string, updated_at: string, };
+
+export type RespondPipelineGateRequest = { 
+/**
+ * `approve` or `reject`
+ */
+decision: string, note?: string, };
+
+export type RespondPipelineGateResponse = { gate: PipelineHumanGate, };
 
 export type InboxItem = { id: string, recipient_user_id: string, project_id: string | null, issue_id: string | null, type: string, title: string, body: string, payload: JsonValue, read_at: string | null, archived_at: string | null, created_at: string, };
 

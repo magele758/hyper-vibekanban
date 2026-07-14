@@ -19,6 +19,10 @@ import {
   defaultLabelForType,
   type PaletteNodeType,
 } from './SquadPipelineCanvas';
+import {
+  buildFeatureBabysitterPipeline,
+  pickBabysitterAgents,
+} from './featureBabysitterTemplate';
 
 const TARGET_OPTIONS: {
   value: SquadTargetType;
@@ -155,6 +159,12 @@ export function SquadPipelineEditor({
         : {}),
       ...(type === 'while' ? { max_iterations: 3 } : {}),
       ...(type === 'wait' ? { wait_seconds: 5 } : {}),
+      ...(type === 'human_gate'
+        ? {
+            gate_kind: 'merge_approval',
+            prompt: '是否合并到目标分支？',
+          }
+        : {}),
     };
     const nodes = [...draft.pipeline.nodes, node];
     const edges = [...draft.pipeline.edges];
@@ -173,6 +183,26 @@ export function SquadPipelineEditor({
   };
 
   const addStep = () => addNode('agent', undefined, true);
+
+  const applyBabysitterTemplate = () => {
+    const picks = pickBabysitterAgents(agents);
+    const pipeline = buildFeatureBabysitterPipeline({
+      implementAgentId: draft.leader_agent_id ?? picks.implementAgentId,
+      verifyAgentId: picks.verifyAgentId,
+      maxFixRounds: 3,
+    });
+    onChange({
+      ...draft,
+      leader_agent_id:
+        draft.leader_agent_id ?? picks.implementAgentId ?? null,
+      name: draft.name.trim() ? draft.name : 'Feature Babysitter',
+      pipeline,
+      target_type:
+        draft.target_type === 'path' ? 'issue_and_path' : draft.target_type,
+    });
+    setSelectedNodeId(pipeline.nodes[0]?.id ?? null);
+    setMode('canvas');
+  };
 
   const removeStep = (id: string) => {
     setPipeline({
@@ -387,6 +417,14 @@ export function SquadPipelineEditor({
           >
             <PlusIcon className="size-3.5" />
             添加 Agent 步骤
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-brand/30 bg-brand/5 px-2 py-1 text-xs text-brand hover:bg-brand/10"
+            title="Implement → Verify → Fix 循环 → Rebase → 合并确认"
+            onClick={applyBabysitterTemplate}
+          >
+            应用 Feature Babysitter
           </button>
         </div>
 
@@ -822,6 +860,49 @@ function NodeDetailForm({
         <p className="text-[11px] text-low">
           运行时退出最近的 While；无 While 则忽略。
         </p>
+      )}
+
+      {kind === 'rebase' && (
+        <p className="text-[11px] text-low">
+          系统步骤：对上一步 Workspace 执行 rebase 到 target
+          branch。冲突时任务失败并通知 Inbox。
+        </p>
+      )}
+
+      {kind === 'human_gate' && (
+        <>
+          <label className="block text-xs text-low">
+            确认类型
+            <select
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              value={node.gate_kind ?? 'merge_approval'}
+              onChange={(e) =>
+                onChange({
+                  gate_kind: e.target.value || undefined,
+                })
+              }
+            >
+              <option value="merge_approval">合并确认</option>
+              <option value="completeness_qa">完整性确认</option>
+            </select>
+          </label>
+          <label className="block text-xs text-low">
+            询问文案
+            <textarea
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              rows={2}
+              value={node.prompt ?? ''}
+              onChange={(e) =>
+                onChange({
+                  prompt: e.target.value || undefined,
+                })
+              }
+            />
+          </label>
+          <p className="text-[11px] text-low">
+            会写入 Inbox；合并确认可在 Inbox 点「合并」调本地 merge API。
+          </p>
+        </>
       )}
 
       {kind === 'agent' && (

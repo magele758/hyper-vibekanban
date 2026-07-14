@@ -23,6 +23,7 @@ use executors::{
     executors::BaseCodingAgent,
     profile::ExecutorConfig,
 };
+use git::GitService;
 use services::services::{
     container::ContainerService,
     remote_client::{RemoteClient, RemoteClientError},
@@ -93,6 +94,11 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             issue_id = %task.issue_id,
             "Claimed agent task"
         );
+
+        if let Some(workspace_id) = parse_system_rebase_workspace(&task) {
+            self.handle_system_rebase(task, workspace_id).await?;
+            return Ok(());
+        }
 
         let agent = match self.remote_client.get_agent(task.agent_id).await {
             Ok(agent) => agent,
@@ -539,6 +545,176 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
         }
     }
 
+    async fn handle_system_rebase(
+        &self,
+        task: AgentTask,
+        workspace_id: Uuid,
+    ) -> Result<(), RemoteClientError> {
+        info!(
+            task_id = %task.id,
+            %workspace_id,
+            "Running Feature Babysitter system rebase"
+        );
+
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Running),
+                    failure_reason: None,
+                    local_workspace_id: Some(Some(workspace_id)),
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                },
+            )
+            .await;
+
+        let workspace = match Workspace::find_by_id(&self.db.pool, workspace_id).await {
+            Ok(Some(ws)) => ws,
+            Ok(None) => {
+                self.fail_system_task(
+                    &task,
+                    format!("rebase workspace {workspace_id} not found on this host"),
+                )
+                .await;
+                return Ok(());
+            }
+            Err(e) => {
+                self.fail_system_task(&task, format!("failed to load workspace: {e}"))
+                    .await;
+                return Ok(());
+            }
+        };
+
+        let workspace_repos =
+            match WorkspaceRepo::find_by_workspace_id(&self.db.pool, workspace_id).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    self.fail_system_task(&task, format!("failed to list workspace repos: {e}"))
+                        .await;
+                    return Ok(());
+                }
+            };
+        if workspace_repos.is_empty() {
+            self.fail_system_task(&task, "rebase: workspace has no repos".into())
+                .await;
+            return Ok(());
+        }
+
+        let container_ref = match self.container.ensure_container_exists(&workspace).await {
+            Ok(path) => path,
+            Err(e) => {
+                self.fail_system_task(&task, format!("ensure container failed: {e}"))
+                    .await;
+                return Ok(());
+            }
+        };
+        let workspace_path = std::path::Path::new(&container_ref);
+        let git = GitService::new();
+
+        for wr in &workspace_repos {
+            let repo = match Repo::find_by_id(&self.db.pool, wr.repo_id).await {
+                Ok(Some(r)) => r,
+                Ok(None) => {
+                    self.fail_system_task(&task, format!("repo {} missing", wr.repo_id))
+                        .await;
+                    return Ok(());
+                }
+                Err(e) => {
+                    self.fail_system_task(&task, format!("load repo failed: {e}"))
+                        .await;
+                    return Ok(());
+                }
+            };
+            let worktree_path = workspace.kind.repo_working_path(workspace_path, &repo.name);
+            let target = wr.target_branch.clone();
+            match git.rebase_branch(
+                &repo.path,
+                &worktree_path,
+                &target,
+                &target,
+                &workspace.branch,
+            ) {
+                Ok(_) => {
+                    info!(
+                        task_id = %task.id,
+                        repo = %repo.name,
+                        target = %target,
+                        "Babysitter rebase succeeded"
+                    );
+                }
+                Err(e) => {
+                    let msg = format!("rebase conflict on {}: {e}", repo.name);
+                    warn!(task_id = %task.id, %msg);
+                    let _ = self
+                        .remote_client
+                        .create_issue_comment(&CreateIssueCommentRequest {
+                            id: None,
+                            issue_id: task.issue_id,
+                            parent_id: None,
+                            message: format!("Feature Babysitter **rebase** failed: `{msg}`"),
+                        })
+                        .await;
+                    self.fail_system_task(&task, msg).await;
+                    return Ok(());
+                }
+            }
+        }
+
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Completed),
+                    failure_reason: Some(None),
+                    local_workspace_id: Some(Some(workspace_id)),
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                },
+            )
+            .await;
+        let _ = self
+            .remote_client
+            .create_issue_comment(&CreateIssueCommentRequest {
+                id: None,
+                issue_id: task.issue_id,
+                parent_id: None,
+                message: "Feature Babysitter **rebase** completed successfully.".into(),
+            })
+            .await;
+        Ok(())
+    }
+
+    async fn fail_system_task(&self, task: &AgentTask, reason: String) {
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Failed),
+                    failure_reason: Some(Some(reason.clone())),
+                    local_workspace_id: None,
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                },
+            )
+            .await;
+        let _ = self
+            .remote_client
+            .create_issue_comment(&CreateIssueCommentRequest {
+                id: None,
+                issue_id: task.issue_id,
+                parent_id: None,
+                message: format!("Feature Babysitter system step failed: `{reason}`"),
+            })
+            .await;
+    }
+
     async fn wait_and_finalize(
         remote: RemoteClient,
         db: DBService,
@@ -704,6 +880,21 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             })
             .await;
     }
+}
+
+fn parse_system_rebase_workspace(task: &AgentTask) -> Option<Uuid> {
+    let prompt = task.execution_prompt.as_deref()?.trim();
+    if !prompt.starts_with("__VK_SYSTEM_ACTION__:rebase") {
+        return None;
+    }
+    for line in prompt.lines() {
+        if let Some(rest) = line.trim().strip_prefix("workspace_id:") {
+            if let Ok(id) = Uuid::parse_str(rest.trim()) {
+                return Some(id);
+            }
+        }
+    }
+    None
 }
 
 fn select_repo_for_task<'a>(

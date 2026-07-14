@@ -404,6 +404,7 @@ pub async fn execute_squad_pipeline(
         status: AgentTaskStatus,
         failure_reason: Option<String>,
         summary: String,
+        local_workspace_id: Option<Uuid>,
     }
 
     struct JoinGate {
@@ -420,6 +421,7 @@ pub async fn execute_squad_pipeline(
         step_budget: Mutex<usize>,
         agent_priority: Mutex<i32>,
         last_agent_result: Mutex<Option<AgentStepResult>>,
+        last_workspace_id: Mutex<Option<Uuid>>,
         join_gates: Mutex<HashMap<String, Arc<JoinGate>>>,
     }
 
@@ -498,6 +500,34 @@ pub async fn execute_squad_pipeline(
             return (ok, format!("status:{want} vs last={got} → {ok}"));
         }
 
+        // Feature Babysitter: verdict:ready / verdict:needs_work
+        if let Some(rest) = c.strip_prefix("verdict:") {
+            let want = rest.trim();
+            let hay = last
+                .map(|r| {
+                    format!(
+                        "{} {}",
+                        r.summary.to_lowercase(),
+                        r.failure_reason.as_deref().unwrap_or("")
+                    )
+                    .to_lowercase()
+                })
+                .unwrap_or_default();
+            let ok = match want {
+                "ready" | "ok" | "pass" => {
+                    hay.contains("babysitter_verdict: ready")
+                        || hay.contains("babysitter_verdict:ready")
+                }
+                "needs_work" | "needs-work" | "fix" | "fail" => {
+                    hay.contains("babysitter_verdict: needs_work")
+                        || hay.contains("babysitter_verdict:needs_work")
+                        || hay.contains("babysitter_verdict: needs work")
+                }
+                _ => hay.contains(&format!("babysitter_verdict: {want}")),
+            };
+            return (ok, format!("verdict:{want} → {ok}"));
+        }
+
         // agent:<needle> or plain needle → match against last summary / status keywords
         let needle = c
             .strip_prefix("agent:")
@@ -561,6 +591,7 @@ pub async fn execute_squad_pipeline(
     async fn await_agent_task(
         pool: &sqlx::PgPool,
         task_id: Uuid,
+        issue_id: Uuid,
         timeout: Duration,
     ) -> anyhow::Result<AgentStepResult> {
         let deadline = tokio::time::Instant::now() + timeout;
@@ -573,19 +604,36 @@ pub async fn execute_squad_pipeline(
                 AgentTaskStatus::Completed
                 | AgentTaskStatus::Failed
                 | AgentTaskStatus::Cancelled => {
+                    let mut comment_bits = String::new();
+                    if let Ok(comments) =
+                        crate::db::issue_comments::IssueCommentRepository::list_by_issue(
+                            pool, issue_id,
+                        )
+                        .await
+                    {
+                        // Newest comments first — look for babysitter verdict markers.
+                        let mut newest = comments;
+                        newest.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                        for c in newest.into_iter().take(8) {
+                            comment_bits.push(' ');
+                            comment_bits.push_str(&c.message);
+                        }
+                    }
                     let summary = format!(
-                        "task {} ended as {:?}{}",
+                        "task {} ended as {:?}{}{}",
                         task_id,
                         task.status,
                         task.failure_reason
                             .as_ref()
                             .map(|r| format!(" — {r}"))
-                            .unwrap_or_default()
+                            .unwrap_or_default(),
+                        comment_bits
                     );
                     return Ok(AgentStepResult {
                         status: task.status,
                         failure_reason: task.failure_reason,
                         summary,
+                        local_workspace_id: task.local_workspace_id,
                     });
                 }
                 _ => {}
@@ -598,6 +646,7 @@ pub async fn execute_squad_pipeline(
                         timeout.as_secs()
                     )),
                     summary: format!("task {task_id} await timeout"),
+                    local_workspace_id: None,
                 });
             }
             tokio::time::sleep(poll).await;
@@ -751,8 +800,11 @@ pub async fn execute_squad_pipeline(
                     "- **agent** `{label}` → task `{task_id}` (agent `{agent_id}`) — awaiting…"
                 ));
 
-                let result = await_agent_task(pool, task_id, agent_await_timeout).await?;
+                let result = await_agent_task(pool, task_id, issue_id, agent_await_timeout).await?;
                 let ok = result.status == AgentTaskStatus::Completed;
+                if let Some(ws) = result.local_workspace_id {
+                    *shared.last_workspace_id.lock().await = Some(ws);
+                }
                 shared.run_log.lock().await.push(format!(
                     "  - finished {:?}: {}",
                     result.status, result.summary
@@ -1144,6 +1196,312 @@ pub async fn execute_squad_pipeline(
                 )
                 .await
             }
+            SquadPipelineNodeType::Rebase => {
+                let workspace_id = shared.last_workspace_id.lock().await.clone().or_else(|| {
+                    // Fall back: last completed task on this issue with a workspace.
+                    None
+                });
+                let workspace_id = if let Some(ws) = workspace_id {
+                    Some(ws)
+                } else {
+                    // Query DB for most recent task with workspace.
+                    match AgentTaskRepository::list_by_issue(pool, issue_id).await {
+                        Ok(tasks) => tasks
+                            .into_iter()
+                            .filter(|t| t.local_workspace_id.is_some())
+                            .max_by_key(|t| t.updated_at)
+                            .and_then(|t| t.local_workspace_id),
+                        Err(_) => None,
+                    }
+                };
+                let Some(workspace_id) = workspace_id else {
+                    shared.run_log.lock().await.push(format!(
+                        "- **rebase** `{label}` skipped — no workspace from prior agent step"
+                    ));
+                    *shared.last_agent_result.lock().await = Some(AgentStepResult {
+                        status: AgentTaskStatus::Failed,
+                        failure_reason: Some("rebase: no local workspace".into()),
+                        summary: "BABYSITTER rebase failed: no workspace".into(),
+                        local_workspace_id: None,
+                    });
+                    return Ok(false);
+                };
+                *shared.last_workspace_id.lock().await = Some(workspace_id);
+
+                let agent_id = node.agent_id.or(squad.leader_agent_id).ok_or_else(|| {
+                    anyhow::anyhow!("rebase 步骤需要 Leader Agent（系统任务认领用）")
+                })?;
+                let priority = {
+                    let mut p = shared.agent_priority.lock().await;
+                    let cur = *p;
+                    *p = p.saturating_sub(1);
+                    cur
+                };
+                let execution_prompt = Some(format!(
+                    "__VK_SYSTEM_ACTION__:rebase\nworkspace_id:{workspace_id}\n## Step instructions\nRebase workspace onto its target branch(es). Do not write code."
+                ));
+                let task = AgentTaskRepository::enqueue(
+                    pool,
+                    None,
+                    agent_id,
+                    issue_id,
+                    AgentTaskTrigger::Manual,
+                    priority,
+                    true,
+                    Some(squad.id),
+                    false,
+                    preferred_repo.clone(),
+                    execution_prompt,
+                )
+                .await?;
+                let task_id = task.data.id;
+                shared.agent_task_ids.lock().await.push(task_id);
+                shared.run_log.lock().await.push(format!(
+                    "- **rebase** `{label}` → system task `{task_id}` workspace `{workspace_id}` — awaiting…"
+                ));
+                let result = await_agent_task(pool, task_id, issue_id, agent_await_timeout).await?;
+                let ok = result.status == AgentTaskStatus::Completed;
+                shared.run_log.lock().await.push(format!(
+                    "  - rebase finished {:?}: {}",
+                    result.status, result.summary
+                ));
+                *shared.last_agent_result.lock().await = Some(result.clone());
+                if !ok {
+                    let err_edges = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Error);
+                    if !err_edges.is_empty() {
+                        return follow_edges(
+                            pool,
+                            squad,
+                            issue_id,
+                            preferred_repo,
+                            nodes_by_id,
+                            outs,
+                            ins,
+                            shared,
+                            err_edges,
+                            while_stack,
+                            visiting,
+                            agent_await_timeout,
+                            loop_success,
+                            node_id,
+                        )
+                        .await;
+                    }
+                    return Ok(false);
+                }
+                let defaults = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Default);
+                follow_edges(
+                    pool,
+                    squad,
+                    issue_id,
+                    preferred_repo,
+                    nodes_by_id,
+                    outs,
+                    ins,
+                    shared,
+                    defaults,
+                    while_stack,
+                    visiting,
+                    agent_await_timeout,
+                    loop_success,
+                    node_id,
+                )
+                .await
+            }
+            SquadPipelineNodeType::HumanGate => {
+                let gate_kind = node
+                    .gate_kind
+                    .as_deref()
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("merge_approval");
+                let question = node
+                    .prompt
+                    .as_deref()
+                    .or(node.wait_for.as_deref())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Feature 已完成验收与 rebase，是否合并到目标分支？");
+                let workspace_id = shared.last_workspace_id.lock().await.clone();
+
+                let payload = serde_json::json!({
+                    "gate_kind": gate_kind,
+                    "squad_id": squad.id,
+                    "local_workspace_id": workspace_id,
+                });
+                let gate = crate::db::pipeline_gates::PipelineGateRepository::create(
+                    pool,
+                    squad.project_id,
+                    issue_id,
+                    Some(squad.id),
+                    gate_kind,
+                    workspace_id,
+                    question,
+                    payload.clone(),
+                )
+                .await?;
+
+                // Collect inbox recipients (issue creator + human assignees + subscribers).
+                let mut recipients = std::collections::HashSet::new();
+                if let Ok(Some(issue)) =
+                    crate::db::issues::IssueRepository::find_by_id(pool, issue_id).await
+                {
+                    if let Some(creator) = issue.creator_user_id {
+                        recipients.insert(creator);
+                    }
+                }
+                if let Ok(assignees) =
+                    crate::db::issue_assignees::IssueAssigneeRepository::list_by_issue(
+                        pool, issue_id,
+                    )
+                    .await
+                {
+                    for a in assignees {
+                        if let Some(uid) = a.user_id {
+                            recipients.insert(uid);
+                        }
+                    }
+                }
+                if let Ok(rows) = sqlx::query_scalar::<_, Uuid>(
+                    "SELECT user_id FROM issue_subscribers WHERE issue_id = $1",
+                )
+                .bind(issue_id)
+                .fetch_all(pool)
+                .await
+                {
+                    recipients.extend(rows);
+                }
+
+                let title = if gate_kind == "merge_approval" {
+                    "Feature 待合并确认".to_string()
+                } else {
+                    format!("需要确认：{label}")
+                };
+                let body = format!("{question}\n\n(gate `{gate_id}`)", gate_id = gate.id);
+                let inbox_payload = serde_json::json!({
+                    "gate_id": gate.id,
+                    "gate_kind": gate_kind,
+                    "squad_id": squad.id,
+                    "local_workspace_id": workspace_id,
+                    "issue_id": issue_id,
+                });
+                for user_id in &recipients {
+                    let _ = crate::db::inbox::InboxRepository::create(
+                        pool,
+                        *user_id,
+                        Some(squad.project_id),
+                        Some(issue_id),
+                        if gate_kind == "merge_approval" {
+                            "merge_approval"
+                        } else {
+                            "human_gate"
+                        },
+                        &title,
+                        &body,
+                        inbox_payload.clone(),
+                    )
+                    .await;
+                }
+                if recipients.is_empty() {
+                    shared.run_log.lock().await.push(format!(
+                        "- **human_gate** `{label}` warning: no inbox recipients"
+                    ));
+                }
+
+                shared.run_log.lock().await.push(format!(
+                    "- **human_gate** `{label}` kind=`{gate_kind}` gate=`{}` — awaiting human…",
+                    gate.id
+                ));
+
+                let gate_timeout = std::env::var("HUMAN_GATE_TIMEOUT_SECS")
+                    .ok()
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .filter(|&n| n > 0)
+                    .unwrap_or(24 * 60 * 60);
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(gate_timeout);
+                let poll = Duration::from_secs(5);
+                let final_status = loop {
+                    let current = crate::db::pipeline_gates::PipelineGateRepository::find_by_id(
+                        pool, gate.id,
+                    )
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("human gate disappeared"))?;
+                    if current.status != "pending" {
+                        break current.status;
+                    }
+                    if tokio::time::Instant::now() >= deadline {
+                        let _ = crate::db::pipeline_gates::PipelineGateRepository::expire(
+                            pool, gate.id,
+                        )
+                        .await;
+                        break "expired".to_string();
+                    }
+                    tokio::time::sleep(poll).await;
+                };
+
+                let approved = final_status == "approved";
+                shared
+                    .run_log
+                    .lock()
+                    .await
+                    .push(format!("  - human_gate decided: {final_status}"));
+                *shared.last_agent_result.lock().await = Some(AgentStepResult {
+                    status: if approved {
+                        AgentTaskStatus::Completed
+                    } else {
+                        AgentTaskStatus::Failed
+                    },
+                    failure_reason: if approved {
+                        None
+                    } else {
+                        Some(format!("human_gate:{final_status}"))
+                    },
+                    summary: format!("human_gate {final_status}"),
+                    local_workspace_id: workspace_id,
+                });
+
+                if approved {
+                    let defaults = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Default);
+                    follow_edges(
+                        pool,
+                        squad,
+                        issue_id,
+                        preferred_repo,
+                        nodes_by_id,
+                        outs,
+                        ins,
+                        shared,
+                        defaults,
+                        while_stack,
+                        visiting,
+                        agent_await_timeout,
+                        loop_success,
+                        node_id,
+                    )
+                    .await
+                } else {
+                    let false_edges = edges_for_branch(outgoing, SquadPipelineEdgeBranch::False);
+                    if !false_edges.is_empty() {
+                        follow_edges(
+                            pool,
+                            squad,
+                            issue_id,
+                            preferred_repo,
+                            nodes_by_id,
+                            outs,
+                            ins,
+                            shared,
+                            false_edges,
+                            while_stack,
+                            visiting,
+                            agent_await_timeout,
+                            loop_success,
+                            node_id,
+                        )
+                        .await
+                    } else {
+                        Ok(false)
+                    }
+                }
+            }
         }
     }
 
@@ -1155,6 +1513,7 @@ pub async fn execute_squad_pipeline(
         step_budget: Mutex::new(256),
         agent_priority: Mutex::new(100),
         last_agent_result: Mutex::new(None),
+        last_workspace_id: Mutex::new(None),
         join_gates: Mutex::new(HashMap::new()),
     });
 
@@ -1238,7 +1597,10 @@ pub async fn execute_squad_pipeline(
                 .await?;
                 shared.agent_task_ids.lock().await.push(task.data.id);
                 shared.ordered_node_ids.lock().await.push(node_id.clone());
-                let result = await_agent_task(pool, task.data.id, timeout).await?;
+                let result = await_agent_task(pool, task.data.id, issue_id, timeout).await?;
+                if let Some(ws) = result.local_workspace_id {
+                    *shared.last_workspace_id.lock().await = Some(ws);
+                }
                 *shared.last_agent_result.lock().await = Some(result);
             }
         }

@@ -229,6 +229,20 @@ export const boardAgentsApi = {
     }
   },
 
+  async respondPipelineGate(
+    gateId: string,
+    decision: 'approve' | 'reject',
+    note?: string
+  ): Promise<void> {
+    const res = await makeRequest(`/v1/pipeline-gates/${gateId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, note }),
+    });
+    if (!res.ok) {
+      throw new Error(`${res.status}: ${await res.text()}`);
+    }
+  },
+
   // ── Squads ────────────────────────────────────────────────────────────────
 
   async listSquads(projectId: string): Promise<Squad[]> {

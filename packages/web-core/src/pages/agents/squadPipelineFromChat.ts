@@ -30,6 +30,8 @@ const NODE_TYPES: SquadPipelineNodeType[] = [
   'wait',
   'fork',
   'join',
+  'rebase',
+  'human_gate',
 ];
 
 const BRANCHES: SquadPipelineEdgeBranch[] = [

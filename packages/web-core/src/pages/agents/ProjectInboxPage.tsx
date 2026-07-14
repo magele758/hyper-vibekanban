@@ -9,7 +9,20 @@ import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { useUserContext } from '@/shared/hooks/useUserContext';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
+import { workspacesApi } from '@/shared/lib/api';
 import { cn } from '@/shared/lib/utils';
+import type { InboxItem } from 'shared/remote-types';
+
+function payloadString(
+  payload: InboxItem['payload'],
+  key: string
+): string | undefined {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return undefined;
+  }
+  const v = (payload as Record<string, unknown>)[key];
+  return typeof v === 'string' ? v : undefined;
+}
 
 function InboxInner({ projectId }: { projectId: string }) {
   const { inboxItems, isLoading, error: syncError, retry } = useUserContext();
@@ -33,10 +46,10 @@ function InboxInner({ projectId }: { projectId: string }) {
     [items]
   );
 
-  const handleMarkRead = async (id: string) => {
+  const withPending = async (id: string, fn: () => Promise<void>) => {
     setPending((prev) => new Set(prev).add(id));
     try {
-      await boardAgentsApi.markInboxRead(id);
+      await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -48,19 +61,43 @@ function InboxInner({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleMarkRead = async (id: string) => {
+    await withPending(id, () => boardAgentsApi.markInboxRead(id));
+  };
+
   const handleArchive = async (id: string) => {
-    setPending((prev) => new Set(prev).add(id));
-    try {
-      await boardAgentsApi.archiveInboxItem(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setPending((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+    await withPending(id, () => boardAgentsApi.archiveInboxItem(id));
+  };
+
+  const handleMergeApprove = async (item: InboxItem) => {
+    const gateId = payloadString(item.payload, 'gate_id');
+    const workspaceId = payloadString(item.payload, 'local_workspace_id');
+    if (!gateId) {
+      setError('缺少 gate_id，无法确认');
+      return;
     }
+    await withPending(item.id, async () => {
+      if (workspaceId) {
+        const repos = await workspacesApi.getRepos(workspaceId);
+        for (const wr of repos) {
+          await workspacesApi.merge(workspaceId, { repo_id: wr.id });
+        }
+      }
+      await boardAgentsApi.respondPipelineGate(gateId, 'approve');
+      await boardAgentsApi.markInboxRead(item.id);
+    });
+  };
+
+  const handleMergeReject = async (item: InboxItem) => {
+    const gateId = payloadString(item.payload, 'gate_id');
+    if (!gateId) {
+      setError('缺少 gate_id');
+      return;
+    }
+    await withPending(item.id, async () => {
+      await boardAgentsApi.respondPipelineGate(gateId, 'reject');
+      await boardAgentsApi.markInboxRead(item.id);
+    });
   };
 
   const handleMarkAllRead = async () => {
@@ -130,6 +167,9 @@ function InboxInner({ projectId }: { projectId: string }) {
               const isUnread = !item.read_at;
               const isArchived = Boolean(item.archived_at);
               const busy = pending.has(item.id);
+              const isMerge =
+                item.type === 'merge_approval' &&
+                Boolean(payloadString(item.payload, 'gate_id'));
               return (
                 <li
                   key={item.id}
@@ -140,14 +180,26 @@ function InboxInner({ projectId }: { projectId: string }) {
                   )}
                 >
                   <div className="min-w-0 flex-1">
-                    <p
-                      className={cn(
-                        'text-sm',
-                        isUnread ? 'font-medium text-normal' : 'text-low'
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p
+                        className={cn(
+                          'text-sm',
+                          isUnread ? 'font-medium text-normal' : 'text-low'
+                        )}
+                      >
+                        {item.title}
+                      </p>
+                      {item.type === 'merge_approval' && (
+                        <span className="rounded bg-brand/15 px-1.5 py-0.5 text-[10px] text-brand">
+                          合并确认
+                        </span>
                       )}
-                    >
-                      {item.title}
-                    </p>
+                      {item.type === 'rebase_conflict' && (
+                        <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] text-destructive">
+                          Rebase 冲突
+                        </span>
+                      )}
+                    </div>
                     {item.body && (
                       <p className="mt-1 line-clamp-2 text-xs text-low">
                         {item.body}
@@ -156,6 +208,26 @@ function InboxInner({ projectId }: { projectId: string }) {
                     <p className="mt-1 text-[11px] text-low">
                       {new Date(item.created_at).toLocaleString()}
                     </p>
+                    {isMerge && !isArchived && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="rounded-md bg-brand px-2.5 py-1 text-xs text-on-brand hover:opacity-90 disabled:opacity-50"
+                          onClick={() => void handleMergeApprove(item)}
+                        >
+                          合并
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="rounded-md border border-border px-2.5 py-1 text-xs text-low hover:bg-secondary disabled:opacity-50"
+                          onClick={() => void handleMergeReject(item)}
+                        >
+                          拒绝
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100">
                     {isUnread && (

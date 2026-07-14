@@ -84,6 +84,10 @@ pub enum SquadPipelineNodeType {
     Fork,
     /// Barrier: wait until expected inbound branches complete, then continue.
     Join,
+    /// System step: local watcher rebases the prior workspace onto target_branch.
+    Rebase,
+    /// Pause for a human decision via Inbox (e.g. merge approval).
+    HumanGate,
 }
 
 impl SquadPipelineNodeType {
@@ -96,6 +100,8 @@ impl SquadPipelineNodeType {
             Self::Wait => "wait",
             Self::Fork => "fork",
             Self::Join => "join",
+            Self::Rebase => "rebase",
+            Self::HumanGate => "human_gate",
         }
     }
 
@@ -190,6 +196,10 @@ pub struct SquadPipelineNode {
     #[serde(default)]
     #[ts(optional)]
     pub join_count: Option<i32>,
+    /// For `human_gate`: `merge_approval` (default) or `completeness_qa`.
+    #[serde(default)]
+    #[ts(optional)]
+    pub gate_kind: Option<String>,
 }
 
 /// Directed edge: source before target (or control-flow branch).
