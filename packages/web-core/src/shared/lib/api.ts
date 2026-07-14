@@ -486,14 +486,17 @@ export const workspacesApi = {
 
   delete: async (
     workspaceId: string,
-    deleteBranches?: boolean
+    deleteBranches?: boolean,
+    deleteRemote: boolean = true
   ): Promise<void> => {
     const params = new URLSearchParams();
     if (deleteBranches) {
       params.set('delete_branches', 'true');
     }
+    // Always send explicitly so older servers and query parsers agree.
+    params.set('delete_remote', deleteRemote ? 'true' : 'false');
     const queryString = params.toString();
-    const url = `/api/workspaces/${workspaceId}${queryString ? `?${queryString}` : ''}`;
+    const url = `/api/workspaces/${workspaceId}?${queryString}`;
     const response = await makeRequest(url, {
       method: 'DELETE',
     });

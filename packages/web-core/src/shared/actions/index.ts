@@ -296,13 +296,6 @@ export const Actions = {
     execute: async (ctx, workspaceId) => {
       const workspace = await getWorkspace(ctx.queryClient, workspaceId);
 
-      // Check if workspace is linked to a remote issue
-      const remoteWs = ctx.remoteWorkspaces.find(
-        (w) => w.local_workspace_id === workspaceId
-      );
-      const linkedIssueSimpleId = remoteWs?.issue_id
-        ? ctx.projectMutations?.getIssue(remoteWs.issue_id)?.simple_id
-        : undefined;
       const branchStatus = await workspacesApi.getBranchStatus(workspaceId);
       const hasOpenPR = branchStatus.some((repoStatus) =>
         repoStatus.merges?.some(
@@ -313,8 +306,6 @@ export const Actions = {
       const result = await DeleteWorkspaceDialog.show({
         branchName: workspace.branch,
         hasOpenPR,
-        isLinkedToIssue: Boolean(remoteWs?.issue_id),
-        linkedIssueSimpleId,
       });
       if (result.action === 'confirmed') {
         // Calculate next workspace before deleting (only if deleting current)
@@ -323,12 +314,8 @@ export const Actions = {
           ? getNextWorkspaceId(ctx.activeWorkspaces, workspaceId)
           : null;
 
+        // Local delete also clears the remote workspace record by default.
         await workspacesApi.delete(workspaceId, result.deleteBranches);
-
-        // Unlink from remote issue after successful deletion
-        if (result.unlinkFromIssue) {
-          await workspacesApi.unlinkFromIssue(workspaceId);
-        }
         ctx.queryClient.invalidateQueries({
           queryKey: workspaceSummaryKeys.all,
         });
