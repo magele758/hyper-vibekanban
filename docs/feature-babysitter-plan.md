@@ -1,6 +1,6 @@
 # Feature Babysitter（Feature 生命周期守护）
 
-> 状态：一期实现中  
+> 状态：一期已落地  
 > 关联：Board Agents（`docs/board-agents-plan.md`）、Squad Pipeline  
 > 更新：2026-07-14
 
