@@ -1,3 +1,4 @@
+import { isLocalRelayHostId } from '@/shared/lib/localRelayHost';
 import { getCurrentHostId } from '@/shared/providers/HostIdProvider';
 
 export type LocalApiHostScope = 'current' | 'explicit' | 'none';
@@ -52,17 +53,33 @@ function toAbsoluteWsUrl(pathOrUrl: string): string {
   return `${protocol}//${window.location.host}${path}`;
 }
 
+/** Collapse `/api/host/{own_id}/...` to `/api/...` for this machine. */
+function stripOwnHostPrefix(pathOrUrl: string): string {
+  const pathAndQuery = toPathAndQuery(pathOrUrl);
+  const qIndex = pathAndQuery.indexOf('?');
+  const pathname = qIndex >= 0 ? pathAndQuery.slice(0, qIndex) : pathAndQuery;
+  const search = qIndex >= 0 ? pathAndQuery.slice(qIndex) : '';
+  const match = pathname.match(/^\/api\/host\/([^/]+)(\/.*)?$/);
+  if (!match) return pathOrUrl;
+  const [, hostId, rest = ''] = match;
+  if (!isLocalRelayHostId(hostId)) return pathOrUrl;
+  return `/api${rest}${search}`;
+}
+
 function scopeLocalApiPath(pathOrUrl: string, hostId: string | null): string {
-  if (!hostId) return pathOrUrl;
-  const path = toPathAndQuery(pathOrUrl);
+  const normalized = stripOwnHostPrefix(pathOrUrl);
+  // This machine's own host id must stay on plain /api/* — routing through
+  // /api/host/{own_id} would bounce via Relay and break local WS streams.
+  if (!hostId || isLocalRelayHostId(hostId)) return normalized;
+  const path = toPathAndQuery(normalized);
   // These endpoints must always hit the local backend because they rely on
   // local-only credentials/state.
   if (LOCAL_ONLY_API_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-    return pathOrUrl;
+    return normalized;
   }
 
   if (!path.startsWith('/api/') || path.startsWith('/api/host/'))
-    return pathOrUrl;
+    return normalized;
 
   const suffix = path.slice('/api'.length);
   return `/api/host/${hostId}${suffix}`;
@@ -78,7 +95,7 @@ function resolveScopedPath(
   const hostScope = options.hostScope ?? 'current';
 
   if (hostScope === 'none') {
-    return pathOrUrl;
+    return stripOwnHostPrefix(pathOrUrl);
   }
 
   if (hostScope === 'explicit') {

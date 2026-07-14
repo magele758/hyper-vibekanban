@@ -21,13 +21,18 @@ const USE_REMOTE_API_BASE_FALLBACK = !BUILD_TIME_RELAY_API_BASE;
 
 let _relayApiBase: string = BUILD_TIME_RELAY_API_BASE || BUILD_TIME_API_BASE;
 
-/** Dev/self-host: baked relay URL may use LAN IP while the page is opened via Tailscale IP/DNS. */
-export function isSelfHostedDevHostname(hostname: string): boolean {
-  if (
+export function isLoopbackHostname(hostname: string): boolean {
+  return (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
-    hostname === '[::1]'
-  ) {
+    hostname === '[::1]' ||
+    hostname === '::1'
+  );
+}
+
+/** Dev/self-host: baked relay URL may use LAN IP while the page is opened via Tailscale IP/DNS. */
+export function isSelfHostedDevHostname(hostname: string): boolean {
+  if (isLoopbackHostname(hostname)) {
     return true;
   }
   if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) {
@@ -93,6 +98,15 @@ export function resolveDefaultRelayApiBase(
     if (BUILD_TIME_RELAY_API_BASE) {
       try {
         const baked = new URL(BUILD_TIME_RELAY_API_BASE);
+        // Worker desktops open on localhost but point at another machine's
+        // relay (e.g. Mac Tailscale). Do not remap that remote relay onto
+        // localhost — nothing is listening there.
+        if (
+          isLoopbackHostname(hostname) &&
+          !isLoopbackHostname(baked.hostname)
+        ) {
+          return BUILD_TIME_RELAY_API_BASE;
+        }
         if (
           baked.hostname === hostname ||
           baked.hostname === 'localhost' ||

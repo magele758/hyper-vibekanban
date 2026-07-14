@@ -6,6 +6,7 @@ import {
   workspaceDiffStatsKeys,
 } from '@/shared/hooks/workspaceSummaryKeys';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
+import { isLocalRelayHostId } from '@/shared/lib/localRelayHost';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import { useHostId } from '@/shared/providers/HostIdProvider';
 import {
@@ -111,7 +112,8 @@ async function fetchWorkspaceSummariesByArchived(
   hostId: string | null
 ): Promise<Map<string, WorkspaceSummary>> {
   try {
-    const basePath = hostId ? `/api/host/${hostId}` : '/api';
+    const basePath =
+      hostId && !isLocalRelayHostId(hostId) ? `/api/host/${hostId}` : '/api';
     const response = await makeLocalApiRequest(
       `${basePath}/workspaces/summaries`,
       {
@@ -156,7 +158,8 @@ async function fetchWorkspaceDiffStats(
   }
 
   try {
-    const basePath = hostId ? `/api/host/${hostId}` : '/api';
+    const basePath =
+      hostId && !isLocalRelayHostId(hostId) ? `/api/host/${hostId}` : '/api';
     const response = await makeLocalApiRequest(
       `${basePath}/workspaces/diff-stats`,
       {
@@ -209,7 +212,10 @@ export function useWorkspaces(): UseWorkspacesResult {
 
   // Two separate WebSocket connections: one for active, one for archived
   // No limit param - we fetch all and slice on frontend so backfill works when archiving
-  const apiBasePath = streamHostId ? `/api/host/${streamHostId}` : '/api';
+  // Own-machine host id is treated as local (/api), not /api/host/{id}.
+  const useHostPrefix =
+    Boolean(streamHostId) && !isLocalRelayHostId(streamHostId);
+  const apiBasePath = useHostPrefix ? `/api/host/${streamHostId}` : '/api';
   const activeEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=false`;
   const archivedEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=true`;
 

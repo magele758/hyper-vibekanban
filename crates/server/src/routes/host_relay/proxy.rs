@@ -48,12 +48,28 @@ async fn proxy_host_request(
     }
 }
 
+/// True when `host_id` is this machine's own relay host. Worker desktops often
+/// open `/api/host/{own_id}/...` after pairing themselves in the UI; those
+/// requests must loop back locally instead of bouncing through Relay.
+async fn is_own_relay_host(deployment: &DeploymentImpl, host_id: Uuid) -> bool {
+    let Ok(remote_client) = deployment.remote_client() else {
+        return false;
+    };
+    let Ok(hosts) = remote_client.list_relay_hosts().await else {
+        return false;
+    };
+    let machine_id = deployment.user_id();
+    hosts
+        .iter()
+        .any(|host| host.id == host_id && host.machine_id == machine_id)
+}
+
 async fn forward_http(
     deployment: &DeploymentImpl,
     host_id: Uuid,
     request: Request,
 ) -> Result<Response, ApiError> {
-    if is_inbound_relay_tunnel_request(&request) {
+    if is_inbound_relay_tunnel_request(&request) || is_own_relay_host(deployment, host_id).await {
         let response = send_loopback_request(deployment, request).await?;
         return Ok(hyper_response_to_axum(response));
     }
@@ -86,7 +102,7 @@ async fn forward_ws(
     request: Request,
     ws_upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    if is_inbound_relay_tunnel_request(&request) {
+    if is_inbound_relay_tunnel_request(&request) || is_own_relay_host(deployment, host_id).await {
         let protocols = request
             .headers()
             .get("sec-websocket-protocol")

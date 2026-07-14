@@ -15,6 +15,7 @@ import type {
 import { getAuthRuntime } from '@/shared/lib/auth/runtime';
 import { sha256Bytes } from '@/shared/lib/relayCrypto';
 import {
+  isLoopbackHostname,
   isSelfHostedDevHostname,
   syncRelayApiBaseWithRemote,
 } from '@/shared/lib/relayBackendApi';
@@ -90,7 +91,17 @@ export function resolveSharedRemoteApiBase(
     const { hostname } = window.location;
     try {
       const baked = new URL(apiBase);
-      if (baked.hostname !== hostname && isSelfHostedDevHostname(hostname)) {
+      // Rewrite same-machine LAN ↔ Tailscale hosts so a phone opening the
+      // page over Tailscale does not keep a stale LAN API base. Never rewrite
+      // a remote host onto localhost — worker desktops use localhost:13001
+      // while Remote/Relay live on another machine (e.g. Mac Tailscale IP).
+      if (
+        baked.hostname !== hostname &&
+        isSelfHostedDevHostname(hostname) &&
+        !(
+          isLoopbackHostname(hostname) && !isLoopbackHostname(baked.hostname)
+        )
+      ) {
         baked.hostname = hostname;
         return baked.origin;
       }
