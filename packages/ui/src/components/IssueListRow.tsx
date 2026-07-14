@@ -71,6 +71,8 @@ export interface IssueListRowProps {
   isMultiSelectActive?: boolean;
   isChecked?: boolean;
   onCheckboxChange?: (checked: boolean) => void;
+  /** Soft tint when the issue has a linked console-mode workspace. */
+  hasConsoleWorkspace?: boolean;
   className?: string;
 }
 
@@ -86,6 +88,7 @@ export function IssueListRow({
   isMultiSelectActive = false,
   isChecked = false,
   onCheckboxChange,
+  hasConsoleWorkspace = false,
   className,
 }: IssueListRowProps) {
   const showCheckbox = isMultiSelectActive || isChecked;
@@ -110,6 +113,9 @@ export function IssueListRow({
             'group/row flex items-center justify-between gap-double px-double py-half',
             'transition-colors',
             'hover:bg-secondary',
+            hasConsoleWorkspace &&
+              !(isSelected || isChecked) &&
+              'bg-brand/5',
             (isSelected || isChecked) && 'bg-secondary',
             snapshot.isDragging && 'bg-secondary shadow-lg cursor-grabbing',
             className
