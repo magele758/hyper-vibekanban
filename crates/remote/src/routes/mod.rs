@@ -49,6 +49,7 @@ pub mod notifications;
 mod oauth;
 pub(crate) mod organization_members;
 mod organizations;
+pub mod pipeline_gates;
 pub mod project_statuses;
 pub mod projects;
 pub mod pull_request_issues;
@@ -134,6 +135,7 @@ pub fn router(state: AppState) -> Router {
         .merge(agent_tasks::router())
         .merge(autopilots::router())
         .merge(squads::router())
+        .merge(pipeline_gates::router())
         .merge(inbox::router())
         .merge(webhooks::router())
         .merge(feishu::router())

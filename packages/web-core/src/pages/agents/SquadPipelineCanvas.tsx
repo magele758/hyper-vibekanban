@@ -31,6 +31,8 @@ import {
   TimerIcon,
   TreeStructureIcon,
   ArrowsInIcon,
+  GitPullRequestIcon,
+  HandPalmIcon,
 } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 import type {
@@ -55,6 +57,16 @@ export const PALETTE_ITEMS: {
   { type: 'while', label: 'While', hint: '循环 body / exit' },
   { type: 'break', label: 'Break', hint: '跳出最近 While' },
   { type: 'wait', label: 'Wait', hint: '等待时长或条件' },
+  {
+    type: 'rebase',
+    label: 'Rebase',
+    hint: '系统步骤：local 对上一 Workspace rebase',
+  },
+  {
+    type: 'human_gate',
+    label: '人工确认',
+    hint: 'Inbox 询问（如合并确认），等待人决策',
+  },
 ];
 
 const DND_MIME = 'application/vk-squad-node';
@@ -152,6 +164,18 @@ function kindChrome(kind: SquadPipelineNodeType): {
         icon: TimerIcon,
         badge: 'Wait',
       };
+    case 'rebase':
+      return {
+        bar: 'border-l-orange-500',
+        icon: GitPullRequestIcon,
+        badge: 'Rebase',
+      };
+    case 'human_gate':
+      return {
+        bar: 'border-l-pink-500',
+        icon: HandPalmIcon,
+        badge: 'Gate',
+      };
     default: {
       const _exhaustive: never = kind;
       return _exhaustive;
@@ -189,6 +213,10 @@ function controlDetail(node: SquadPipelineNode): string | undefined {
     }
     case 'break':
       return '退出最近 While';
+    case 'rebase':
+      return '系统 rebase 到 target branch';
+    case 'human_gate':
+      return node.gate_kind?.trim() || node.prompt?.trim() || 'Inbox 人工确认';
     default: {
       const _exhaustive: never = kind;
       return _exhaustive;
@@ -681,6 +709,10 @@ export function defaultLabelForType(
       return 'Break';
     case 'wait':
       return 'Wait';
+    case 'rebase':
+      return 'Rebase';
+    case 'human_gate':
+      return '合并确认';
     default: {
       const _exhaustive: never = type;
       return _exhaustive;
