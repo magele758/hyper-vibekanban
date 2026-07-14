@@ -17,6 +17,7 @@ import type {
   WorkspaceSummary,
   WorkspaceSummaryResponse,
   WorkspaceDiffStatsResponse,
+  WorkspaceKind,
   ApiResponse,
 } from 'shared/types';
 
@@ -28,6 +29,7 @@ export interface SidebarWorkspace {
   createdAt: string;
   updatedAt: string;
   description: string;
+  kind: WorkspaceKind;
   filesChanged?: number;
   linesAdded?: number;
   linesRemoved?: number;
@@ -77,6 +79,7 @@ function toSidebarWorkspace(
     createdAt: ws.created_at,
     updatedAt: ws.updated_at,
     description: '',
+    kind: ws.kind,
     filesChanged:
       diffStats?.files_changed ?? summary?.files_changed ?? undefined,
     linesAdded: diffStats?.lines_added ?? summary?.lines_added ?? undefined,
