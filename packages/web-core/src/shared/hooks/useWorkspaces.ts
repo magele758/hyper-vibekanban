@@ -216,6 +216,7 @@ export function useWorkspaces(): UseWorkspacesResult {
   const archivedStreamEnabled = useArchivedWorkspaceStreamEnabled();
 
   // Active stream is always on; archived opens only after archive UI / archived workspace.
+  // No limit param: fetch the full selected stream so archiving can backfill the UI.
   // Own-machine host id is treated as local (/api), not /api/host/{id}.
   const useHostPrefix =
     Boolean(streamHostId) && !isLocalRelayHostId(streamHostId);
