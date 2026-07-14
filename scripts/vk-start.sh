@@ -61,6 +61,28 @@ if vk_tailscale_ok; then
   fi
 fi
 
+# Bypass Clash/VPN for Tailscale + loopback HTTPS (Node/curl/reqwest).
+# Without this, HTTPS_PROXY can abort TLS mid-handshake to *.ts.net / localhost h2.
+VK_NO_PROXY_EXTRA="localhost,127.0.0.1,::1,.ts.net,100.64.0.0/10"
+if [[ -n "${TS_HOSTNAME}" ]]; then
+  VK_NO_PROXY_EXTRA="${VK_NO_PROXY_EXTRA},${TS_HOSTNAME}"
+fi
+if [[ -n "${TS_IP}" ]]; then
+  VK_NO_PROXY_EXTRA="${VK_NO_PROXY_EXTRA},${TS_IP}"
+fi
+export NO_PROXY="${NO_PROXY:+${NO_PROXY},}${VK_NO_PROXY_EXTRA}"
+export no_proxy="${no_proxy:+${no_proxy},}${VK_NO_PROXY_EXTRA}"
+# Prefer space-free symlink — NODE_EXTRA_CA_CERTS breaks if unquoted paths split.
+CADDY_ROOT_CA="${HOME}/.vk-kanban/certs/caddy-root.crt"
+CADDY_ROOT_CA_SRC="${HOME}/Library/Application Support/Caddy/pki/authorities/local/root.crt"
+if [[ ! -f "${CADDY_ROOT_CA}" && -f "${CADDY_ROOT_CA_SRC}" ]]; then
+  mkdir -p "${HOME}/.vk-kanban/certs"
+  ln -sfn "${CADDY_ROOT_CA_SRC}" "${CADDY_ROOT_CA}"
+fi
+if [[ -f "${CADDY_ROOT_CA}" ]]; then
+  export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-${CADDY_ROOT_CA}}"
+fi
+
 echo "==> Starting Remote stack (Docker)..."
 vk_configure_orbstack_proxy
 

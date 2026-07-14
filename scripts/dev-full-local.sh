@@ -18,9 +18,25 @@ export VITE_VK_SHARED_API_BASE="${VITE_VK_SHARED_API_BASE:-$VK_SHARED_API_BASE}"
 # through the proxy, which refuses loopback and returns an empty-body 502 —
 # breaking /api/auth/token, relay registration, and project loading. Force every
 # local target to bypass the proxy. Append to any inherited NO_PROXY.
-VK_NO_PROXY_HOSTS="localhost,127.0.0.1,::1,host.orb.internal"
+# Include Tailscale MagicDNS suffix so HTTPS front doors
+# (https://*.ts.net:13444) are not MITM'd by Clash when proxy is on — that
+# produces Node's "Client network socket disconnected before secure TLS…".
+VK_NO_PROXY_HOSTS="localhost,127.0.0.1,::1,host.orb.internal,.ts.net,100.64.0.0/10"
 export NO_PROXY="${NO_PROXY:+${NO_PROXY},}${VK_NO_PROXY_HOSTS}"
 export no_proxy="${no_proxy:+${no_proxy},}${VK_NO_PROXY_HOSTS}"
+
+# Node does not use the macOS trust store. When tools hit the Caddy h2 front
+# door (https://localhost:13443), point them at Caddy's local root CA.
+# Prefer space-free symlink — NODE_EXTRA_CA_CERTS breaks if unquoted paths split.
+CADDY_ROOT_CA="${HOME}/.vk-kanban/certs/caddy-root.crt"
+CADDY_ROOT_CA_SRC="${HOME}/Library/Application Support/Caddy/pki/authorities/local/root.crt"
+if [[ ! -f "${CADDY_ROOT_CA}" && -f "${CADDY_ROOT_CA_SRC}" ]]; then
+  mkdir -p "${HOME}/.vk-kanban/certs"
+  ln -sfn "${CADDY_ROOT_CA_SRC}" "${CADDY_ROOT_CA}"
+fi
+if [[ -f "${CADDY_ROOT_CA}" ]]; then
+  export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-${CADDY_ROOT_CA}}"
+fi
 
 # Re-enable relay (dev:lite turns it off)
 node -e "
