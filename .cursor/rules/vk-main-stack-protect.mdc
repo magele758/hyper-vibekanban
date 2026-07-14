@@ -1,0 +1,25 @@
+---
+description: 禁止 worktree/workspace agent 用 vk-stop 或 VK_REBUILD 误杀本机主栈（1300x）；隔离预览用 vk-test-feature / vk-isolate
+alwaysApply: true
+---
+
+# VK 主栈保护（禁止 worktree 误杀）
+
+本规则对主仓与 **vibe-kanban worktree**（`*/vibe-kanban-dev/worktrees/*`）会话一律生效。
+
+## 禁止
+
+- `vk-stop` / `scripts/vk-stop.sh`（会停本机主栈）
+- `VK_REBUILD=1 vk-start`（先杀 13001/13002 再重建）
+- 杀主端口：`13000`–`13003`、`13443`–`13445`、`15433`、`18082`、`18443`
+- 清理/抢占 `~/.vk-kanban/pids`（与主栈共享）
+
+## 正确做法
+
+- 隔离试跑：`vk-test-feature` / `vk-isolate`（**23xxx**，勿占 1300x）
+- 远端预览：`scripts/vk-isolate.sh preview-remote …`（见 `.cursor/skills/vk-worktree-preview`）
+- 主栈故障：先 `vk-status`；仅用户明确要求时，在主仓根目录 `vk-start`（默认不加 `VK_REBUILD`）
+
+## 为何
+
+Worktree 里跑主栈 `vk-stop` 会 SIGKILL Desktop，留下 Remote 还活着、本机页面挂掉的假象。
