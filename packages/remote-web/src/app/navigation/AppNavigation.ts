@@ -58,6 +58,25 @@ export function resolveRemoteDestinationFromPath(
       const projectId = getPathParam(routeParams, "projectId");
       return projectId ? { kind: "project", projectId } : null;
     }
+    case "/projects/$projectId_/agents": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-agents", projectId } : null;
+    }
+    case "/projects/$projectId_/agents_/$agentId": {
+      const projectId = getPathParam(routeParams, "projectId");
+      const agentId = getPathParam(routeParams, "agentId");
+      return projectId && agentId
+        ? { kind: "project-agent", projectId, agentId }
+        : null;
+    }
+    case "/projects/$projectId_/copilot": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-copilot", projectId } : null;
+    }
+    case "/projects/$projectId_/inbox": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-inbox", projectId } : null;
+    }
     case "/projects/$projectId_/issues/$issueId": {
       const projectId = getPathParam(routeParams, "projectId");
       const issueId = getPathParam(routeParams, "issueId");
@@ -174,12 +193,26 @@ function destinationToRemoteTarget(
         params: { projectId: destination.projectId },
       } as const;
     case "project-agents":
-    case "project-agent":
-    case "project-copilot":
-    case "project-inbox":
-      // Remote-web does not host Agents/Copilot/Inbox pages yet; fall back to board.
       return {
-        to: "/projects/$projectId",
+        to: "/projects/$projectId/agents",
+        params: { projectId: destination.projectId },
+      } as const;
+    case "project-agent":
+      return {
+        to: "/projects/$projectId/agents/$agentId",
+        params: {
+          projectId: destination.projectId,
+          agentId: destination.agentId,
+        },
+      } as const;
+    case "project-copilot":
+      return {
+        to: "/projects/$projectId/copilot",
+        params: { projectId: destination.projectId },
+      } as const;
+    case "project-inbox":
+      return {
+        to: "/projects/$projectId/inbox",
         params: { projectId: destination.projectId },
       } as const;
     case "project-issue":
