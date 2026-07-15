@@ -687,9 +687,14 @@ export function AppBar({
         </div>
       ))}
 
-      {expanded && activeProjectId && (
-        <div className="flex flex-col gap-1 border-t border-border pt-base">
-          <AppBarSectionLabel expanded>Project</AppBarSectionLabel>
+      {activeProjectId && (
+        <div
+          className={cn(
+            'flex flex-col gap-1 border-t border-border pt-base',
+            expanded ? 'items-stretch' : 'items-center'
+          )}
+        >
+          <AppBarSectionLabel expanded={expanded}>Project</AppBarSectionLabel>
           {(
             [
               {
@@ -717,24 +722,34 @@ export function AppBar({
                 onClick: () => onNavigateInbox?.(activeProjectId),
               },
             ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={item.onClick}
-              title={item.label}
-              className={cn(
-                appBarItemBaseClassName,
-                getAppBarItemLayoutClassName(true),
-                activeProjectSubNav === item.id
-                  ? 'bg-brand/15 text-normal'
-                  : 'text-low hover:bg-primary hover:text-normal'
-              )}
-            >
-              <item.icon className="size-icon-base shrink-0" weight="bold" />
-              <AppBarItemLabel>{item.label}</AppBarItemLabel>
-            </button>
-          ))}
+          ).map((item) => {
+            const button = (
+              <button
+                type="button"
+                onClick={item.onClick}
+                aria-label={item.label}
+                title={expanded ? item.label : undefined}
+                className={cn(
+                  appBarItemBaseClassName,
+                  getAppBarItemLayoutClassName(expanded),
+                  'cursor-pointer',
+                  activeProjectSubNav === item.id
+                    ? 'bg-brand/15 text-normal'
+                    : 'text-low hover:bg-primary hover:text-normal'
+                )}
+              >
+                <item.icon className="size-icon-base shrink-0" weight="bold" />
+                {expanded && <AppBarItemLabel>{item.label}</AppBarItemLabel>}
+              </button>
+            );
+            return expanded ? (
+              <div key={item.id}>{button}</div>
+            ) : (
+              <Tooltip key={item.id} content={item.label} side="right">
+                {button}
+              </Tooltip>
+            );
+          })}
         </div>
       )}
 
