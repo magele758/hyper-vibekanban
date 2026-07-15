@@ -1,45 +1,59 @@
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queueApi } from '@/shared/lib/api';
-import type { ExecutorConfig, QueueStatus } from 'shared/types';
+import type {
+  DraftFollowUpData,
+  ExecutorConfig,
+  QueuedMessage,
+  QueueStatus,
+} from 'shared/types';
 
 interface UseSessionQueueInteractionOptions {
-  /** Session ID for queue operations */
   sessionId: string | undefined;
 }
 
 interface UseSessionQueueInteractionResult {
-  /** Whether a message is currently queued */
+  /** Queued messages in order */
+  messages: QueuedMessage[];
+  /** Whether the queue has at least one message */
   isQueued: boolean;
-  /** The queued message content, if any */
-  queuedMessage: string | null;
-  /** The executor config from the queued message, if any */
-  queuedConfig: ExecutorConfig | null;
   /** Whether a queue operation is in progress */
   isQueueLoading: boolean;
-  /** Queue a message for later execution */
+  /** Append a message to the queue */
   queueMessage: (
     message: string,
     executorConfig: ExecutorConfig
   ) => Promise<void>;
-  /** Cancel the queued message */
-  cancelQueue: () => Promise<void>;
+  /** Clear the entire queue */
+  clearQueue: () => Promise<void>;
+  /** Remove a single queued message */
+  removeMessage: (itemId: string) => Promise<void>;
+  /** Update a queued message */
+  updateMessage: (
+    itemId: string,
+    message: string,
+    executorConfig: ExecutorConfig
+  ) => Promise<void>;
+  /** Reorder the queue */
+  reorderMessages: (itemIds: string[]) => Promise<void>;
   /** Refresh queue status from server */
   refreshQueueStatus: () => Promise<void>;
 }
 
 const QUEUE_STATUS_KEY = 'queue-status';
 
+function messagesFromStatus(status: QueueStatus): QueuedMessage[] {
+  return status.status === 'queued' ? status.messages : [];
+}
+
 /**
- * Hook to manage queue interaction for session messages.
- * Uses TanStack Query for caching and mutation handling.
+ * Hook to manage multi-item queue interaction for session follow-ups.
  */
 export function useSessionQueueInteraction({
   sessionId,
 }: UseSessionQueueInteractionOptions): UseSessionQueueInteractionResult {
   const queryClient = useQueryClient();
 
-  // Query for queue status
   const { data: queueStatus = { status: 'empty' as const }, refetch } =
     useQuery<QueueStatus>({
       queryKey: [QUEUE_STATUS_KEY, sessionId],
@@ -47,38 +61,45 @@ export function useSessionQueueInteraction({
       enabled: !!sessionId,
     });
 
-  const isQueued = queueStatus.status === 'queued';
-  const queuedMessageData = isQueued
-    ? (queueStatus as Extract<QueueStatus, { status: 'queued' }>).message
-    : null;
-  const queuedMessage = queuedMessageData?.data.message ?? null;
-  const queuedConfig: ExecutorConfig | null =
-    queuedMessageData?.data.executor_config ?? null;
+  const messages = messagesFromStatus(queueStatus);
+  const isQueued = messages.length > 0;
 
-  // Mutation for queueing a message
-  const queueMutation = useMutation({
-    mutationFn: ({
-      message,
-      executorConfig,
-    }: {
-      message: string;
-      executorConfig: ExecutorConfig;
-    }) =>
-      queueApi.queue(sessionId!, {
-        message,
-        executor_config: executorConfig,
-      }),
-    onSuccess: (status) => {
+  const setStatus = useCallback(
+    (status: QueueStatus) => {
       queryClient.setQueryData([QUEUE_STATUS_KEY, sessionId], status);
     },
+    [queryClient, sessionId]
+  );
+
+  const queueMutation = useMutation({
+    mutationFn: (data: DraftFollowUpData) => queueApi.queue(sessionId!, data),
+    onSuccess: setStatus,
   });
 
-  // Mutation for cancelling the queue
-  const cancelMutation = useMutation({
-    mutationFn: () => queueApi.cancel(sessionId!),
-    onSuccess: (status) => {
-      queryClient.setQueryData([QUEUE_STATUS_KEY, sessionId], status);
-    },
+  const clearMutation = useMutation({
+    mutationFn: () => queueApi.clear(sessionId!),
+    onSuccess: setStatus,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (itemId: string) => queueApi.remove(sessionId!, itemId),
+    onSuccess: setStatus,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      itemId,
+      data,
+    }: {
+      itemId: string;
+      data: DraftFollowUpData;
+    }) => queueApi.update(sessionId!, itemId, data),
+    onSuccess: setStatus,
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: (itemIds: string[]) => queueApi.reorder(sessionId!, itemIds),
+    onSuccess: setStatus,
   });
 
   const queueMessage = useCallback(
@@ -86,16 +107,43 @@ export function useSessionQueueInteraction({
       if (!sessionId) return;
       await queueMutation.mutateAsync({
         message,
-        executorConfig,
+        executor_config: executorConfig,
       });
     },
     [sessionId, queueMutation]
   );
 
-  const cancelQueue = useCallback(async () => {
+  const clearQueue = useCallback(async () => {
     if (!sessionId) return;
-    await cancelMutation.mutateAsync();
-  }, [sessionId, cancelMutation]);
+    await clearMutation.mutateAsync();
+  }, [sessionId, clearMutation]);
+
+  const removeMessage = useCallback(
+    async (itemId: string) => {
+      if (!sessionId) return;
+      await removeMutation.mutateAsync(itemId);
+    },
+    [sessionId, removeMutation]
+  );
+
+  const updateMessage = useCallback(
+    async (itemId: string, message: string, executorConfig: ExecutorConfig) => {
+      if (!sessionId) return;
+      await updateMutation.mutateAsync({
+        itemId,
+        data: { message, executor_config: executorConfig },
+      });
+    },
+    [sessionId, updateMutation]
+  );
+
+  const reorderMessages = useCallback(
+    async (itemIds: string[]) => {
+      if (!sessionId) return;
+      await reorderMutation.mutateAsync(itemIds);
+    },
+    [sessionId, reorderMutation]
+  );
 
   const refreshQueueStatus = useCallback(async () => {
     if (!sessionId) return;
@@ -103,12 +151,19 @@ export function useSessionQueueInteraction({
   }, [sessionId, refetch]);
 
   return {
+    messages,
     isQueued,
-    queuedMessage,
-    queuedConfig,
-    isQueueLoading: queueMutation.isPending || cancelMutation.isPending,
+    isQueueLoading:
+      queueMutation.isPending ||
+      clearMutation.isPending ||
+      removeMutation.isPending ||
+      updateMutation.isPending ||
+      reorderMutation.isPending,
     queueMessage,
-    cancelQueue,
+    clearQueue,
+    removeMessage,
+    updateMessage,
+    reorderMessages,
     refreshQueueStatus,
   };
 }

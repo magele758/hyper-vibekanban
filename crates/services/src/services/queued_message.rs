@@ -1,90 +1,126 @@
-use std::sync::Arc;
-
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
-use db::models::scratch::DraftFollowUpData;
+use db::models::{
+    scratch::DraftFollowUpData,
+    session_queued_message::{SessionQueuedMessage, SessionQueuedMessageError},
+};
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use ts_rs::TS;
 use uuid::Uuid;
 
-/// Represents a queued follow-up message for a session
+/// API-facing queued message (stable id + follow-up payload).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct QueuedMessage {
-    /// The session this message is queued for
+    pub id: Uuid,
     pub session_id: Uuid,
-    /// The follow-up data (message + variant)
     pub data: DraftFollowUpData,
-    /// Timestamp when the message was queued
-    pub queued_at: DateTime<Utc>,
+    pub queued_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<SessionQueuedMessage> for QueuedMessage {
+    fn from(value: SessionQueuedMessage) -> Self {
+        Self {
+            id: value.id,
+            session_id: value.session_id,
+            data: value.data,
+            queued_at: value.queued_at,
+        }
+    }
 }
 
 /// Status of the queue for a session (for frontend display)
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum QueueStatus {
-    /// No message queued
     Empty,
-    /// Message is queued and waiting for execution to complete
-    Queued { message: QueuedMessage },
+    Queued { messages: Vec<QueuedMessage> },
 }
 
-/// In-memory service for managing queued follow-up messages.
-/// One queued message per session.
+impl QueueStatus {
+    pub fn from_messages(messages: Vec<QueuedMessage>) -> Self {
+        if messages.is_empty() {
+            Self::Empty
+        } else {
+            Self::Queued { messages }
+        }
+    }
+}
+
+/// DB-backed service for managing queued follow-up messages (ordered list per session).
 #[derive(Clone)]
 pub struct QueuedMessageService {
-    queue: Arc<DashMap<Uuid, QueuedMessage>>,
+    pool: SqlitePool,
 }
 
 impl QueuedMessageService {
-    pub fn new() -> Self {
-        Self {
-            queue: Arc::new(DashMap::new()),
-        }
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
     }
 
-    /// Queue a message for a session. Replaces any existing queued message.
-    pub fn queue_message(&self, session_id: Uuid, data: DraftFollowUpData) -> QueuedMessage {
-        let queued = QueuedMessage {
-            session_id,
-            data,
-            queued_at: Utc::now(),
-        };
-        self.queue.insert(session_id, queued.clone());
-        queued
+    pub async fn list(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Vec<QueuedMessage>, SessionQueuedMessageError> {
+        let messages = SessionQueuedMessage::list_by_session(&self.pool, session_id).await?;
+        Ok(messages.into_iter().map(QueuedMessage::from).collect())
     }
 
-    /// Cancel/remove a queued message for a session
-    pub fn cancel_queued(&self, session_id: Uuid) -> Option<QueuedMessage> {
-        self.queue.remove(&session_id).map(|(_, v)| v)
+    pub async fn enqueue(
+        &self,
+        session_id: Uuid,
+        data: DraftFollowUpData,
+    ) -> Result<QueuedMessage, SessionQueuedMessageError> {
+        let queued = SessionQueuedMessage::enqueue(&self.pool, session_id, &data).await?;
+        Ok(QueuedMessage::from(queued))
     }
 
-    /// Get the queued message for a session (if any)
-    pub fn get_queued(&self, session_id: Uuid) -> Option<QueuedMessage> {
-        self.queue.get(&session_id).map(|r| r.clone())
+    pub async fn update(
+        &self,
+        session_id: Uuid,
+        item_id: Uuid,
+        data: DraftFollowUpData,
+    ) -> Result<QueuedMessage, SessionQueuedMessageError> {
+        let queued = SessionQueuedMessage::update(&self.pool, session_id, item_id, &data).await?;
+        Ok(QueuedMessage::from(queued))
     }
 
-    /// Take (remove and return) the queued message for a session.
-    /// Used by finalization flow to consume the queued message.
-    pub fn take_queued(&self, session_id: Uuid) -> Option<QueuedMessage> {
-        self.queue.remove(&session_id).map(|(_, v)| v)
+    pub async fn remove(
+        &self,
+        session_id: Uuid,
+        item_id: Uuid,
+    ) -> Result<(), SessionQueuedMessageError> {
+        SessionQueuedMessage::remove(&self.pool, session_id, item_id).await
     }
 
-    /// Check if a session has a queued message
-    pub fn has_queued(&self, session_id: Uuid) -> bool {
-        self.queue.contains_key(&session_id)
+    pub async fn clear(&self, session_id: Uuid) -> Result<(), SessionQueuedMessageError> {
+        SessionQueuedMessage::clear(&self.pool, session_id).await
     }
 
-    /// Get queue status for frontend display
-    pub fn get_status(&self, session_id: Uuid) -> QueueStatus {
-        match self.get_queued(session_id) {
-            Some(msg) => QueueStatus::Queued { message: msg },
-            None => QueueStatus::Empty,
-        }
+    pub async fn reorder(
+        &self,
+        session_id: Uuid,
+        ordered_ids: Vec<Uuid>,
+    ) -> Result<Vec<QueuedMessage>, SessionQueuedMessageError> {
+        let messages = SessionQueuedMessage::reorder(&self.pool, session_id, &ordered_ids).await?;
+        Ok(messages.into_iter().map(QueuedMessage::from).collect())
     }
-}
 
-impl Default for QueuedMessageService {
-    fn default() -> Self {
-        Self::new()
+    pub async fn pop_front(
+        &self,
+        session_id: Uuid,
+    ) -> Result<Option<QueuedMessage>, SessionQueuedMessageError> {
+        let queued = SessionQueuedMessage::pop_front(&self.pool, session_id).await?;
+        Ok(queued.map(QueuedMessage::from))
+    }
+
+    pub async fn has_queued(&self, session_id: Uuid) -> Result<bool, SessionQueuedMessageError> {
+        SessionQueuedMessage::has_any(&self.pool, session_id).await
+    }
+
+    pub async fn get_status(
+        &self,
+        session_id: Uuid,
+    ) -> Result<QueueStatus, SessionQueuedMessageError> {
+        let messages = self.list(session_id).await?;
+        Ok(QueueStatus::from_messages(messages))
     }
 }

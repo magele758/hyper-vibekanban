@@ -110,7 +110,15 @@
     "logsCopied": "已複製！"
   },
   "followUp": {
-    "queuedMessage": "訊息已加入佇列 - 會在目前執行完成後處理"
+    "queuedMessage": "訊息已加入佇列 - 會在目前執行完成後處理",
+    "queue": {
+      "title": "佇列 ({{count}})",
+      "clear": "清空",
+      "edit": "修改",
+      "remove": "刪除",
+      "save": "儲存",
+      "reorder": "調整順序"
+    }
   },
   "todoPopup": {
     "title": "任務",
