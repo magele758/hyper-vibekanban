@@ -121,6 +121,12 @@ remote_cmd() {
     # shellcheck disable=SC2034
     set -- "${PREVIEW_EXTRA_ARGS[@]+"${PREVIEW_EXTRA_ARGS[@]}"}"
 
+    local remote_script="scripts/vk-preview-remote.sh"
+    if [[ "$mode" == "preview-full" ]]; then
+        remote_script="scripts/vk-preview-full.sh"
+    fi
+    local remote_env='export PATH="$HOME/.cargo/bin:$HOME/.local/share/pnpm:$PATH"; if [ -s "$HOME/.nvm/nvm.sh" ]; then . "$HOME/.nvm/nvm.sh"; nvm use 22 >/dev/null 2>&1 || nvm use 20 >/dev/null 2>&1 || true; fi'
+
     case "$cmd" in
         sync)
             sync_to_remote
@@ -128,12 +134,12 @@ remote_cmd() {
         up)
             sync_to_remote
             ssh -t "$VK_PREVIEW_HOST" \
-              "cd '$VK_PREVIEW_DIR' && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash scripts/vk-preview-remote.sh up"
+              "cd '$VK_PREVIEW_DIR' && ${remote_env} && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash ${remote_script} up"
             ;;
         down|status|logs|smoke|clean)
             require_preview_params
             ssh -t "$VK_PREVIEW_HOST" \
-              "cd '$VK_PREVIEW_DIR' && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash scripts/vk-preview-remote.sh '$cmd'"
+              "cd '$VK_PREVIEW_DIR' && ${remote_env} && VK_PREVIEW_PORTS_BASE='${VK_PREVIEW_PORTS_BASE}' bash ${remote_script} '$cmd'"
             ;;
         *)
             echo "Unknown preview command: $cmd" >&2
@@ -166,7 +172,9 @@ MODES:
   preview-full   Remote full stack — needs --host and --dir
 
 PREVIEW (ask the user in chat; pass flags; NO config file):
-  ./scripts/vk-isolate.sh preview-remote up --host <ssh-host> --dir /abs/path/on/remote
+  ./scripts/vk-isolate.sh preview-remote up --host <ssh-host> --dir /abs/path/on-remote
+  ./scripts/vk-isolate.sh preview-full up --host <ssh-host> --dir /abs/path-on-remote
+      # full = Remote+Relay + Desktop Host (:23001/:23002)
   ./scripts/vk-isolate.sh preview-remote sync|down|status|logs|smoke|clean --host ... --dir ...
 
   Optional env: VK_PREVIEW_GIT_REMOTE VK_PREVIEW_SYNC_METHOD=git|rsync VK_PREVIEW_PORTS_BASE
