@@ -1591,7 +1591,7 @@ export const agentsApi = {
 // Queue API for session follow-up messages
 export const queueApi = {
   /**
-   * Queue a follow-up message to be executed when current execution finishes
+   * Append a follow-up message to be executed when current execution finishes
    */
   queue: async (
     sessionId: string,
@@ -1605,9 +1605,9 @@ export const queueApi = {
   },
 
   /**
-   * Cancel a queued follow-up message
+   * Clear all queued follow-up messages
    */
-  cancel: async (sessionId: string): Promise<QueueStatus> => {
+  clear: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`, {
       method: 'DELETE',
     });
@@ -1615,10 +1615,59 @@ export const queueApi = {
   },
 
   /**
+   * @deprecated Use clear() instead
+   */
+  cancel: async (sessionId: string): Promise<QueueStatus> => {
+    return queueApi.clear(sessionId);
+  },
+
+  /**
    * Get the current queue status for a session
    */
   getStatus: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`);
+    return handleApiResponse<QueueStatus>(response);
+  },
+
+  update: async (
+    sessionId: string,
+    itemId: string,
+    data: DraftFollowUpData
+  ): Promise<QueueStatus> => {
+    const response = await makeRequest(
+      `/api/sessions/${sessionId}/queue/${itemId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<QueueStatus>(response);
+  },
+
+  remove: async (
+    sessionId: string,
+    itemId: string
+  ): Promise<QueueStatus> => {
+    const response = await makeRequest(
+      `/api/sessions/${sessionId}/queue/${itemId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return handleApiResponse<QueueStatus>(response);
+  },
+
+  reorder: async (
+    sessionId: string,
+    itemIds: string[]
+  ): Promise<QueueStatus> => {
+    const response = await makeRequest(
+      `/api/sessions/${sessionId}/queue/reorder`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ item_ids: itemIds }),
+      }
+    );
     return handleApiResponse<QueueStatus>(response);
   },
 };

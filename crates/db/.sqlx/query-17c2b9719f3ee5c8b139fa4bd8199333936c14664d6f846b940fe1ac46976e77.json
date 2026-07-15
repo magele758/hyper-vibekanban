@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!: Uuid\",\n                      session_id AS \"session_id!: Uuid\",\n                      position AS \"position!: i64\",\n                      message,\n                      executor_config,\n                      queued_at AS \"queued_at!: DateTime<Utc>\"\n               FROM session_queued_messages\n               WHERE session_id = $1\n               ORDER BY position ASC, queued_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "position!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "message",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "executor_config",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "queued_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "17c2b9719f3ee5c8b139fa4bd8199333936c14664d6f846b940fe1ac46976e77"
+}

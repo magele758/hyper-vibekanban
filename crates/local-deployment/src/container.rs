@@ -784,33 +784,48 @@ impl LocalContainerService {
                     .await
                     .unwrap_or(true);
 
-                    if !has_running_agent
-                        && let Some(queued_msg) =
-                            container.queued_message_service.take_queued(ctx.session.id)
-                    {
-                        tracing::info!(
-                            "Parallel setup script finished with queued message for session {}, starting follow-up",
-                            ctx.session.id
-                        );
-
-                        if let Err(e) =
-                            Scratch::delete(&db.pool, ctx.session.id, &ScratchType::DraftFollowUp)
-                                .await
-                        {
-                            tracing::warn!(
-                                "Failed to delete scratch after consuming queued message: {}",
-                                e
-                            );
-                        }
-
-                        if let Err(e) = container
-                            .start_queued_follow_up(&ctx, &queued_msg.data)
+                    if !has_running_agent {
+                        match container
+                            .queued_message_service
+                            .pop_front(ctx.session.id)
                             .await
                         {
-                            tracing::error!(
-                                "Failed to start queued follow-up from setup script completion: {}",
-                                e
-                            );
+                            Ok(Some(queued_msg)) => {
+                                tracing::info!(
+                                    "Parallel setup script finished with queued message for session {}, starting follow-up",
+                                    ctx.session.id
+                                );
+
+                                if let Err(e) = Scratch::delete(
+                                    &db.pool,
+                                    ctx.session.id,
+                                    &ScratchType::DraftFollowUp,
+                                )
+                                .await
+                                {
+                                    tracing::warn!(
+                                        "Failed to delete scratch after consuming queued message: {}",
+                                        e
+                                    );
+                                }
+
+                                if let Err(e) = container
+                                    .start_queued_follow_up(&ctx, &queued_msg.data)
+                                    .await
+                                {
+                                    tracing::error!(
+                                        "Failed to start queued follow-up from setup script completion: {}",
+                                        e
+                                    );
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to pop queued message after setup script: {}",
+                                    e
+                                );
+                            }
                         }
                     }
                 }
@@ -1135,14 +1150,33 @@ impl LocalContainerService {
     /// Returns `true` when a queued follow-up was successfully started.
     async fn consume_queued_or_finalize(&self, ctx: &ExecutionContext) -> bool {
         // Only execute queued messages if the execution succeeded.
-        // If it failed or was killed, just clear the queue and finalize.
+        // If it failed or was killed, clear the entire queue and finalize.
         let should_execute_queued = !matches!(
             ctx.execution_process.status,
             ExecutionProcessStatus::Failed | ExecutionProcessStatus::Killed
         );
 
-        if let Some(queued_msg) = self.queued_message_service.take_queued(ctx.session.id) {
-            if should_execute_queued {
+        if !should_execute_queued {
+            if let Err(e) = self.queued_message_service.clear(ctx.session.id).await {
+                tracing::warn!(
+                    "Failed to clear queue for session {} after {:?} status: {}",
+                    ctx.session.id,
+                    ctx.execution_process.status,
+                    e
+                );
+            } else {
+                tracing::info!(
+                    "Cleared queued messages for session {} due to execution status {:?}",
+                    ctx.session.id,
+                    ctx.execution_process.status
+                );
+            }
+            self.finalize_task(ctx).await;
+            return false;
+        }
+
+        match self.queued_message_service.pop_front(ctx.session.id).await {
+            Ok(Some(queued_msg)) => {
                 tracing::info!(
                     "Found queued message for session {}, starting follow-up execution",
                     ctx.session.id
@@ -1165,18 +1199,20 @@ impl LocalContainerService {
                 } else {
                     true
                 }
-            } else {
-                tracing::info!(
-                    "Discarding queued message for session {} due to execution status {:?}",
+            }
+            Ok(None) => {
+                self.finalize_task(ctx).await;
+                false
+            }
+            Err(e) => {
+                tracing::error!(
+                    "Failed to pop queued message for session {}: {}",
                     ctx.session.id,
-                    ctx.execution_process.status
+                    e
                 );
                 self.finalize_task(ctx).await;
                 false
             }
-        } else {
-            self.finalize_task(ctx).await;
-            false
         }
     }
 

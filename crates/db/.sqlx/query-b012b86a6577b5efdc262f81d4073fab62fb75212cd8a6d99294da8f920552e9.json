@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE session_queued_messages\n                   SET position = $1\n                   WHERE id = $2 AND session_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "b012b86a6577b5efdc262f81d4073fab62fb75212cd8a6d99294da8f920552e9"
+}

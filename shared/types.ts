@@ -567,21 +567,9 @@ export type SendMessageShortcut = "ModifierEnter" | "Enter";
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 
-export type QueuedMessage = { 
-/**
- * The session this message is queued for
- */
-session_id: string, 
-/**
- * The follow-up data (message + variant)
- */
-data: DraftFollowUpData, 
-/**
- * Timestamp when the message was queued
- */
-queued_at: string, };
+export type QueuedMessage = { id: string, session_id: string, data: DraftFollowUpData, queued_at: string, };
 
-export type QueueStatus = { "status": "empty" } | { "status": "queued", message: QueuedMessage, };
+export type QueueStatus = { "status": "empty" } | { "status": "queued", messages: Array<QueuedMessage>, };
 
 export type ConflictOp = "rebase" | "merge" | "cherry_pick" | "revert";
 
