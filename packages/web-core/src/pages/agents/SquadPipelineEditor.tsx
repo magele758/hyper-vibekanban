@@ -61,6 +61,7 @@ export type SquadEditorDraft = {
   issue_id: string | null;
   working_directory: string | null;
   pipeline: SquadPipeline;
+  on_assign: import('shared/remote-types').SquadOnAssign;
 };
 
 export function squadToDraft(squad: Squad): SquadEditorDraft {
@@ -71,6 +72,7 @@ export function squadToDraft(squad: Squad): SquadEditorDraft {
     issue_id: squad.issue_id,
     working_directory: squad.working_directory,
     pipeline: squad.pipeline ?? emptyPipeline(),
+    on_assign: squad.on_assign ?? 'leader_only',
   };
 }
 
@@ -292,6 +294,25 @@ export function SquadPipelineEditor({
         <p className="text-xs text-low">
           {TARGET_OPTIONS.find((o) => o.value === draft.target_type)?.hint}
         </p>
+
+        <label className="block text-xs text-low">
+          指派时行为（on_assign）
+          <select
+            className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+            value={draft.on_assign}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                on_assign: e.target.value as SquadEditorDraft['on_assign'],
+              })
+            }
+          >
+            <option value="leader_only">
+              仅 Leader（默认，兼容纯 Issue）
+            </option>
+            <option value="full_pipeline">跑全 Pipeline</option>
+          </select>
+        </label>
 
         {usesIssue && (
           <label className="block text-xs text-low">
@@ -817,6 +838,76 @@ function NodeDetailForm({
           </label>
         </>
       )}
+
+      {kind === 'wait_approval' && (
+        <>
+          <label className="block text-xs text-low">
+            门禁种类 approval_kind
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              placeholder="merge / scheme / design…"
+              value={node.approval_kind ?? ''}
+              onChange={(e) =>
+                onChange({
+                  approval_kind: e.target.value || undefined,
+                })
+              }
+            />
+          </label>
+          <label className="block text-xs text-low">
+            询问文案
+            <textarea
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              rows={3}
+              placeholder="Ask Merge：是否合并到 main？"
+              value={node.prompt_template ?? node.prompt ?? ''}
+              onChange={(e) =>
+                onChange({
+                  prompt_template: e.target.value || undefined,
+                })
+              }
+            />
+          </label>
+        </>
+      )}
+
+      {(kind === 'script' || kind === 'git_op') && (
+        <label className="block text-xs text-low">
+          {kind === 'script' ? '命令 command' : '操作 git_op'}
+          <input
+            className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+            placeholder={
+              kind === 'script'
+                ? 'pnpm run check'
+                : 'rebase | create_pr | merge'
+            }
+            value={
+              kind === 'script' ? (node.command ?? '') : (node.git_op ?? '')
+            }
+            onChange={(e) =>
+              onChange(
+                kind === 'script'
+                  ? { command: e.target.value || undefined }
+                  : { git_op: e.target.value || undefined }
+              )
+            }
+          />
+        </label>
+      )}
+
+      <label className="block text-xs text-low">
+        快捷入口名 entry_label（Issue「从…开始」）
+        <input
+          className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+          placeholder="例如：测试验证 / Ask Merge"
+          value={node.entry_label ?? ''}
+          onChange={(e) =>
+            onChange({
+              entry_label: e.target.value || undefined,
+            })
+          }
+        />
+      </label>
 
       {kind === 'break' && (
         <p className="text-[11px] text-low">

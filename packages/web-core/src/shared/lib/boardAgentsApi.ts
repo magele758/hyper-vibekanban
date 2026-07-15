@@ -1,5 +1,7 @@
 import { makeRequest } from '@/shared/lib/remoteApi';
 import type {
+  ApproveSquadRunRequest,
+  ApproveSquadRunResponse,
   Autopilot,
   AutopilotRun,
   CreateAutopilotRequest,
@@ -7,6 +9,7 @@ import type {
   ListInboxResponse,
   Squad,
   SquadMember,
+  SquadRun,
   CreateSquadRequest,
   UpdateSquadRequest,
   RunSquadRequest,
@@ -267,6 +270,40 @@ export const boardAgentsApi = {
         method: 'POST',
         body: JSON.stringify(body ?? {}),
       })
+    );
+  },
+
+  async listIssueSquadRuns(issueId: string): Promise<SquadRun[]> {
+    const data = await json<{ runs: SquadRun[] }>(
+      await makeRequest(`/v1/issues/${issueId}/squad-runs`)
+    );
+    return data.runs;
+  },
+
+  async approveSquadRun(
+    runId: string,
+    body: ApproveSquadRunRequest
+  ): Promise<ApproveSquadRunResponse> {
+    return json<ApproveSquadRunResponse>(
+      await makeRequest(`/v1/squad-runs/${runId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+
+  async installFeatureCloseout(
+    projectId: string
+  ): Promise<{
+    squad: Squad;
+    agent_ids: string[];
+    created_agent_names: string[];
+  }> {
+    return json(
+      await makeRequest(
+        `/v1/projects/${projectId}/workflow-templates/feature-closeout`,
+        { method: 'POST', body: '{}' }
+      )
     );
   },
 

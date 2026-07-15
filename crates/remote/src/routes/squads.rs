@@ -1,7 +1,8 @@
 use api_types::{
-    AddSquadMemberRequest, AgentTaskTrigger, CreateSquadRequest, DeleteResponse,
-    ListSquadMembersResponse, ListSquadsQuery, ListSquadsResponse, MutationResponse,
-    RunSquadRequest, RunSquadResponse, Squad, SquadMember, SquadTargetType, UpdateSquadRequest,
+    AddSquadMemberRequest, AgentTaskTrigger, ApproveSquadRunRequest, ApproveSquadRunResponse,
+    CreateSquadRequest, DeleteResponse, ListSquadMembersResponse, ListSquadRunsResponse,
+    ListSquadsQuery, ListSquadsResponse, MutationResponse, RunSquadRequest, RunSquadResponse,
+    Squad, SquadMember, SquadRunStatus, SquadTargetType, UpdateSquadRequest,
 };
 use axum::{
     Json, Router,
@@ -10,6 +11,7 @@ use axum::{
     routing::{delete, get, post},
 };
 use chrono::Utc;
+use serde_json::json;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -22,6 +24,8 @@ use crate::{
     auth::RequestContext,
     db::{
         agent_tasks::AgentTaskRepository,
+        inbox::InboxRepository,
+        squad_runs::SquadRunRepository,
         squads::{SquadRepository, topological_order},
     },
 };
@@ -42,6 +46,8 @@ pub fn router() -> Router<AppState> {
             "/squads/{squad_id}/members/{member_id}",
             delete(remove_squad_member),
         )
+        .route("/issues/{issue_id}/squad-runs", get(list_issue_squad_runs))
+        .route("/squad-runs/{id}/approve", post(approve_squad_run))
 }
 
 #[instrument(name = "squads.list", skip(state, ctx), fields(user_id = %ctx.user.id))]
@@ -97,6 +103,7 @@ async fn create_squad(
         target_type,
         payload.issue_id,
         payload.working_directory,
+        payload.on_assign.unwrap_or_default(),
     )
     .await
     .map_err(|e| db_error(e, "failed to create squad"))?;
@@ -133,6 +140,7 @@ async fn update_squad(
         payload.target_type,
         payload.issue_id,
         payload.working_directory,
+        payload.on_assign,
     )
     .await
     .map_err(|e| db_error(e, "failed to update squad"))?;
@@ -168,7 +176,7 @@ async fn run_squad(
     let squad = load_and_authorize(&state, ctx.user.id, id).await?;
     let overrides = payload.map(|j| j.0).unwrap_or_default();
 
-    let result = execute_squad_pipeline(state.pool(), &squad, &overrides)
+    let result = execute_squad_pipeline(state.pool(), &squad, &overrides, Some(ctx.user.id))
         .await
         .map_err(|e| {
             tracing::error!(?e, squad_id = %id, "failed to run squad pipeline");
@@ -176,6 +184,131 @@ async fn run_squad(
         })?;
 
     Ok(Json(result))
+}
+
+#[instrument(name = "squad_runs.list_by_issue", skip(state, ctx), fields(issue_id = %issue_id, user_id = %ctx.user.id))]
+async fn list_issue_squad_runs(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Path(issue_id): Path<Uuid>,
+) -> Result<Json<ListSquadRunsResponse>, ErrorResponse> {
+    let issue = sqlx::query_scalar::<_, Uuid>("SELECT project_id FROM issues WHERE id = $1")
+        .bind(issue_id)
+        .fetch_optional(state.pool())
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "failed to load issue");
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to load issue")
+        })?
+        .ok_or_else(|| ErrorResponse::new(StatusCode::NOT_FOUND, "issue not found"))?;
+    ensure_project_access(state.pool(), ctx.user.id, issue).await?;
+
+    let runs = SquadRunRepository::list_by_issue(state.pool(), issue_id, 20)
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "failed to list squad runs");
+            ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to list squad runs",
+            )
+        })?;
+    Ok(Json(ListSquadRunsResponse { runs }))
+}
+
+#[instrument(name = "squad_runs.approve", skip(state, ctx, payload), fields(id = %id, user_id = %ctx.user.id))]
+async fn approve_squad_run(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ApproveSquadRunRequest>,
+) -> Result<Json<ApproveSquadRunResponse>, ErrorResponse> {
+    let run = SquadRunRepository::find_by_id(state.pool(), id)
+        .await
+        .map_err(|e| {
+            tracing::error!(?e, "failed to load squad run");
+            ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load squad run",
+            )
+        })?
+        .ok_or_else(|| ErrorResponse::new(StatusCode::NOT_FOUND, "squad run not found"))?;
+
+    let squad = load_and_authorize(&state, ctx.user.id, run.squad_id).await?;
+    if run.status != SquadRunStatus::WaitingApproval.as_str() {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            format!("run is not waiting for approval (status={})", run.status),
+        ));
+    }
+
+    let decision = payload.decision.trim().to_lowercase();
+    match decision.as_str() {
+        "approve" => {
+            let resume_node = run.resume_node_id.clone().ok_or_else(|| {
+                ErrorResponse::new(StatusCode::BAD_REQUEST, "run has no resume_node_id")
+            })?;
+            let _ =
+                SquadRunRepository::mark_status(state.pool(), id, SquadRunStatus::Running, None)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(?e, "failed to mark run running");
+                        ErrorResponse::new(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "failed to resume run",
+                        )
+                    })?;
+
+            let overrides = RunSquadRequest {
+                issue_id: Some(run.issue_id),
+                working_directory: run.working_directory.clone(),
+                start_from_node_id: Some(resume_node),
+                resume_run_id: Some(id),
+            };
+            let resumed =
+                execute_squad_pipeline(state.pool(), &squad, &overrides, Some(ctx.user.id))
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(?e, "failed to resume squad pipeline");
+                        ErrorResponse::new(StatusCode::BAD_REQUEST, e.to_string())
+                    })?;
+
+            let run = SquadRunRepository::find_by_id(state.pool(), id)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or(run);
+            Ok(Json(ApproveSquadRunResponse {
+                run,
+                resumed: Some(resumed),
+            }))
+        }
+        "reject" => {
+            let msg = payload
+                .comment
+                .clone()
+                .unwrap_or_else(|| "rejected by user".into());
+            let run = SquadRunRepository::mark_status(
+                state.pool(),
+                id,
+                SquadRunStatus::Cancelled,
+                Some(msg),
+            )
+            .await
+            .map_err(|e| {
+                tracing::error!(?e, "failed to cancel run");
+                ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to cancel run")
+            })?;
+            Ok(Json(ApproveSquadRunResponse { run, resumed: None }))
+        }
+        "comment" => Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "comment-only resume is not implemented yet; use approve/reject",
+        )),
+        _ => Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "decision must be approve, reject, or comment",
+        )),
+    }
 }
 
 #[instrument(name = "squads.list_members", skip(state, ctx), fields(id = %id, user_id = %ctx.user.id))]
@@ -280,10 +413,13 @@ async fn load_and_authorize(
 
 /// Execute a squad pipeline: resolve Issue+Path target, create/use issue, then
 /// walk the pipeline (await agents, fork/join, control-flow).
+///
+/// `actor_user_id` receives Inbox notifications for `wait_approval` gates.
 pub async fn execute_squad_pipeline(
     pool: &sqlx::PgPool,
     squad: &Squad,
     overrides: &RunSquadRequest,
+    actor_user_id: Option<Uuid>,
 ) -> anyhow::Result<RunSquadResponse> {
     use std::{
         collections::{HashMap, HashSet},
@@ -374,6 +510,16 @@ pub async fn execute_squad_pipeline(
         roots
     };
 
+    // Mid-pipeline entry: treat start_from as the sole root; upstream is skipped.
+    let roots = if let Some(ref start_id) = overrides.start_from_node_id {
+        if !nodes_by_id.contains_key(start_id.as_str()) {
+            anyhow::bail!("start_from_node_id `{start_id}` not found in pipeline");
+        }
+        vec![start_id.as_str()]
+    } else {
+        roots
+    };
+
     let loop_config = squad.pipeline.loop_config.clone();
     let loop_note = loop_config
         .as_ref()
@@ -421,6 +567,15 @@ pub async fn execute_squad_pipeline(
         agent_priority: Mutex<i32>,
         last_agent_result: Mutex<Option<AgentStepResult>>,
         join_gates: Mutex<HashMap<String, Arc<JoinGate>>>,
+        /// Set when a wait_approval node pauses the walk.
+        pause: Mutex<Option<PipelinePause>>,
+    }
+
+    struct PipelinePause {
+        pause_node_id: String,
+        resume_node_id: Option<String>,
+        approval_kind: String,
+        approval_prompt: String,
     }
 
     struct WhileFrame {
@@ -1144,6 +1299,172 @@ pub async fn execute_squad_pipeline(
                 )
                 .await
             }
+            SquadPipelineNodeType::WaitApproval => {
+                let kind = node
+                    .approval_kind
+                    .clone()
+                    .or_else(|| node.wait_for.clone())
+                    .unwrap_or_else(|| "approval".into());
+                let prompt = node
+                    .prompt_template
+                    .clone()
+                    .or_else(|| node.prompt.clone())
+                    .unwrap_or_else(|| {
+                        format!("流水线在步骤「{label}」等待你的确认。Approve 继续，Reject 取消。")
+                    });
+                let resume = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Default)
+                    .first()
+                    .map(|e| e.target.clone());
+                shared.run_log.lock().await.push(format!(
+                    "- **wait_approval** `{label}` kind={kind} resume={}",
+                    resume.as_deref().unwrap_or("(end)")
+                ));
+                *shared.pause.lock().await = Some(PipelinePause {
+                    pause_node_id: node_id.to_string(),
+                    resume_node_id: resume,
+                    approval_kind: kind,
+                    approval_prompt: prompt,
+                });
+                // Stop this branch; caller persists waiting_approval and returns.
+                Ok(false)
+            }
+            SquadPipelineNodeType::Script | SquadPipelineNodeType::GitOp => {
+                let agent_id = node.agent_id.or(squad.leader_agent_id).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "步骤「{label}」需要 Agent（或 Squad Leader）以挂靠 script/git_op 任务"
+                    )
+                })?;
+                let priority = {
+                    let mut p = shared.agent_priority.lock().await;
+                    let cur = *p;
+                    *p = p.saturating_sub(1);
+                    cur
+                };
+                let local_ws =
+                    AgentTaskRepository::latest_local_workspace_for_issue(pool, issue_id)
+                        .await
+                        .ok()
+                        .flatten();
+                let job = match node.node_type {
+                    SquadPipelineNodeType::Script => {
+                        let command = node
+                            .command
+                            .clone()
+                            .or_else(|| node.prompt.clone())
+                            .filter(|s| !s.trim().is_empty())
+                            .ok_or_else(|| anyhow::anyhow!("script 节点「{label}」缺少 command"))?;
+                        api_types::PipelineJobSpec {
+                            kind: api_types::PipelineJobKind::Script,
+                            command: Some(command),
+                            op: None,
+                            target_branch: None,
+                            local_workspace_id: local_ws,
+                            label: Some(label.to_string()),
+                        }
+                    }
+                    _ => {
+                        let op = node
+                            .git_op
+                            .clone()
+                            .or_else(|| node.prompt.clone())
+                            .unwrap_or_else(|| "rebase".into());
+                        api_types::PipelineJobSpec {
+                            kind: api_types::PipelineJobKind::GitOp,
+                            command: None,
+                            op: Some(op),
+                            target_branch: node.wait_for.clone().or_else(|| Some("main".into())),
+                            local_workspace_id: local_ws,
+                            label: Some(label.to_string()),
+                        }
+                    }
+                };
+                let execution_prompt = job.encode().map_err(|e| anyhow::anyhow!(e))?;
+                let kind = node.node_type.as_str();
+                let task = AgentTaskRepository::enqueue(
+                    pool,
+                    None,
+                    agent_id,
+                    issue_id,
+                    AgentTaskTrigger::Manual,
+                    priority,
+                    true,
+                    Some(squad.id),
+                    false,
+                    preferred_repo.clone(),
+                    Some(execution_prompt),
+                )
+                .await?;
+                let task_id = task.data.id;
+                shared.agent_task_ids.lock().await.push(task_id);
+                shared
+                    .ordered_node_ids
+                    .lock()
+                    .await
+                    .push(node_id.to_string());
+                shared.run_log.lock().await.push(format!(
+                    "- **{kind}** `{label}` → task `{task_id}` — awaiting local watcher…"
+                ));
+
+                let result = await_agent_task(pool, task_id, agent_await_timeout).await?;
+                let ok = result.status == AgentTaskStatus::Completed;
+                shared.run_log.lock().await.push(format!(
+                    "  - finished {:?}: {}",
+                    result.status, result.summary
+                ));
+                *shared.last_agent_result.lock().await = Some(result.clone());
+
+                if !ok {
+                    let err_edges = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Error);
+                    if !err_edges.is_empty() {
+                        shared
+                            .run_log
+                            .lock()
+                            .await
+                            .push("  - following `error` edge(s)".into());
+                        return follow_edges(
+                            pool,
+                            squad,
+                            issue_id,
+                            preferred_repo,
+                            nodes_by_id,
+                            outs,
+                            ins,
+                            shared,
+                            err_edges,
+                            while_stack,
+                            visiting,
+                            agent_await_timeout,
+                            loop_success,
+                            node_id,
+                        )
+                        .await;
+                    }
+                    shared.run_log.lock().await.push(
+                        "  - script/git_op failed and no `error` edge — stopping this branch"
+                            .into(),
+                    );
+                    return Ok(false);
+                }
+
+                let defaults = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Default);
+                follow_edges(
+                    pool,
+                    squad,
+                    issue_id,
+                    preferred_repo,
+                    nodes_by_id,
+                    outs,
+                    ins,
+                    shared,
+                    defaults,
+                    while_stack,
+                    visiting,
+                    agent_await_timeout,
+                    loop_success,
+                    node_id,
+                )
+                .await
+            }
         }
     }
 
@@ -1156,7 +1477,14 @@ pub async fn execute_squad_pipeline(
         agent_priority: Mutex::new(100),
         last_agent_result: Mutex::new(None),
         join_gates: Mutex::new(HashMap::new()),
+        pause: Mutex::new(None),
     });
+
+    if let Some(ref start_id) = overrides.start_from_node_id {
+        shared.run_log.lock().await.push(format!(
+            "- starting from node `{start_id}` (upstream skipped)"
+        ));
+    }
 
     let loop_success = loop_config
         .as_ref()
@@ -1247,12 +1575,16 @@ pub async fn execute_squad_pipeline(
     let agent_task_ids = shared.agent_task_ids.lock().await.clone();
     let ordered_node_ids = shared.ordered_node_ids.lock().await.clone();
     let run_log = shared.run_log.lock().await.clone();
+    let pause = shared.pause.lock().await.take();
 
     let mut plan = String::from("## Squad pipeline run\n\n");
     plan.push_str(&format!("Squad: **{}**\n", squad.name));
     plan.push_str(&format!("Target: `{}`\n", target_type.as_str()));
     if let Some(ref wd) = working_directory {
         plan.push_str(&format!("Working directory: `{wd}`\n"));
+    }
+    if let Some(ref start_id) = overrides.start_from_node_id {
+        plan.push_str(&format!("Started from node: `{start_id}`\n"));
     }
     plan.push_str(&format!("Agent await timeout: {}s\n", agent_await_timeout));
     plan.push_str("\n### Execution trace\n\n");
@@ -1269,7 +1601,8 @@ pub async fn execute_squad_pipeline(
         "\n\n_Orchestrator: agent nodes enqueue + await terminal status; Fork fans out \
          concurrently; Join barriers on inbound count (or join_count); if/while use literals, \
          status:, agent:keyword / last-result matching; failed agents follow optional `error` \
-         edge else stop branch. Parallel only via Fork._\n",
+         edge else stop branch. Parallel only via Fork. Mid-entry via start_from_node_id; \
+         wait_approval pauses for human Approve/Reject._\n",
     );
 
     let now = Utc::now();
@@ -1287,12 +1620,119 @@ pub async fn execute_squad_pipeline(
     .execute(pool)
     .await;
 
+    let (status, pause_node_id, resume_node_id) = if let Some(ref p) = pause {
+        (
+            SquadRunStatus::WaitingApproval,
+            Some(p.pause_node_id.clone()),
+            p.resume_node_id.clone(),
+        )
+    } else {
+        (SquadRunStatus::Completed, None, None)
+    };
+
+    let run = if let Some(resume_id) = overrides.resume_run_id {
+        if let Some(p) = &pause {
+            SquadRunRepository::mark_waiting_approval(
+                pool,
+                resume_id,
+                p.pause_node_id.clone(),
+                p.resume_node_id.clone(),
+                p.approval_kind.clone(),
+                p.approval_prompt.clone(),
+            )
+            .await
+            .ok()
+        } else {
+            SquadRunRepository::mark_completed(pool, resume_id, &agent_task_ids, &ordered_node_ids)
+                .await
+                .ok()
+        }
+    } else {
+        let created = SquadRunRepository::create(
+            pool,
+            squad.id,
+            issue_id,
+            if pause.is_some() {
+                SquadRunStatus::WaitingApproval
+            } else {
+                SquadRunStatus::Running
+            },
+            overrides.start_from_node_id.clone(),
+            working_directory.clone(),
+            actor_user_id,
+        )
+        .await
+        .ok();
+
+        if let Some(run) = created {
+            if let Some(p) = &pause {
+                SquadRunRepository::mark_waiting_approval(
+                    pool,
+                    run.id,
+                    p.pause_node_id.clone(),
+                    p.resume_node_id.clone(),
+                    p.approval_kind.clone(),
+                    p.approval_prompt.clone(),
+                )
+                .await
+                .ok()
+            } else {
+                SquadRunRepository::mark_completed(pool, run.id, &agent_task_ids, &ordered_node_ids)
+                    .await
+                    .ok()
+            }
+        } else {
+            None
+        }
+    };
+
+    if let Some(p) = &pause {
+        let recipients: Vec<Uuid> = if let Some(uid) = actor_user_id {
+            vec![uid]
+        } else {
+            sqlx::query_scalar::<_, Uuid>(
+                r#"
+                SELECT DISTINCT user_id FROM issue_subscribers
+                WHERE issue_id = $1 AND user_id IS NOT NULL
+                "#,
+            )
+            .bind(issue_id)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default()
+        };
+
+        let run_id = run.as_ref().map(|r| r.id);
+        for uid in recipients {
+            let _ = InboxRepository::create(
+                pool,
+                uid,
+                Some(squad.project_id),
+                Some(issue_id),
+                "workflow_approval",
+                &format!("待确认：{}", squad.name),
+                &p.approval_prompt,
+                json!({
+                    "squad_run_id": run_id,
+                    "squad_id": squad.id,
+                    "pause_node_id": p.pause_node_id,
+                    "approval_kind": p.approval_kind,
+                }),
+            )
+            .await;
+        }
+    }
+
     Ok(RunSquadResponse {
         issue_id,
         agent_task_ids,
         ordered_node_ids,
         target_type,
         working_directory,
+        run_id: run.as_ref().map(|r| r.id),
+        status: Some(status),
+        pause_node_id,
+        resume_node_id,
     })
 }
 

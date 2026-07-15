@@ -109,7 +109,7 @@ async fn do_dispatch_squad(
         anyhow::bail!("squad does not belong to autopilot project");
     }
 
-    let result = execute_squad_pipeline(pool, &squad, &RunSquadRequest::default()).await?;
+    let result = execute_squad_pipeline(pool, &squad, &RunSquadRequest::default(), None).await?;
 
     let first_task = result.agent_task_ids.first().copied();
     let _ = AutopilotRepository::update_run(

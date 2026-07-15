@@ -175,17 +175,45 @@ async fn create_issue_assignee(
     }
     .await;
 
-    // Assigning an agent (or squad leader) enqueues a task.
-    let enqueue_target = if let Some(agent_id) = payload.agent_id {
-        Some((agent_id, None, false))
+    // Assigning an agent (or squad) triggers work.
+    // - agent: enqueue agent task
+    // - squad + leader_only (default): enqueue leader only (pure-issue friendly)
+    // - squad + full_pipeline: background-run entire pipeline
+    enum AssignAction {
+        Enqueue {
+            agent_id: Uuid,
+            squad_id: Option<Uuid>,
+            is_leader_task: bool,
+        },
+        RunPipeline {
+            squad: api_types::Squad,
+        },
+    }
+
+    let assign_action = if let Some(agent_id) = payload.agent_id {
+        Some(AssignAction::Enqueue {
+            agent_id,
+            squad_id: None,
+            is_leader_task: false,
+        })
     } else if let Some(squad_id) = payload.squad_id {
         match SquadRepository::find_by_id(state.pool(), squad_id).await {
             Ok(Some(squad)) => {
-                if let Some(leader_id) = squad.leader_agent_id {
-                    Some((leader_id, Some(squad_id), true))
-                } else {
-                    tracing::warn!(%squad_id, "squad has no leader_agent_id; skip enqueue");
-                    None
+                use api_types::SquadOnAssign;
+                match squad.on_assign {
+                    SquadOnAssign::FullPipeline => Some(AssignAction::RunPipeline { squad }),
+                    SquadOnAssign::LeaderOnly => {
+                        if let Some(leader_id) = squad.leader_agent_id {
+                            Some(AssignAction::Enqueue {
+                                agent_id: leader_id,
+                                squad_id: Some(squad_id),
+                                is_leader_task: true,
+                            })
+                        } else {
+                            tracing::warn!(%squad_id, "squad has no leader_agent_id; skip enqueue");
+                            None
+                        }
+                    }
                 }
             }
             Ok(None) => {
@@ -205,36 +233,70 @@ async fn create_issue_assignee(
         None
     };
 
-    if let Some((agent_id, squad_id, is_leader_task)) = enqueue_target
-        && let Err(error) = AgentTaskRepository::enqueue(
-            state.pool(),
-            None,
+    match assign_action {
+        Some(AssignAction::Enqueue {
             agent_id,
-            payload.issue_id,
-            AgentTaskTrigger::Assign,
-            0,
-            false,
             squad_id,
             is_leader_task,
-            preferred_repo_hint,
-            None,
-        )
-        .await
-    {
-        tracing::error!(?error, %agent_id, issue_id = %payload.issue_id, "failed to enqueue agent task");
-        if let Err(rollback_err) =
-            IssueAssigneeRepository::delete(state.pool(), response.data.id).await
-        {
-            tracing::error!(
-                ?rollback_err,
-                assignee_id = %response.data.id,
-                "failed to roll back assignee after enqueue failure"
-            );
+        }) => {
+            if let Err(error) = AgentTaskRepository::enqueue(
+                state.pool(),
+                None,
+                agent_id,
+                payload.issue_id,
+                AgentTaskTrigger::Assign,
+                0,
+                false,
+                squad_id,
+                is_leader_task,
+                preferred_repo_hint,
+                None,
+            )
+            .await
+            {
+                tracing::error!(?error, %agent_id, issue_id = %payload.issue_id, "failed to enqueue agent task");
+                if let Err(rollback_err) =
+                    IssueAssigneeRepository::delete(state.pool(), response.data.id).await
+                {
+                    tracing::error!(
+                        ?rollback_err,
+                        assignee_id = %response.data.id,
+                        "failed to roll back assignee after enqueue failure"
+                    );
+                }
+                return Err(ErrorResponse::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to enqueue agent task; assignee was not kept",
+                ));
+            }
         }
-        return Err(ErrorResponse::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to enqueue agent task; assignee was not kept",
-        ));
+        Some(AssignAction::RunPipeline { squad }) => {
+            let pool = state.pool().clone();
+            let issue_id = payload.issue_id;
+            let actor = ctx.user.id;
+            let working_directory = squad.working_directory.clone();
+            tokio::spawn(async move {
+                use api_types::RunSquadRequest;
+
+                use crate::routes::squads::execute_squad_pipeline;
+                let overrides = RunSquadRequest {
+                    issue_id: Some(issue_id),
+                    working_directory,
+                    start_from_node_id: None,
+                    resume_run_id: None,
+                };
+                if let Err(e) = execute_squad_pipeline(&pool, &squad, &overrides, Some(actor)).await
+                {
+                    tracing::error!(
+                        ?e,
+                        squad_id = %squad.id,
+                        %issue_id,
+                        "full_pipeline on_assign failed"
+                    );
+                }
+            });
+        }
+        None => {}
     }
 
     // Auto-subscribe the actor so they receive inbox on agent task completion.

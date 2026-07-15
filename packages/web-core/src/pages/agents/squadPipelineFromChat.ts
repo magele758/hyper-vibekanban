@@ -28,8 +28,11 @@ const NODE_TYPES: SquadPipelineNodeType[] = [
   'while',
   'break',
   'wait',
+  'wait_approval',
   'fork',
   'join',
+  'script',
+  'git_op',
 ];
 
 const BRANCHES: SquadPipelineEdgeBranch[] = [
@@ -343,6 +346,7 @@ function emptyDraft(): SquadEditorDraft {
     issue_id: null,
     working_directory: null,
     pipeline: { nodes: [], edges: [] },
+    on_assign: 'leader_only',
   };
 }
 
@@ -1162,6 +1166,7 @@ export async function generateSquadFromChat(params: {
           ? obj.working_directory
           : (current?.working_directory ?? null),
       pipeline,
+      on_assign: current?.on_assign ?? 'leader_only',
     };
 
     const summary =

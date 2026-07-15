@@ -80,10 +80,16 @@ pub enum SquadPipelineNodeType {
     While,
     Break,
     Wait,
+    /// Pause until a human approves / rejects (Inbox + Issue actions).
+    WaitApproval,
     /// Fan-out: walk all default outgoing edges concurrently.
     Fork,
     /// Barrier: wait until expected inbound branches complete, then continue.
     Join,
+    /// Run a shell/script job in the linked workspace (Batch 2+).
+    Script,
+    /// Git/PR operation via local Workspace API (Batch 2+).
+    GitOp,
 }
 
 impl SquadPipelineNodeType {
@@ -94,8 +100,11 @@ impl SquadPipelineNodeType {
             Self::While => "while",
             Self::Break => "break",
             Self::Wait => "wait",
+            Self::WaitApproval => "wait_approval",
             Self::Fork => "fork",
             Self::Join => "join",
+            Self::Script => "script",
+            Self::GitOp => "git_op",
         }
     }
 
@@ -105,6 +114,70 @@ impl SquadPipelineNodeType {
 
     pub fn is_control(self) -> bool {
         !self.is_agent()
+    }
+}
+
+/// What happens when an Issue is assigned this squad.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SquadOnAssign {
+    /// Enqueue leader agent only (legacy / pure-issue-friendly default).
+    #[default]
+    LeaderOnly,
+    /// Start the full pipeline (optionally from configured entry).
+    FullPipeline,
+}
+
+impl SquadOnAssign {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LeaderOnly => "leader_only",
+            Self::FullPipeline => "full_pipeline",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "full_pipeline" => Self::FullPipeline,
+            _ => Self::LeaderOnly,
+        }
+    }
+}
+
+/// Lifecycle status for a persisted squad pipeline run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SquadRunStatus {
+    #[default]
+    Queued,
+    Running,
+    WaitingApproval,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl SquadRunStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::WaitingApproval => "waiting_approval",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "queued" => Self::Queued,
+            "waiting_approval" => Self::WaitingApproval,
+            "completed" => Self::Completed,
+            "failed" => Self::Failed,
+            "cancelled" => Self::Cancelled,
+            _ => Self::Running,
+        }
     }
 }
 
@@ -147,7 +220,7 @@ impl SquadPipelineEdgeBranch {
 }
 
 /// A single step / node in the squad pipeline DAG.
-#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
 pub struct SquadPipelineNode {
     pub id: String,
     /// Node kind. Defaults to `agent` when omitted (legacy pipelines).
@@ -190,6 +263,30 @@ pub struct SquadPipelineNode {
     #[serde(default)]
     #[ts(optional)]
     pub join_count: Option<i32>,
+    /// Short label for "run from this step" UI (e.g. 测试验证).
+    #[serde(default)]
+    #[ts(optional)]
+    pub entry_label: Option<String>,
+    /// Optional Stage Protocol id this node advances to / represents.
+    #[serde(default)]
+    #[ts(optional)]
+    pub stage: Option<String>,
+    /// `wait_approval` kind: scheme | design | merge | release | custom.
+    #[serde(default)]
+    #[ts(optional)]
+    pub approval_kind: Option<String>,
+    /// Prompt shown in Inbox / Issue when waiting for approval.
+    #[serde(default)]
+    #[ts(optional)]
+    pub prompt_template: Option<String>,
+    /// `script` command or script_key (Batch 2+).
+    #[serde(default)]
+    #[ts(optional)]
+    pub command: Option<String>,
+    /// `git_op`: rebase | create_pr | merge | push (Batch 2+).
+    #[serde(default)]
+    #[ts(optional)]
+    pub git_op: Option<String>,
 }
 
 /// Directed edge: source before target (or control-flow branch).
@@ -231,6 +328,9 @@ pub struct Squad {
     pub issue_id: Option<Uuid>,
     /// When target includes Path — local codebase/workdir for agents.
     pub working_directory: Option<String>,
+    /// Assign behaviour: leader only (default) or start full pipeline.
+    #[serde(default)]
+    pub on_assign: SquadOnAssign,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -262,6 +362,9 @@ pub struct CreateSquadRequest {
     pub issue_id: Option<Uuid>,
     #[ts(optional)]
     pub working_directory: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub on_assign: Option<SquadOnAssign>,
 }
 
 #[derive(Debug, Clone, Deserialize, TS)]
@@ -278,6 +381,8 @@ pub struct UpdateSquadRequest {
     pub issue_id: Option<Option<Uuid>>,
     #[serde(default, deserialize_with = "some_if_present")]
     pub working_directory: Option<Option<String>>,
+    #[serde(default, deserialize_with = "some_if_present")]
+    pub on_assign: Option<SquadOnAssign>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -311,6 +416,12 @@ pub struct RunSquadRequest {
     pub issue_id: Option<Uuid>,
     #[ts(optional)]
     pub working_directory: Option<String>,
+    /// Start walk at this node; upstream nodes are skipped.
+    #[ts(optional)]
+    pub start_from_node_id: Option<String>,
+    /// Resume an existing run after approval (optional).
+    #[ts(optional)]
+    pub resume_run_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -320,4 +431,56 @@ pub struct RunSquadResponse {
     pub ordered_node_ids: Vec<String>,
     pub target_type: SquadTargetType,
     pub working_directory: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub run_id: Option<Uuid>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub status: Option<SquadRunStatus>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub pause_node_id: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub resume_node_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, sqlx::FromRow)]
+pub struct SquadRun {
+    pub id: Uuid,
+    pub squad_id: Uuid,
+    pub issue_id: Uuid,
+    pub status: String,
+    pub start_from_node_id: Option<String>,
+    pub pause_node_id: Option<String>,
+    pub resume_node_id: Option<String>,
+    pub approval_kind: Option<String>,
+    pub approval_prompt: Option<String>,
+    pub working_directory: Option<String>,
+    pub error_message: Option<String>,
+    pub created_by_user_id: Option<Uuid>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, TS)]
+pub struct ApproveSquadRunRequest {
+    /// approve | reject | comment
+    pub decision: String,
+    #[ts(optional)]
+    pub comment: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ApproveSquadRunResponse {
+    pub run: SquadRun,
+    #[ts(optional)]
+    pub resumed: Option<RunSquadResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct ListSquadRunsResponse {
+    pub runs: Vec<SquadRun>,
 }

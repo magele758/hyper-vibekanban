@@ -55,6 +55,21 @@ export const PALETTE_ITEMS: {
   { type: 'while', label: 'While', hint: '循环 body / exit' },
   { type: 'break', label: 'Break', hint: '跳出最近 While' },
   { type: 'wait', label: 'Wait', hint: '等待时长或条件' },
+  {
+    type: 'wait_approval',
+    label: '人机门禁',
+    hint: '暂停等 Approve / Reject（Ask Merge 等）',
+  },
+  {
+    type: 'script',
+    label: 'Script',
+    hint: '跑测试/脚本（Batch 2 执行；现可编排）',
+  },
+  {
+    type: 'git_op',
+    label: 'Git',
+    hint: 'rebase / PR / merge（Batch 2 执行；现可编排）',
+  },
 ];
 
 const DND_MIME = 'application/vk-squad-node';
@@ -152,6 +167,24 @@ function kindChrome(kind: SquadPipelineNodeType): {
         icon: TimerIcon,
         badge: 'Wait',
       };
+    case 'wait_approval':
+      return {
+        bar: 'border-l-amber-500',
+        icon: TimerIcon,
+        badge: 'Approve',
+      };
+    case 'script':
+      return {
+        bar: 'border-l-sky-500',
+        icon: TreeStructureIcon,
+        badge: 'Script',
+      };
+    case 'git_op':
+      return {
+        bar: 'border-l-emerald-500',
+        icon: GitBranchIcon,
+        badge: 'Git',
+      };
     default: {
       const _exhaustive: never = kind;
       return _exhaustive;
@@ -187,6 +220,16 @@ function controlDetail(node: SquadPipelineNode): string | undefined {
       if (node.wait_for?.trim()) parts.push(node.wait_for.trim());
       return parts.length ? parts.join(' · ') : '无等待配置';
     }
+    case 'wait_approval':
+      return (
+        node.approval_kind?.trim() ||
+        node.entry_label?.trim() ||
+        '等人确认'
+      );
+    case 'script':
+      return node.command?.trim() || '脚本（Batch 2）';
+    case 'git_op':
+      return node.git_op?.trim() || 'git 操作（Batch 2）';
     case 'break':
       return '退出最近 While';
     default: {
@@ -681,6 +724,12 @@ export function defaultLabelForType(
       return 'Break';
     case 'wait':
       return 'Wait';
+    case 'wait_approval':
+      return '人机门禁';
+    case 'script':
+      return 'Script';
+    case 'git_op':
+      return 'Git';
     default: {
       const _exhaustive: never = type;
       return _exhaustive;

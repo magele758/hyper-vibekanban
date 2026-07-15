@@ -1,5 +1,6 @@
 use api_types::{
-    DeleteResponse, MutationResponse, Squad, SquadMember, SquadPipeline, SquadTargetType,
+    DeleteResponse, MutationResponse, Squad, SquadMember, SquadOnAssign, SquadPipeline,
+    SquadTargetType,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -21,6 +22,35 @@ fn parse_pipeline(value: Value) -> SquadPipeline {
     serde_json::from_value(value).unwrap_or_default()
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct SquadRow {
+    id: Uuid,
+    project_id: Uuid,
+    name: String,
+    leader_agent_id: Option<Uuid>,
+    pipeline: Value,
+    target_type: String,
+    issue_id: Option<Uuid>,
+    working_directory: Option<String>,
+    on_assign: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+const SQUAD_COLUMNS: &str = r#"
+    id,
+    project_id,
+    name,
+    leader_agent_id,
+    pipeline,
+    target_type,
+    issue_id,
+    working_directory,
+    on_assign,
+    created_at,
+    updated_at
+"#;
+
 fn map_squad_row(
     id: Uuid,
     project_id: Uuid,
@@ -30,6 +60,7 @@ fn map_squad_row(
     target_type: String,
     issue_id: Option<Uuid>,
     working_directory: Option<String>,
+    on_assign: &str,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 ) -> Squad {
@@ -42,95 +73,63 @@ fn map_squad_row(
         target_type: SquadTargetType::parse(&target_type),
         issue_id,
         working_directory,
+        on_assign: SquadOnAssign::parse(on_assign),
         created_at,
         updated_at,
     }
+}
+
+fn squad_from_row(r: SquadRow) -> Squad {
+    map_squad_row(
+        r.id,
+        r.project_id,
+        r.name,
+        r.leader_agent_id,
+        r.pipeline,
+        r.target_type,
+        r.issue_id,
+        r.working_directory,
+        &r.on_assign,
+        r.created_at,
+        r.updated_at,
+    )
 }
 
 pub struct SquadRepository;
 
 impl SquadRepository {
     pub async fn find_by_id(pool: &PgPool, id: Uuid) -> Result<Option<Squad>, SquadError> {
-        let record = sqlx::query!(
+        let record = sqlx::query_as::<_, SquadRow>(&format!(
             r#"
-            SELECT
-                id,
-                project_id,
-                name,
-                leader_agent_id,
-                pipeline AS "pipeline!: Value",
-                target_type,
-                issue_id,
-                working_directory,
-                created_at,
-                updated_at
+            SELECT {SQUAD_COLUMNS}
             FROM squads
             WHERE id = $1
-            "#,
-            id
-        )
+            "#
+        ))
+        .bind(id)
         .fetch_optional(pool)
         .await?;
 
-        Ok(record.map(|r| {
-            map_squad_row(
-                r.id,
-                r.project_id,
-                r.name,
-                r.leader_agent_id,
-                r.pipeline,
-                r.target_type,
-                r.issue_id,
-                r.working_directory,
-                r.created_at,
-                r.updated_at,
-            )
-        }))
+        Ok(record.map(squad_from_row))
     }
 
     pub async fn list_by_project(
         pool: &PgPool,
         project_id: Uuid,
     ) -> Result<Vec<Squad>, SquadError> {
-        let records = sqlx::query!(
+        let records = sqlx::query_as::<_, SquadRow>(&format!(
             r#"
-            SELECT
-                id,
-                project_id,
-                name,
-                leader_agent_id,
-                pipeline AS "pipeline!: Value",
-                target_type,
-                issue_id,
-                working_directory,
-                created_at,
-                updated_at
+            SELECT {SQUAD_COLUMNS}
             FROM squads
             WHERE project_id = $1
             ORDER BY name ASC
-            "#,
-            project_id
-        )
+            "#
+        ))
+        .bind(project_id)
         .fetch_all(pool)
         .await?;
 
-        Ok(records
-            .into_iter()
-            .map(|r| {
-                map_squad_row(
-                    r.id,
-                    r.project_id,
-                    r.name,
-                    r.leader_agent_id,
-                    r.pipeline,
-                    r.target_type,
-                    r.issue_id,
-                    r.working_directory,
-                    r.created_at,
-                    r.updated_at,
-                )
-            })
-            .collect())
+        Ok(records.into_iter().map(squad_from_row).collect())
     }
 
     pub async fn create(
@@ -143,55 +142,36 @@ impl SquadRepository {
         target_type: SquadTargetType,
         issue_id: Option<Uuid>,
         working_directory: Option<String>,
+        on_assign: SquadOnAssign,
     ) -> Result<MutationResponse<Squad>, SquadError> {
         let id = id.unwrap_or_else(Uuid::new_v4);
         let pipeline = pipeline.unwrap_or_default();
         let pipeline_json = serde_json::to_value(&pipeline)?;
         let mut tx = super::begin_tx(pool).await?;
 
-        let r = sqlx::query!(
+        let r = sqlx::query_as::<_, SquadRow>(&format!(
             r#"
             INSERT INTO squads (
                 id, project_id, name, leader_agent_id, pipeline,
-                target_type, issue_id, working_directory
+                target_type, issue_id, working_directory, on_assign
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING
-                id,
-                project_id,
-                name,
-                leader_agent_id,
-                pipeline AS "pipeline!: Value",
-                target_type,
-                issue_id,
-                working_directory,
-                created_at,
-                updated_at
-            "#,
-            id,
-            project_id,
-            name,
-            leader_agent_id,
-            pipeline_json,
-            target_type.as_str(),
-            issue_id,
-            working_directory
-        )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING {SQUAD_COLUMNS}
+            "#
+        ))
+        .bind(id)
+        .bind(project_id)
+        .bind(name)
+        .bind(leader_agent_id)
+        .bind(pipeline_json)
+        .bind(target_type.as_str())
+        .bind(issue_id)
+        .bind(working_directory)
+        .bind(on_assign.as_str())
         .fetch_one(&mut *tx)
         .await?;
 
-        let data = map_squad_row(
-            r.id,
-            r.project_id,
-            r.name,
-            r.leader_agent_id,
-            r.pipeline,
-            r.target_type,
-            r.issue_id,
-            r.working_directory,
-            r.created_at,
-            r.updated_at,
-        );
+        let data = squad_from_row(r);
         let txid = get_txid(&mut *tx).await?;
         tx.commit().await?;
         Ok(MutationResponse { data, txid })
@@ -206,6 +186,7 @@ impl SquadRepository {
         target_type: Option<SquadTargetType>,
         issue_id: Option<Option<Uuid>>,
         working_directory: Option<Option<String>>,
+        on_assign: Option<SquadOnAssign>,
     ) -> Result<MutationResponse<Squad>, SquadError> {
         let mut tx = super::begin_tx(pool).await?;
 
@@ -219,8 +200,10 @@ impl SquadRepository {
         let set_pipeline = pipeline_json.is_some();
         let set_target = target_type.is_some();
         let target_str = target_type.map(|t| t.as_str().to_string());
+        let set_on_assign = on_assign.is_some();
+        let on_assign_str = on_assign.map(|o| o.as_str().to_string());
 
-        let r = sqlx::query!(
+        let r = sqlx::query_as::<_, SquadRow>(
             r#"
             UPDATE squads
             SET
@@ -248,6 +231,10 @@ impl SquadRepository {
                     WHEN $12::text IS NOT NULL THEN $12
                     ELSE working_directory
                 END,
+                on_assign = CASE
+                    WHEN $13 THEN $14
+                    ELSE on_assign
+                END,
                 updated_at = NOW()
             WHERE id = $1
             RETURNING
@@ -255,41 +242,33 @@ impl SquadRepository {
                 project_id,
                 name,
                 leader_agent_id,
-                pipeline AS "pipeline!: Value",
+                pipeline,
                 target_type,
                 issue_id,
                 working_directory,
+                on_assign,
                 created_at,
                 updated_at
             "#,
-            id,
-            name,
-            clear_leader,
-            set_leader,
-            set_pipeline,
-            pipeline_json,
-            set_target,
-            target_str,
-            clear_issue,
-            set_issue,
-            clear_workdir,
-            set_workdir
         )
+        .bind(id)
+        .bind(name)
+        .bind(clear_leader)
+        .bind(set_leader)
+        .bind(set_pipeline)
+        .bind(pipeline_json)
+        .bind(set_target)
+        .bind(target_str)
+        .bind(clear_issue)
+        .bind(set_issue)
+        .bind(clear_workdir)
+        .bind(set_workdir)
+        .bind(set_on_assign)
+        .bind(on_assign_str)
         .fetch_one(&mut *tx)
         .await?;
 
-        let data = map_squad_row(
-            r.id,
-            r.project_id,
-            r.name,
-            r.leader_agent_id,
-            r.pipeline,
-            r.target_type,
-            r.issue_id,
-            r.working_directory,
-            r.created_at,
-            r.updated_at,
-        );
+        let data = squad_from_row(r);
         let txid = get_txid(&mut *tx).await?;
         tx.commit().await?;
         Ok(MutationResponse { data, txid })
@@ -456,6 +435,13 @@ mod tests {
                     max_iterations: None,
                     wait_seconds: None,
                     wait_for: None,
+                    join_count: None,
+                    entry_label: None,
+                    stage: None,
+                    approval_kind: None,
+                    prompt_template: None,
+                    command: None,
+                    git_op: None,
                 },
                 SquadPipelineNode {
                     id: "b".into(),
@@ -469,6 +455,13 @@ mod tests {
                     max_iterations: None,
                     wait_seconds: None,
                     wait_for: None,
+                    join_count: None,
+                    entry_label: None,
+                    stage: None,
+                    approval_kind: None,
+                    prompt_template: None,
+                    command: None,
+                    git_op: None,
                 },
                 SquadPipelineNode {
                     id: "c".into(),
@@ -482,6 +475,13 @@ mod tests {
                     max_iterations: None,
                     wait_seconds: None,
                     wait_for: None,
+                    join_count: None,
+                    entry_label: None,
+                    stage: None,
+                    approval_kind: None,
+                    prompt_template: None,
+                    command: None,
+                    git_op: None,
                 },
             ],
             edges: vec![
