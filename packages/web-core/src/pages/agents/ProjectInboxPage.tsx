@@ -153,6 +153,84 @@ function InboxInner({ projectId }: { projectId: string }) {
                         {item.body}
                       </p>
                     )}
+                    {item.type === 'workflow_approval' &&
+                      (() => {
+                        const payload = item.payload as {
+                          squad_run_id?: string;
+                        } | null;
+                        const runId = payload?.squad_run_id;
+                        if (!runId) return null;
+                        return (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className="rounded-md border border-brand bg-brand/10 px-2 py-1 text-xs text-brand disabled:opacity-50"
+                              onClick={() => {
+                                void (async () => {
+                                  setPending((prev) =>
+                                    new Set(prev).add(item.id)
+                                  );
+                                  try {
+                                    await boardAgentsApi.approveSquadRun(
+                                      runId,
+                                      { decision: 'approve' }
+                                    );
+                                    await boardAgentsApi.markInboxRead(item.id);
+                                  } catch (e) {
+                                    setError(
+                                      e instanceof Error
+                                        ? e.message
+                                        : String(e)
+                                    );
+                                  } finally {
+                                    setPending((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(item.id);
+                                      return next;
+                                    });
+                                  }
+                                })();
+                              }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className="rounded-md border border-border px-2 py-1 text-xs text-low disabled:opacity-50"
+                              onClick={() => {
+                                void (async () => {
+                                  setPending((prev) =>
+                                    new Set(prev).add(item.id)
+                                  );
+                                  try {
+                                    await boardAgentsApi.approveSquadRun(
+                                      runId,
+                                      { decision: 'reject' }
+                                    );
+                                    await boardAgentsApi.markInboxRead(item.id);
+                                  } catch (e) {
+                                    setError(
+                                      e instanceof Error
+                                        ? e.message
+                                        : String(e)
+                                    );
+                                  } finally {
+                                    setPending((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(item.id);
+                                      return next;
+                                    });
+                                  }
+                                })();
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        );
+                      })()}
                     <p className="mt-1 text-[11px] text-low">
                       {new Date(item.created_at).toLocaleString()}
                     </p>

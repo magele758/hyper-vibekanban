@@ -1,10 +1,16 @@
 # AI 工作流主骨（Stage Protocol）与 Feature Autopilot
 
-> 状态：方案定稿，待分期实现  
+> 状态：方案定稿，**Batch 1 已落地代码**（待本机 `VK_REBUILD` 跑 migration 验证）  
 > 关联：[board-agents-plan.md](./board-agents-plan.md)（Board Agent / Squad 已落地骨架）  
-> 更新：2026-07-14
+> 更新：2026-07-15
 
 把「想法 → 方案 → 实现 → 验证 → 合并 → 发布」做成 vibe-kanban 的一等编排能力；首个可演示 case 是 **Feature Autopilot（Closeout）**：挂 Squad 后自动 review / 测试 / rebase，并在合并前询问人。
+
+**产品硬约束（2026-07-15 补齐）：**
+
+1. **保留纯 Issue 开发模式**——不挂 Squad / 不跑 pipeline 时，行为与今日完全一致（人手开 Workspace、follow-up、rebase、PR）。
+2. **一条大 Pipeline 覆盖全流程**，但**任意中间节点都可切入**——不是只能从头跑；Closeout / 只测 / 只合并都是「从某节点起跑到结束」。
+3. **前端交互是一等设计**——Issue 面板、Squad 编辑器、Inbox 门禁、Run 对话框都有明确入口（见 §2.3 / §7.3）。
 
 ---
 
@@ -81,19 +87,102 @@ flowchart TB
   Gate -->|Approve / Reject / 回复| Run
 ```
 
-### 2.1 与现有 SOP 的关系
+### 2.1 与现有 SOP 的关系（同一 Issue，三种用法）
 
-```
-原路径（保留）:
-  人手开 Workspace → coding → 人手 rebase/PR/merge
+三种用法落在**同一条大 Pipeline 模板**上，差异只是「起跑点」和「是否自动编排」——**不是三套产品**。
 
-新路径（叠在上面）:
-  Issue 挂 Stage Protocol
-    → 指派 Full Feature Flow / Feature Closeout Squad
-    → pipeline 驱动 agent / script / git_op
-    → wait_approval 卡人
-    → 回写 stage + artifact + 粗列
+```mermaid
+flowchart LR
+  subgraph modes [同一 Issue 上的介入方式]
+    Pure["纯 Issue：不挂 Squad\n人手 Workspace / PR"]
+    Mid["从中间节点 Run\n如 verify / rebase / Ask Merge"]
+    Full["指派 Squad 从头或 Autopilot"]
+  end
+  Pipe["Full Feature Flow Pipeline"]
+  Pure -.->|随时可开 Workspace| WS[Workspace SOP]
+  Mid --> Pipe
+  Full --> Pipe
+  Pipe --> WS
 ```
+
+| 模式 | 怎么进 | Pipeline | Workspace |
+|------|--------|----------|-----------|
+| **纯 Issue** | 不指派 Squad；或指派了人也只当协作者 | 不跑 | 人手开 / 跟今日一样 |
+| **中段切入** | Issue / Squad 页「从该步骤运行」 | 从选中节点起跑到汇合/结束；上游视为已由人完成 | 可已有 worktree |
+| **全自动** | 指派 `on_assign=full_pipeline` 的 Squad，或 Autopilot | 从头（或配置的默认入口） | 编排层开 |
+
+硬规则：
+
+- 挂了 Squad **不禁止**人手开 Workspace、拖列、手点 merge——编排是加速层，不是锁死态。
+- 取消指派 / 取消 run → 回到纯 Issue，无残留强制状态机。
+- `on_assign` 默认仍为 `leader_only`（兼容旧 Squad）；模板 Closeout / Full Flow 才用 `full_pipeline`。
+
+### 2.2 任意节点切入（`start_from_node_id`）
+
+一条大 DAG 始终存在；运行时可选入口：
+
+```text
+POST /v1/squads/{id}/run
+{
+  "issue_id": "...",
+  "start_from_node_id": "n_verify",   // 可选；缺省 = 拓扑根
+  "working_directory": "..."
+}
+```
+
+语义：
+
+1. 以 `start_from_node_id` 为**唯一根**开始 walk（其上游节点**不执行**，记 `skipped_upstream`）。
+2. 从该节点出发的出边、while/fork/join 语义不变。
+3. UI 场景映射（同一模板）：
+
+| 用户场景 | 建议入口节点 |
+|----------|----------------|
+| 只有想法，要全自动 | 根：`ideate` / Research |
+| 方案已定，只要人写代码 | `implement_mvp` |
+| 代码写完，只要收尾 | Closeout 的 `review`（或独立 Closeout Squad） |
+| 只要回归 | `regress` script |
+| 只要问能不能合 | `ask_merge`（`wait_approval`） |
+
+节点可标 `stage` / `entry_label`（展示用），便于 Issue 上「快捷入口」按钮，而不强迫用户认 node id。
+
+Resume（门禁通过后）= 再次 `run`，`start_from_node_id` = 门禁节点的 default 出边目标。
+
+### 2.3 前端交互（产品规格）
+
+#### A. Issue 面板（Kanban 右侧）
+
+| 区块 | 行为 |
+|------|------|
+| **开发（保留）** | 现有：开 Workspace、关联 PR、Agent 任务列表——纯 Issue 主路径，位置与今日一致 |
+| **工作流条** | 有 `issue_workflow` 或活跃 `squad_run` 时显示：当前 stage + 节点进度点；无则隐藏（不打扰纯 Issue） |
+| **快捷运行** | 若项目有 Full Flow / Closeout 模板：下拉「从…开始」→ 选入口（按 `entry_label`）→ `run` 带 `start_from_node_id` |
+| **待审批** | run=`waiting_approval` 时置顶 Approve / Reject / 回复；与 Inbox 同源 |
+| **Artifacts** | 折叠区列出 proposal / test_report 等（Batch 3）；Batch 1 可用评论摘要代替 |
+
+#### B. Squad 编辑器（Agents 页）
+
+| 控件 | 行为 |
+|------|------|
+| 画布节点 | 现有 + `wait_approval` / `script` / `git_op` 进 palette |
+| 节点属性 | approval 文案、script 命令、git op、**entry_label**、绑定 **stage** |
+| `on_assign` | 下拉：仅 Leader / 跑全 Pipeline |
+| **运行** | 对话框：选 Issue + **从哪一步开始**（节点列表）+ 可选 path → 调 run API |
+| 画布右键节点 | 「从此处运行」（同 run + start_from） |
+
+#### C. Inbox
+
+- `type=workflow_approval`：标题含 Issue 标识 + 门禁种类（确认方案 / Ask Merge…）
+- 操作：Approve / Reject；Reject 可带 comment；跳转 Issue
+
+#### D. 看板卡片
+
+- 有活跃 pipeline run：小徽章「流水线中 / 待你批准」（复用 agent_task 徽章思路）
+- 无 run：无新 UI（纯 Issue 零噪音）
+
+#### E. 不改的交互
+
+- 创建 Issue、拖列、评论、@Agent、人手 Create Workspace、diff review、手动 rebase/PR——全部保留。
 
 ---
 
@@ -162,6 +251,7 @@ Agent 节点结束时：watcher / pipeline runner 解析评论或约定 JSON 块
 | git / PR | 仅 Workspace UI/API，人手点 | **`git_op` 节点**调用同一 API |
 | 测试 | Agent 自觉跑或人手 | **`script` 节点**跑 repo 脚本 |
 | 跑记录 | `RunSquadResponse` 瞬时 | 持久化 **`squad_runs` / `squad_run_nodes`** |
+| 入口 | 只能从头 / 手点 Run | **`start_from_node_id`**：任意节点切入；上游 skipped |
 
 ### 4.2 节点类型扩展
 
@@ -237,10 +327,23 @@ on_assign: 'leader_only' | 'full_pipeline'   -- 默认 leader_only 保持兼容
 Assignee 写入 `squad_id` 且 `on_assign=full_pipeline` 时：
 
 1. 创建 `squad_runs`（status=`running`）。
-2. 调用与 `POST /v1/squads/{id}/run` 相同的 `execute_squad_pipeline`。
+2. 后台调用与 `POST /v1/squads/{id}/run` 相同的 `execute_squad_pipeline`（**不阻塞**指派 API）。
 3. 不再只 enqueue leader（除非模板显式第一个节点就是 leader 规划步）。
 
+`on_assign=leader_only`（默认）：保持今日行为——只 enqueue leader，**纯 Issue + Leader 参谋**场景不受影响。
+
 Autopilot 已支持 `squad_id`；与之对齐即可。
+
+### 4.3b 节点展示字段（切入友好）
+
+`SquadPipelineNode` 增加可选：
+
+```text
+entry_label?: string   -- UI「从…开始」显示名，如「测试验证」「Ask Merge」
+stage?: string         -- 对齐 Stage Protocol id（ideate/verify/merge…）
+```
+
+无 `entry_label` 的节点仍可在高级列表里选 id，但不进 Issue 快捷入口。
 
 ### 4.4 持久化 run（建议）
 
@@ -370,10 +473,10 @@ Copilot/Research Agent
 | `issue_workflow` CRUD + shape | Issue 面板展示 stage |
 | `issue_artifacts` list/create | 流水线与 Agent 回写 |
 | `squads.on_assign` | 兼容默认 `leader_only` |
-| `POST /v1/squads/{id}/run` | 已有；指派路径复用 |
-| `POST /v1/squad-runs/{id}/approve` | body: `{ decision, comment? }` |
+| `POST /v1/squads/{id}/run` | 已有；扩展 `start_from_node_id`；指派 full_pipeline 复用 |
+| `POST /v1/squad-runs/{id}/approve` | body: `{ decision, comment? }`；通过后从下一节点 resume |
 | Inbox type | `workflow_approval` |
-| 节点枚举 | 扩展 `SquadPipelineNodeType` + 字段；`pnpm run remote:generate-types` |
+| 节点枚举 | 扩展 `SquadPipelineNodeType` + `entry_label`/`stage`；`pnpm run remote:generate-types` |
 
 ### 7.2 Local
 
@@ -384,12 +487,21 @@ Copilot/Research Agent
 
 首期实现建议：**Remote 编排状态机 + Local watcher 认新 task kind**，避免 Remote 直连用户机器 git。
 
-### 7.3 UI
+### 7.3 UI（与 §2.3 对齐，Batch 1 必做子集）
 
-- Issue：Stage 条 + Artifacts 折叠 + 流水线进度。
-- 评论 / Inbox：Approve / Reject / 回复。
-- Agents：一键安装模板「Feature Closeout」「Full Feature Flow」（建 Agents + Squad + 可选列名）。
-- Squad 编辑器：新节点类型表单（approval / script / git_op）。
+**Batch 1 必做：**
+
+- Squad 编辑器：palette 增加 `wait_approval`；节点可填 `entry_label` / approval 文案；`on_assign` 开关。
+- Run 对话框：选 Issue + **从哪一步开始**（有 entry_label 的节点优先）。
+- Issue 面板：活跃 run 进度条 + 待审批 Approve/Reject（可先只读 agent tasks，Batch 1 末加上 run）。
+- Inbox：`workflow_approval` 展示与操作。
+
+**Batch 1 明确不做（留给后续，避免吵纯 Issue）：**
+
+- 强制 Stage 条占位；无 run 时 Issue 面板零新增控件。
+- 替换「开 Workspace」主按钮。
+
+**Batch 2+：** Closeout 模板一键安装、script/git_op 表单、Artifacts 折叠、看板流水线徽章。
 
 ---
 
@@ -399,23 +511,31 @@ Copilot/Research Agent
 
 - Stage 语义、粗列映射、Closeout 故事、非目标。
 
-### Batch 1 — 门禁 + 指派跑全 pipeline
+### Batch 1 — 门禁 + 任意切入 + 指派跑全 pipeline
 
 **验收：**
 
-1. Squad `on_assign=full_pipeline`，指派后自动跑多 agent 节点（不必手点 Run）。
-2. `wait_approval` 卡住；Inbox 可 Approve；通过后继续下一节点。
-3. Issue 上可见 run 进度。
+1. **纯 Issue 不回归**：不指派 Squad / `on_assign=leader_only` 时，行为与改造前一致。
+2. Squad `on_assign=full_pipeline`，指派后自动跑多 agent 节点（不必手点 Run）。
+3. Run 可带 `start_from_node_id`；上游不执行；UI 能选「从该步骤运行」。
+4. `wait_approval` 卡住；Inbox / Issue 可 Approve；通过后从下一节点继续。
+5. Issue 上可见 run 进度（有 run 才显示）。
 
-### Batch 2 — Closeout 可演示
+### Batch 2 — Closeout 可演示 — **代码已落地（待 ubuntu1 验证）**
 
-**验收：**
+**已实现：**
 
-1. 模板安装后，对有 Workspace 的 Feature 指派 Closeout。
-2. Review while 环至少能追问/回修 1 轮。
-3. `script` 跑通项目 check；失败不进入 merge。
+1. `script` / `git_op` 经 `execution_prompt` JSON 入队；Local `AgentTaskWatcher` 执行（rebase/merge/push/shell）。
+2. `POST /v1/projects/{id}/workflow-templates/feature-closeout` + UI「安装 Closeout 模板」。
+3. Closeout pipeline：Review → 完成度 if → Fixer 环 → Tester → script check → rebase → Ask Merge。
+
+**验收（在 ubuntu1，勿碰本机 vk-stop/start）：**
+
+1. 安装模板后，对有 Workspace 的 Feature 指派 Closeout 或从「代码审查」切入。
+2. Review while / if 环至少能追问/回修 1 轮。
+3. `script` 跑通；失败不进入 rebase。
 4. `git_op rebase` 成功后出现 Ask Merge。
-5. Approve 后 merge 或建 PR；Issue → Done（或 In review 若仅建 PR）。
+5. Approve 后可继续（merge 节点可另挂；默认 Ask Merge 为人批终点）。
 
 ### Batch 3 — Stage Protocol + Full Flow 前半
 

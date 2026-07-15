@@ -492,4 +492,24 @@ impl AgentTaskRepository {
         tx.commit().await?;
         Ok(DeleteResponse { txid })
     }
+
+    /// Most recent local workspace id recorded for an issue (prior coding steps).
+    pub async fn latest_local_workspace_for_issue(
+        pool: &PgPool,
+        issue_id: Uuid,
+    ) -> Result<Option<Uuid>, AgentTaskError> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT local_workspace_id
+            FROM agent_tasks
+            WHERE issue_id = $1 AND local_workspace_id IS NOT NULL
+            ORDER BY updated_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
 }

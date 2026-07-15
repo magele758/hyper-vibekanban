@@ -58,6 +58,7 @@ pub mod squads;
 pub mod tags;
 mod tokens;
 pub mod webhooks;
+pub mod workflow_templates;
 mod workspaces;
 
 pub fn router(state: AppState) -> Router {
@@ -134,6 +135,7 @@ pub fn router(state: AppState) -> Router {
         .merge(agent_tasks::router())
         .merge(autopilots::router())
         .merge(squads::router())
+        .merge(workflow_templates::router())
         .merge(inbox::router())
         .merge(webhooks::router())
         .merge(feishu::router())

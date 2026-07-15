@@ -1,8 +1,8 @@
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use api_types::{
-    AgentTask, AgentTaskStatus, ClaimAgentTaskRequest, CreateIssueCommentRequest,
-    UpdateAgentTaskRequest,
+    AgentTask, AgentTaskStatus, ClaimAgentTaskRequest, CreateIssueCommentRequest, PipelineJobKind,
+    PipelineJobSpec, UpdateAgentTaskRequest,
 };
 use db::{
     DBService,
@@ -23,6 +23,7 @@ use executors::{
     executors::BaseCodingAgent,
     profile::ExecutorConfig,
 };
+use git::GitServiceError;
 use services::services::{
     container::ContainerService,
     remote_client::{RemoteClient, RemoteClientError},
@@ -93,6 +94,16 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             issue_id = %task.issue_id,
             "Claimed agent task"
         );
+
+        // Squad pipeline script / git_op jobs (not coding agents).
+        if let Some(job) = task
+            .execution_prompt
+            .as_deref()
+            .and_then(api_types::PipelineJobSpec::parse)
+        {
+            self.run_pipeline_job(&task, job).await;
+            return Ok(());
+        }
 
         let agent = match self.remote_client.get_agent(task.agent_id).await {
             Ok(agent) => agent,
@@ -456,6 +467,268 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
         }
 
         Ok(())
+    }
+
+    async fn run_pipeline_job(&self, task: &AgentTask, job: PipelineJobSpec) {
+        let label = job.label.as_deref().unwrap_or("pipeline-job");
+        info!(task_id = %task.id, ?job.kind, %label, "Running pipeline job");
+
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Running),
+                    failure_reason: None,
+                    local_workspace_id: job.local_workspace_id.map(Some),
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                },
+            )
+            .await;
+
+        let workspace_id = match job.local_workspace_id {
+            Some(id) => id,
+            None => {
+                self.fail_pipeline_job(
+                    task,
+                    format!(
+                        "{label}: no local_workspace_id — run a coding step first so the issue has a workspace"
+                    ),
+                )
+                .await;
+                return;
+            }
+        };
+
+        let workspace = match Workspace::find_by_id(&self.db.pool, workspace_id).await {
+            Ok(Some(ws)) => ws,
+            Ok(None) => {
+                self.fail_pipeline_job(
+                    task,
+                    format!("{label}: workspace {workspace_id} not found on this host"),
+                )
+                .await;
+                return;
+            }
+            Err(e) => {
+                self.fail_pipeline_job(task, format!("{label}: load workspace: {e}"))
+                    .await;
+                return;
+            }
+        };
+
+        if let Err(e) = self.container.ensure_container_exists(&workspace).await {
+            self.fail_pipeline_job(task, format!("{label}: ensure container: {e}"))
+                .await;
+            return;
+        }
+
+        let repos = match WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await
+        {
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => {
+                self.fail_pipeline_job(task, format!("{label}: workspace has no repos"))
+                    .await;
+                return;
+            }
+            Err(e) => {
+                self.fail_pipeline_job(task, format!("{label}: list repos: {e}"))
+                    .await;
+                return;
+            }
+        };
+        let repo = &repos[0];
+        let workspace_root = match workspace.container_ref.as_ref() {
+            Some(r) => std::path::PathBuf::from(r),
+            None => {
+                self.fail_pipeline_job(task, format!("{label}: missing container_ref"))
+                    .await;
+                return;
+            }
+        };
+        let worktree_path = workspace
+            .kind
+            .repo_working_path(&workspace_root, &repo.name);
+
+        let result = match job.kind {
+            PipelineJobKind::Script => {
+                let command = job.command.as_deref().unwrap_or("").trim();
+                if command.is_empty() {
+                    Err("script job missing command".into())
+                } else {
+                    self.run_script_job(&worktree_path, command).await
+                }
+            }
+            PipelineJobKind::GitOp => {
+                let op = job.op.as_deref().unwrap_or("rebase");
+                let target = job
+                    .target_branch
+                    .as_deref()
+                    .unwrap_or(repo.default_target_branch.as_deref().unwrap_or("main"));
+                self.run_git_op_job(&workspace, repo, &worktree_path, op, target)
+                    .await
+            }
+        };
+
+        match result {
+            Ok(summary) => {
+                let _ = self
+                    .remote_client
+                    .update_agent_task(
+                        task.id,
+                        &UpdateAgentTaskRequest {
+                            status: Some(AgentTaskStatus::Completed),
+                            failure_reason: None,
+                            local_workspace_id: Some(Some(workspace.id)),
+                            local_session_id: None,
+                            claimed_by_host: None,
+                            attempt: None,
+                        },
+                    )
+                    .await;
+                let _ = self
+                    .remote_client
+                    .create_issue_comment(&CreateIssueCommentRequest {
+                        id: None,
+                        issue_id: task.issue_id,
+                        parent_id: None,
+                        message: format!("Pipeline **{label}** completed.\n\n{summary}"),
+                    })
+                    .await;
+            }
+            Err(reason) => {
+                self.fail_pipeline_job(task, format!("{label}: {reason}"))
+                    .await;
+            }
+        }
+    }
+
+    async fn run_script_job(&self, worktree_path: &Path, command: &str) -> Result<String, String> {
+        use std::process::Stdio;
+
+        use tokio::process::Command;
+
+        let output = Command::new("bash")
+            .arg("-lc")
+            .arg(command)
+            .current_dir(worktree_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| format!("spawn failed: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let tail = |s: &str| {
+            let t = s.trim();
+            if t.len() > 2000 {
+                format!("…{}", &t[t.len() - 2000..])
+            } else {
+                t.to_string()
+            }
+        };
+        if output.status.success() {
+            Ok(format!(
+                "`$ {command}` exit 0\n\nstdout:\n{}\n\nstderr:\n{}",
+                tail(&stdout),
+                tail(&stderr)
+            ))
+        } else {
+            Err(format!(
+                "`$ {command}` failed ({})\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                tail(&stdout),
+                tail(&stderr)
+            ))
+        }
+    }
+
+    async fn run_git_op_job(
+        &self,
+        workspace: &Workspace,
+        repo: &Repo,
+        worktree_path: &Path,
+        op: &str,
+        target_branch: &str,
+    ) -> Result<String, String> {
+        let git = self.container.git();
+        match op {
+            "rebase" => {
+                git.rebase_branch(
+                    &repo.path,
+                    worktree_path,
+                    target_branch,
+                    target_branch,
+                    &workspace.branch,
+                )
+                .map_err(|e| match e {
+                    GitServiceError::MergeConflicts {
+                        message,
+                        conflicted_files,
+                    } => format!("rebase conflict: {message}; files={conflicted_files:?}"),
+                    other => format!("rebase failed: {other}"),
+                })?;
+                Ok(format!(
+                    "rebased `{}` onto `{target_branch}`",
+                    workspace.branch
+                ))
+            }
+            "merge" => {
+                git.merge_changes(
+                    &repo.path,
+                    worktree_path,
+                    &workspace.branch,
+                    target_branch,
+                    &format!("Merge branch '{}'", workspace.branch),
+                )
+                .map_err(|e| format!("merge failed: {e}"))?;
+                Ok(format!(
+                    "merged `{}` into `{target_branch}`",
+                    workspace.branch
+                ))
+            }
+            "push" => {
+                git.push_to_remote(worktree_path, &workspace.branch, false)
+                    .map_err(|e| format!("push failed: {e}"))?;
+                Ok(format!("pushed `{}`", workspace.branch))
+            }
+            "create_pr" => Err(
+                "create_pr via pipeline job is not implemented yet; use Ask Merge + manual PR"
+                    .into(),
+            ),
+            other => Err(format!("unknown git_op `{other}`")),
+        }
+    }
+
+    async fn fail_pipeline_job(&self, task: &AgentTask, reason: String) {
+        warn!(task_id = %task.id, %reason, "pipeline job failed");
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Failed),
+                    failure_reason: Some(Some(reason.clone())),
+                    local_workspace_id: None,
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                },
+            )
+            .await;
+        let _ = self
+            .remote_client
+            .create_issue_comment(&CreateIssueCommentRequest {
+                id: None,
+                issue_id: task.issue_id,
+                parent_id: None,
+                message: format!("Pipeline job failed: {reason}"),
+            })
+            .await;
     }
 
     async fn fail_or_requeue(

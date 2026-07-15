@@ -740,6 +740,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
       issue_id: null,
       working_directory: null,
       pipeline: { nodes: [], edges: [] },
+      on_assign: 'leader_only',
     });
     setError(null);
     setRunMsg(null);
@@ -756,6 +757,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
       issue_id: null,
       working_directory: null,
       pipeline: { nodes: [], edges: [] },
+      on_assign: 'leader_only',
     });
     setError(null);
     setRunMsg(null);
@@ -793,6 +795,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id ?? undefined,
           working_directory: draft.working_directory ?? undefined,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         });
       } else if (editingId) {
         await boardAgentsApi.updateSquad(editingId, {
@@ -802,6 +805,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id,
           working_directory: draft.working_directory,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
       }
       closeEditor();
@@ -817,7 +821,46 @@ function SquadsTab({ projectId }: { projectId: string }) {
     setError(null);
     setRunMsg(null);
     try {
-      // Persist draft first if editing this squad
+      const squad =
+        editingId === squadId && draft
+          ? null
+          : squads.find((s) => s.id === squadId);
+      const pipeline =
+        editingId === squadId && draft
+          ? draft.pipeline
+          : (squad?.pipeline ?? { nodes: [], edges: [] });
+      const entryNodes = pipeline.nodes.filter(
+        (n) => n.entry_label?.trim() || n.type === 'wait_approval'
+      );
+      const choices = [
+        { id: '', label: '从头（拓扑根）' },
+        ...pipeline.nodes.map((n) => ({
+          id: n.id,
+          label:
+            n.entry_label?.trim() ||
+            n.label?.trim() ||
+            `${n.type ?? 'agent'}:${n.id.slice(0, 8)}`,
+        })),
+      ];
+      // Prefer prompting when there are mid-entry labels; otherwise still allow pick.
+      const picked =
+        entryNodes.length > 0 || pipeline.nodes.length > 1
+          ? window.prompt(
+              `从哪一步开始？输入编号 0-${choices.length - 1}\n` +
+                choices.map((c, i) => `${i}. ${c.label}`).join('\n'),
+              '0'
+            )
+          : '0';
+      if (picked == null) {
+        setRunning(false);
+        return;
+      }
+      const idx = Number(picked);
+      const startFrom =
+        Number.isFinite(idx) && idx > 0 && idx < choices.length
+          ? choices[idx].id
+          : undefined;
+
       if (editingId === squadId && draft) {
         await boardAgentsApi.updateSquad(squadId, {
           name: draft.name.trim(),
@@ -826,13 +869,27 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id,
           working_directory: draft.working_directory,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
       }
-      const result = await boardAgentsApi.runSquad(squadId);
+      const result = await boardAgentsApi.runSquad(squadId, {
+        issue_id:
+          editingId === squadId && draft
+            ? (draft.issue_id ?? undefined)
+            : (squad?.issue_id ?? undefined),
+        working_directory:
+          editingId === squadId && draft
+            ? (draft.working_directory ?? undefined)
+            : (squad?.working_directory ?? undefined),
+        start_from_node_id: startFrom || undefined,
+      });
+      const status = result.status ?? 'completed';
       setRunMsg(
-        `已入队 ${result.agent_task_ids.length} 个任务（Issue ${result.issue_id.slice(0, 8)}…，目标 ${result.target_type}${
-          result.working_directory ? ` @ ${result.working_directory}` : ''
-        }）`
+        status === 'waiting_approval'
+          ? `已暂停待确认（run ${result.run_id?.slice(0, 8) ?? '?'}…）。请到 Inbox / Issue 批准。`
+          : `已完成/入队 ${result.agent_task_ids.length} 个任务（Issue ${result.issue_id.slice(0, 8)}…，目标 ${result.target_type}${
+              result.working_directory ? ` @ ${result.working_directory}` : ''
+            }${startFrom ? `，从 ${startFrom}` : ''}）`
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -891,6 +948,35 @@ function SquadsTab({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-low hover:bg-secondary"
+            disabled={busy}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                setError(null);
+                setRunMsg(null);
+                try {
+                  const r =
+                    await boardAgentsApi.installFeatureCloseout(projectId);
+                  setRunMsg(
+                    `已安装 Feature Closeout（Squad ${r.squad.name}${
+                      r.created_agent_names.length
+                        ? `，新建 Agent：${r.created_agent_names.join('、')}`
+                        : ''
+                    }）。可指派到 Issue，或「从某步运行」。`
+                  );
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            安装 Closeout 模板
+          </button>
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/15"
