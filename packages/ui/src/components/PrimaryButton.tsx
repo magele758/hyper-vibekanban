@@ -9,6 +9,7 @@ interface PrimaryButtonProps {
   disabled?: boolean;
   children?: React.ReactNode;
   className?: string;
+  title?: string;
 }
 
 export function PrimaryButton({
@@ -19,6 +20,7 @@ export function PrimaryButton({
   disabled,
   children,
   className,
+  title,
 }: PrimaryButtonProps) {
   const variantStyles = disabled
     ? 'cursor-not-allowed bg-panel'
@@ -37,6 +39,7 @@ export function PrimaryButton({
       )}
       onClick={onClick}
       disabled={disabled}
+      title={title}
     >
       {value}
       {children}

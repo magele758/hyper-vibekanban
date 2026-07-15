@@ -64,6 +64,10 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
   );
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isAppBarExpanded, setIsAppBarExpanded] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("vk-appbar-expanded") === "1";
+  });
 
   const { data: organizationsData } = useUserOrganizations();
   const organizations = organizationsData?.organizations ?? [];
@@ -144,6 +148,21 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
     return segments[projectSegmentIndex + 1] ?? null;
   }, [location.pathname]);
 
+  const activeProjectSubNav = useMemo(() => {
+    if (!activeProjectId) return null;
+    const path = location.pathname;
+    if (path.includes(`/projects/${activeProjectId}/agents`)) {
+      return "agents" as const;
+    }
+    if (path.includes(`/projects/${activeProjectId}/copilot`)) {
+      return "copilot" as const;
+    }
+    if (path.includes(`/projects/${activeProjectId}/inbox`)) {
+      return "inbox" as const;
+    }
+    return "board" as const;
+  }, [activeProjectId, location.pathname]);
+
   const openRelaySettings = useCallback((hostId?: string) => {
     void SettingsDialog.show({
       initialSection: "relay",
@@ -183,6 +202,46 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
       }
     },
     [activeProjectId],
+  );
+
+  const handleNavigateBoard = useCallback(
+    (projectId: string) => {
+      navigate({
+        to: "/projects/$projectId",
+        params: { projectId },
+      });
+    },
+    [navigate],
+  );
+
+  const handleNavigateAgents = useCallback(
+    (projectId: string) => {
+      navigate({
+        to: "/projects/$projectId/agents",
+        params: { projectId },
+      });
+    },
+    [navigate],
+  );
+
+  const handleNavigateCopilot = useCallback(
+    (projectId: string) => {
+      navigate({
+        to: "/projects/$projectId/copilot",
+        params: { projectId },
+      });
+    },
+    [navigate],
+  );
+
+  const handleNavigateInbox = useCallback(
+    (projectId: string) => {
+      navigate({
+        to: "/projects/$projectId/inbox",
+        params: { projectId },
+      });
+    },
+    [navigate],
   );
 
   const handleCreateProject = useCallback(async () => {
@@ -274,6 +333,22 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
             onSignIn={() => {
               navigate({ to: "/account" });
             }}
+            expanded={isAppBarExpanded}
+            onToggleExpanded={() => {
+              setIsAppBarExpanded((v) => {
+                const next = !v;
+                window.localStorage.setItem(
+                  "vk-appbar-expanded",
+                  next ? "1" : "0",
+                );
+                return next;
+              });
+            }}
+            activeProjectSubNav={activeProjectSubNav}
+            onNavigateBoard={handleNavigateBoard}
+            onNavigateAgents={handleNavigateAgents}
+            onNavigateCopilot={handleNavigateCopilot}
+            onNavigateInbox={handleNavigateInbox}
             notificationBell={
               isSignedIn ? <AppBarNotificationBellContainer /> : undefined
             }
