@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM session_queued_messages WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "ad1ea1c8c89aa423d4d4da1f1fad285c74006f4ef481b54770ed4fe2e691783a"
+}

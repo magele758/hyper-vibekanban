@@ -107,7 +107,15 @@
     "logsCopied": "Copied!"
   },
   "followUp": {
-    "queuedMessage": "Message queued - will execute when current run finishes"
+    "queuedMessage": "Message queued - will execute when current run finishes",
+    "queue": {
+      "title": "Queue ({{count}})",
+      "clear": "Clear all",
+      "edit": "Edit",
+      "remove": "Remove",
+      "save": "Save",
+      "reorder": "Reorder"
+    }
   },
   "todoPopup": {
     "title": "Tasks",

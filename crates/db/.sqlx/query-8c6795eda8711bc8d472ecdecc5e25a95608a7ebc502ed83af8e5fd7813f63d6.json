@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(MAX(position), -1) + 1 AS \"position!: i64\"\n               FROM session_queued_messages\n               WHERE session_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "position!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8c6795eda8711bc8d472ecdecc5e25a95608a7ebc502ed83af8e5fd7813f63d6"
+}

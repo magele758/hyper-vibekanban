@@ -3,7 +3,6 @@ import {
   type Icon,
   PaperclipIcon,
   CheckIcon,
-  ClockIcon,
   XIcon,
   PlusIcon,
   SpinnerIcon,
@@ -193,6 +192,8 @@ interface SessionChatBoxProps<TExecutor extends string = string> {
   tokenUsageInfo?: ContextUsageInfo | null;
   supportsContextUsage?: boolean;
   dropzone?: DropzoneProps;
+  /** Optional queue panel rendered above the input banners */
+  queuePanel?: ReactNode;
 }
 
 function defaultExecutorLabel(executor: string) {
@@ -255,6 +256,7 @@ export function SessionChatBox<TExecutor extends string = string>({
   tokenUsageInfo,
   supportsContextUsage,
   dropzone,
+  queuePanel,
 }: SessionChatBoxProps<TExecutor>) {
   const { t } = useTranslation('tasks');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -290,9 +292,9 @@ export function SessionChatBox<TExecutor extends string = string>({
     editor.value.trim().length > 0 || (reviewComments?.count ?? 0) > 0;
   const canSend =
     hasContent && !['sending', 'stopping', 'queue-loading'].includes(status);
-  const isQueued = status === 'queued';
   const isRunning = status === 'running' || status === 'queued';
-  const areContentInsertActionsDisabled = isDisabled || isQueued;
+  // Queue no longer locks the editor — users can keep appending while queued.
+  const areContentInsertActionsDisabled = isDisabled;
   const showRunningAnimation =
     (status === 'running' || status === 'queued' || status === 'sending') &&
     !isInApprovalMode &&
@@ -332,7 +334,7 @@ export function SessionChatBox<TExecutor extends string = string>({
       feedbackMode?.onSubmitFeedback();
     } else if (isInEditMode && canSend) {
       editMode?.onSubmitEdit();
-    } else if (status === 'running' && canSend) {
+    } else if ((status === 'running' || status === 'queued') && canSend) {
       actions.onQueue();
     } else if (status === 'idle' && canSend) {
       actions.onSend();
@@ -538,10 +540,17 @@ export function SessionChatBox<TExecutor extends string = string>({
         );
 
       case 'queued':
+        // Kept for backward compatibility; multi-queue uses running + panel.
         return (
           <>
             <PrimaryButton
+              onClick={actions.onQueue}
+              disabled={!canSend}
+              value={t('conversation.actions.queue')}
+            />
+            <PrimaryButton
               onClick={actions.onCancelQueue}
+              variant="secondary"
               value={t('conversation.actions.cancelQueue')}
               actionIcon={XIcon}
             />
@@ -580,6 +589,10 @@ export function SessionChatBox<TExecutor extends string = string>({
   const renderBanner = () => {
     const banners: ReactNode[] = [];
 
+    if (queuePanel) {
+      banners.push(<div key="queue-panel">{queuePanel}</div>);
+    }
+
     // Review comments banner
     if (reviewComments && reviewComments.count > 0) {
       banners.push(
@@ -616,21 +629,6 @@ export function SessionChatBox<TExecutor extends string = string>({
           isTimedOut={askQuestionMode.isTimedOut}
           error={askQuestionMode.error ?? null}
         />
-      );
-    }
-
-    // Queued message banner
-    if (isQueued) {
-      banners.push(
-        <div
-          key="queued"
-          className="bg-secondary border-b px-double py-base flex items-center gap-base"
-        >
-          <ClockIcon className="h-4 w-4 text-low" />
-          <span className="text-sm text-low">
-            {t('followUp.queuedMessage')}
-          </span>
-        </div>
       );
     }
 

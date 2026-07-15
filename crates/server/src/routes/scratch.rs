@@ -46,15 +46,6 @@ pub async fn create_scratch(
     Path(ScratchPath { scratch_type, id }): Path<ScratchPath>,
     Json(payload): Json<CreateScratch>,
 ) -> Result<ResponseJson<ApiResponse<Scratch>>, ApiError> {
-    // Reject edits to draft_follow_up if a message is queued for this workspace
-    if matches!(scratch_type, ScratchType::DraftFollowUp)
-        && deployment.queued_message_service().has_queued(id)
-    {
-        return Err(ApiError::BadRequest(
-            "Cannot edit scratch while a message is queued".to_string(),
-        ));
-    }
-
     // Validate that payload type matches URL type
     payload
         .payload
@@ -70,15 +61,6 @@ pub async fn update_scratch(
     Path(ScratchPath { scratch_type, id }): Path<ScratchPath>,
     Json(payload): Json<UpdateScratch>,
 ) -> Result<ResponseJson<ApiResponse<Scratch>>, ApiError> {
-    // Reject edits to draft_follow_up if a message is queued for this workspace
-    if matches!(scratch_type, ScratchType::DraftFollowUp)
-        && deployment.queued_message_service().has_queued(id)
-    {
-        return Err(ApiError::BadRequest(
-            "Cannot edit scratch while a message is queued".to_string(),
-        ));
-    }
-
     // Validate that payload type matches URL type
     payload
         .payload
