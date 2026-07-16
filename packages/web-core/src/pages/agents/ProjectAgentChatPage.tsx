@@ -643,7 +643,13 @@ function AgentChatInner({
               )}
               <div className="mt-2 flex items-center gap-2 border-t border-border/60 pt-2 text-xs text-low">
                 <SpinnerIcon className="size-3.5 shrink-0 animate-spin text-brand" />
-                <span className="animate-pulse">Agent 运行中…</span>
+                <span className="animate-pulse">
+                  {streaming
+                    ? toolStatus && !toolStatus.done
+                      ? '工具执行中…'
+                      : '生成中…'
+                    : '收尾中…'}
+                </span>
                 {toolStatus && (
                   <span className="truncate opacity-80">
                     ·{' '}
