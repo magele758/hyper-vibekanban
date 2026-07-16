@@ -493,12 +493,14 @@ impl AgentTaskRepository {
         Ok(DeleteResponse { txid })
     }
 
-    /// Most recent local workspace id recorded for an issue (prior coding steps).
+    /// Most recent local workspace id for an issue.
+    /// Prefers agent_tasks (coding/pipeline steps), then falls back to linked
+    /// `workspaces` rows (manual Workspace / linked_issue start).
     pub async fn latest_local_workspace_for_issue(
         pool: &PgPool,
         issue_id: Uuid,
     ) -> Result<Option<Uuid>, AgentTaskError> {
-        let row: Option<(Uuid,)> = sqlx::query_as(
+        let from_task: Option<(Uuid,)> = sqlx::query_as(
             r#"
             SELECT local_workspace_id
             FROM agent_tasks
@@ -510,6 +512,25 @@ impl AgentTaskRepository {
         .bind(issue_id)
         .fetch_optional(pool)
         .await?;
-        Ok(row.map(|r| r.0))
+        if let Some((id,)) = from_task {
+            return Ok(Some(id));
+        }
+        // Prefer the earliest linked workspace (usually the implement worktree);
+        // later auto-spawned agent workspaces should not steal script/git_op.
+        let from_ws: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT local_workspace_id
+            FROM workspaces
+            WHERE issue_id = $1
+              AND local_workspace_id IS NOT NULL
+              AND archived = false
+            ORDER BY created_at ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(from_ws.map(|r| r.0))
     }
 }

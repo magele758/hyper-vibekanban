@@ -244,9 +244,21 @@ async fn approve_squad_run(
     let decision = payload.decision.trim().to_lowercase();
     match decision.as_str() {
         "approve" => {
-            let resume_node = run.resume_node_id.clone().ok_or_else(|| {
-                ErrorResponse::new(StatusCode::BAD_REQUEST, "run has no resume_node_id")
-            })?;
+            // Terminal Ask Merge (no outgoing edge): approval completes the run.
+            // When merge/create_pr nodes exist after the gate, resume_node_id is set.
+            let Some(resume_node) = run.resume_node_id.clone() else {
+                let run = SquadRunRepository::mark_completed(state.pool(), id, &[], &[])
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(?e, "failed to complete terminal approval");
+                        ErrorResponse::new(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "failed to complete run",
+                        )
+                    })?;
+                return Ok(Json(ApproveSquadRunResponse { run, resumed: None }));
+            };
+
             let _ =
                 SquadRunRepository::mark_status(state.pool(), id, SquadRunStatus::Running, None)
                     .await
@@ -1620,12 +1632,27 @@ pub async fn execute_squad_pipeline(
     .execute(pool)
     .await;
 
+    let last_failed = shared
+        .last_agent_result
+        .lock()
+        .await
+        .as_ref()
+        .is_some_and(|r| r.status != AgentTaskStatus::Completed);
+    let fail_msg = shared
+        .last_agent_result
+        .lock()
+        .await
+        .as_ref()
+        .and_then(|r| r.failure_reason.clone());
+
     let (status, pause_node_id, resume_node_id) = if let Some(ref p) = pause {
         (
             SquadRunStatus::WaitingApproval,
             Some(p.pause_node_id.clone()),
             p.resume_node_id.clone(),
         )
+    } else if last_failed {
+        (SquadRunStatus::Failed, None, None)
     } else {
         (SquadRunStatus::Completed, None, None)
     };
@@ -1639,6 +1666,15 @@ pub async fn execute_squad_pipeline(
                 p.resume_node_id.clone(),
                 p.approval_kind.clone(),
                 p.approval_prompt.clone(),
+            )
+            .await
+            .ok()
+        } else if last_failed {
+            SquadRunRepository::mark_status(
+                pool,
+                resume_id,
+                SquadRunStatus::Failed,
+                fail_msg.clone(),
             )
             .await
             .ok()
@@ -1673,6 +1709,15 @@ pub async fn execute_squad_pipeline(
                     p.resume_node_id.clone(),
                     p.approval_kind.clone(),
                     p.approval_prompt.clone(),
+                )
+                .await
+                .ok()
+            } else if last_failed {
+                SquadRunRepository::mark_status(
+                    pool,
+                    run.id,
+                    SquadRunStatus::Failed,
+                    fail_msg.clone(),
                 )
                 .await
                 .ok()
