@@ -74,6 +74,10 @@ function AgentChatInner({
   const busy = chatBusy || configBusy;
   const [error, setError] = useState<string | null>(null);
   const [justFinished, setJustFinished] = useState(false);
+  const [turnMeta, setTurnMeta] = useState<{
+    transport?: string;
+    history_turns?: number;
+  } | null>(null);
   const [llm, setLlm] = useState<AgentLlmSettings | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
@@ -258,6 +262,7 @@ function AgentChatInner({
     setError(null);
     setStreaming('');
     setToolStatus(null);
+    setTurnMeta(null);
     setInput('');
 
     try {
@@ -300,6 +305,12 @@ function AgentChatInner({
             setLastEffectiveCwd({
               cwd: status.cwd,
               source: status.cwd_source,
+            });
+          }
+          if (status.transport || status.history_turns != null) {
+            setTurnMeta({
+              transport: status.transport,
+              history_turns: status.history_turns,
             });
           }
         },
@@ -650,6 +661,19 @@ function AgentChatInner({
                       : '生成中…'
                     : '收尾中…'}
                 </span>
+                {turnMeta?.transport && (
+                  <span className="truncate opacity-70">
+                    ·{' '}
+                    {turnMeta.transport === 'openai-compatible'
+                      ? 'OpenAI 兼容'
+                      : turnMeta.transport === 'cursor-sdk'
+                        ? 'Cursor SDK'
+                        : turnMeta.transport}
+                    {turnMeta.history_turns != null
+                      ? ` · 上下文 ${turnMeta.history_turns} 条`
+                      : ''}
+                  </span>
+                )}
                 {toolStatus && (
                   <span className="truncate opacity-80">
                     ·{' '}
