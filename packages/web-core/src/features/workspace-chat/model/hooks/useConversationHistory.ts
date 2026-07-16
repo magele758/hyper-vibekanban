@@ -10,21 +10,33 @@ import type {
   AddEntryType,
   ConversationTimelineSource,
   ExecutionProcessStateStore,
-  PatchTypeWithKey,
   UseConversationHistoryParams,
 } from '@/shared/hooks/useConversationHistory/types';
+import {
+  INITIAL_HISTORIC_CODING_AGENT_PROCESSES,
+  LOAD_MORE_CODING_AGENT_PROCESSES,
+} from '@/shared/hooks/useConversationHistory/constants';
 
 // Result type for the new UI's conversation history hook
 export interface UseConversationHistoryResult {
   /** Whether the conversation only has a single coding agent turn (no follow-ups) */
   isFirstTurn: boolean;
-  /** Whether background batches are still loading older history entries */
+  /** Whether an older-history batch is currently loading (scroll-triggered) */
   isLoadingHistory: boolean;
+  /** Whether older historic processes exist that have not been loaded yet */
+  hasMoreHistory: boolean;
+  /** Load the next batch of older history (no-op if already loading / none left) */
+  loadMoreHistory: () => Promise<void>;
 }
-import {
-  MIN_INITIAL_ENTRIES,
-  REMAINING_BATCH_SIZE,
-} from '@/shared/hooks/useConversationHistory/constants';
+
+function isCodingAgentProcess(executionProcess: ExecutionProcess): boolean {
+  const typ = executionProcess.executor_action.typ.type;
+  return (
+    typ === 'CodingAgentInitialRequest' ||
+    typ === 'CodingAgentFollowUpRequest' ||
+    typ === 'ReviewRequest'
+  );
+}
 
 export const useConversationHistory = ({
   onTimelineUpdated,
@@ -40,6 +52,7 @@ export const useConversationHistory = ({
   const loadedInitialEntries = useRef(false);
   const emittedEmptyInitialRef = useRef(false);
   const streamingProcessIdsRef = useRef<Set<string>>(new Set());
+  const loadingMoreRef = useRef(false);
   const onTimelineUpdatedRef = useRef<
     UseConversationHistoryParams['onTimelineUpdated'] | null
   >(null);
@@ -47,6 +60,7 @@ export const useConversationHistory = ({
     new Map()
   );
   const [isLoadingHistoryState, setIsLoadingHistory] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
 
   // Derive whether this is the first turn (no follow-up processes exist)
   const isFirstTurn = useMemo(() => {
@@ -93,6 +107,14 @@ export const useConversationHistory = ({
     );
   }, [executionProcessesRaw]);
 
+  const refreshHasMoreHistory = useCallback(() => {
+    const displayed = displayedExecutionProcesses.current;
+    const more = (executionProcesses.current ?? []).some(
+      (p) => p.status !== ExecutionProcessStatus.running && !displayed[p.id]
+    );
+    setHasMoreHistory(more);
+  }, []);
+
   const loadEntriesForHistoricExecutionProcess = (
     executionProcess: ExecutionProcess
   ) => {
@@ -131,28 +153,6 @@ export const useConversationHistory = ({
       patchKey: `${executionProcessId}:${index}`,
       executionProcessId,
     };
-  };
-
-  const flattenEntries = (
-    executionProcessState: ExecutionProcessStateStore
-  ): PatchTypeWithKey[] => {
-    return Object.values(executionProcessState)
-      .filter(
-        (p) =>
-          p.executionProcess.executor_action.typ.type ===
-            'CodingAgentFollowUpRequest' ||
-          p.executionProcess.executor_action.typ.type ===
-            'CodingAgentInitialRequest' ||
-          p.executionProcess.executor_action.typ.type === 'ReviewRequest'
-      )
-      .sort(
-        (a, b) =>
-          new Date(
-            a.executionProcess.created_at as unknown as string
-          ).getTime() -
-          new Date(b.executionProcess.created_at as unknown as string).getTime()
-      )
-      .flatMap((p) => p.entries);
   };
 
   const getActiveAgentProcesses = (): ExecutionProcess[] => {
@@ -257,17 +257,44 @@ export const useConversationHistory = ({
     [loadRunningAndEmit]
   );
 
-  const loadHistoricEntries = useCallback(
-    async (maxEntries?: number): Promise<ExecutionProcessStateStore> => {
+  /**
+   * Load historic processes newest-first until `maxCodingAgentProcesses` turn
+   * processes are included, plus the setup script immediately older than the
+   * last included turn (so the turn's setup placeholder is not missing).
+   */
+  const loadHistoricTurnProcesses = useCallback(
+    async (
+      maxCodingAgentProcesses: number,
+      options?: { skipAlreadyDisplayed?: boolean }
+    ): Promise<ExecutionProcessStateStore> => {
       const localDisplayedExecutionProcesses: ExecutionProcessStateStore = {};
+      const skipAlreadyDisplayed = options?.skipAlreadyDisplayed ?? false;
 
       if (!executionProcesses?.current) return localDisplayedExecutionProcesses;
+
+      let codingAgentCount = 0;
+      let reachedTurnLimit = false;
 
       for (const executionProcess of [
         ...executionProcesses.current,
       ].reverse()) {
-        if (executionProcess.status === ExecutionProcessStatus.running)
+        if (executionProcess.status === ExecutionProcessStatus.running) {
           continue;
+        }
+
+        if (
+          skipAlreadyDisplayed &&
+          displayedExecutionProcesses.current[executionProcess.id]
+        ) {
+          continue;
+        }
+
+        if (reachedTurnLimit) {
+          // After the turn budget, only pull the immediately older setup script(s).
+          if (executionProcess.run_reason !== 'setupscript') {
+            break;
+          }
+        }
 
         const entries =
           await loadEntriesForHistoricExecutionProcess(executionProcess);
@@ -280,56 +307,15 @@ export const useConversationHistory = ({
           entries: entriesWithKey,
         };
 
-        if (
-          maxEntries != null &&
-          flattenEntries(localDisplayedExecutionProcesses).length > maxEntries
-        ) {
-          break;
+        if (isCodingAgentProcess(executionProcess)) {
+          codingAgentCount += 1;
+          if (codingAgentCount >= maxCodingAgentProcesses) {
+            reachedTurnLimit = true;
+          }
         }
       }
 
       return localDisplayedExecutionProcesses;
-    },
-    [executionProcesses]
-  );
-
-  const loadRemainingEntriesInBatches = useCallback(
-    async (batchSize: number): Promise<boolean> => {
-      if (!executionProcesses?.current) return false;
-
-      let anyUpdated = false;
-      for (const executionProcess of [
-        ...executionProcesses.current,
-      ].reverse()) {
-        const current = displayedExecutionProcesses.current;
-        if (
-          current[executionProcess.id] ||
-          executionProcess.status === ExecutionProcessStatus.running
-        )
-          continue;
-
-        const entries =
-          await loadEntriesForHistoricExecutionProcess(executionProcess);
-        const entriesWithKey = entries.map((e, idx) =>
-          patchWithKey(e, executionProcess.id, idx)
-        );
-
-        mergeIntoDisplayed((state) => {
-          state[executionProcess.id] = {
-            executionProcess,
-            entries: entriesWithKey,
-          };
-        });
-
-        if (
-          flattenEntries(displayedExecutionProcesses.current).length > batchSize
-        ) {
-          anyUpdated = true;
-          break;
-        }
-        anyUpdated = true;
-      }
-      return anyUpdated;
     },
     [executionProcesses]
   );
@@ -360,6 +346,43 @@ export const useConversationHistory = ({
     [executionProcessesRaw]
   );
 
+  const loadMoreHistory = useCallback(async () => {
+    if (loadingMoreRef.current || !loadedInitialEntries.current) return;
+
+    const hasUnloaded = (executionProcesses.current ?? []).some(
+      (p) =>
+        p.status !== ExecutionProcessStatus.running &&
+        !displayedExecutionProcesses.current[p.id]
+    );
+    if (!hasUnloaded) {
+      setHasMoreHistory(false);
+      return;
+    }
+
+    loadingMoreRef.current = true;
+    setIsLoadingHistory(true);
+    try {
+      const batch = await loadHistoricTurnProcesses(
+        LOAD_MORE_CODING_AGENT_PROCESSES,
+        { skipAlreadyDisplayed: true }
+      );
+      const loadedIds = Object.keys(batch);
+      if (loadedIds.length === 0) {
+        setHasMoreHistory(false);
+        return;
+      }
+
+      mergeIntoDisplayed((state) => {
+        Object.assign(state, batch);
+      });
+      emitEntries(displayedExecutionProcesses.current, 'historic', false);
+      refreshHasMoreHistory();
+    } finally {
+      loadingMoreRef.current = false;
+      setIsLoadingHistory(false);
+    }
+  }, [emitEntries, loadHistoricTurnProcesses, refreshHasMoreHistory]);
+
   // Clean up entries for processes that have been removed (e.g., after reset)
   useEffect(() => {
     if (isLoading || !isConnected) return;
@@ -376,8 +399,16 @@ export const useConversationHistory = ({
 
     if (changed) {
       emitEntries(displayedExecutionProcesses.current, 'historic', false);
+      refreshHasMoreHistory();
     }
-  }, [idListKey, executionProcessesRaw, emitEntries, isLoading, isConnected]);
+  }, [
+    idListKey,
+    executionProcessesRaw,
+    emitEntries,
+    isLoading,
+    isConnected,
+    refreshHasMoreHistory,
+  ]);
 
   useEffect(() => {
     displayedExecutionProcesses.current = {};
@@ -385,6 +416,9 @@ export const useConversationHistory = ({
     emittedEmptyInitialRef.current = false;
     streamingProcessIdsRef.current.clear();
     previousStatusMapRef.current.clear();
+    loadingMoreRef.current = false;
+    setHasMoreHistory(false);
+    setIsLoadingHistory(false);
     emitEntries(displayedExecutionProcesses.current, 'initial', true);
   }, [scopeKey, emitEntries]);
 
@@ -399,28 +433,22 @@ export const useConversationHistory = ({
         if (emittedEmptyInitialRef.current) return;
         emittedEmptyInitialRef.current = true;
         emitEntries(displayedExecutionProcesses.current, 'initial', false);
+        setHasMoreHistory(false);
         return;
       }
 
       emittedEmptyInitialRef.current = false;
 
-      const allInitialEntries = await loadHistoricEntries(MIN_INITIAL_ENTRIES);
+      const allInitialEntries = await loadHistoricTurnProcesses(
+        INITIAL_HISTORIC_CODING_AGENT_PROCESSES
+      );
       if (cancelled) return;
       loadedInitialEntries.current = true;
       mergeIntoDisplayed((state) => {
         Object.assign(state, allInitialEntries);
       });
       emitEntries(displayedExecutionProcesses.current, 'initial', false);
-
-      setIsLoadingHistory(true);
-      while (
-        !cancelled &&
-        (await loadRemainingEntriesInBatches(REMAINING_BATCH_SIZE))
-      ) {
-        if (cancelled) return;
-        emitEntries(displayedExecutionProcesses.current, 'historic', false);
-      }
-      if (!cancelled) setIsLoadingHistory(false);
+      refreshHasMoreHistory();
     })();
     return () => {
       cancelled = true;
@@ -429,9 +457,9 @@ export const useConversationHistory = ({
     scopeKey,
     idListKey,
     isLoading,
-    loadHistoricEntries,
-    loadRemainingEntriesInBatches,
+    loadHistoricTurnProcesses,
     emitEntries,
+    refreshHasMoreHistory,
   ]); // include idListKey so new processes trigger reload
 
   useEffect(() => {
@@ -515,8 +543,9 @@ export const useConversationHistory = ({
       if (anyUpdated) {
         emitEntries(displayedExecutionProcesses.current, 'running', false);
       }
+      refreshHasMoreHistory();
     })();
-  }, [idStatusKey, executionProcessesRaw, emitEntries]);
+  }, [idStatusKey, executionProcessesRaw, emitEntries, refreshHasMoreHistory]);
 
   // If an execution process is removed, remove it from the state
   useEffect(() => {
@@ -532,8 +561,20 @@ export const useConversationHistory = ({
           delete state[id];
         });
       });
+      refreshHasMoreHistory();
     }
-  }, [scopeKey, idListKey, executionProcessesRaw]);
+  }, [scopeKey, idListKey, executionProcessesRaw, refreshHasMoreHistory]);
 
-  return { isFirstTurn, isLoadingHistory: isLoadingHistoryState };
+  // Keep hasMore in sync when the process list changes after initial load
+  useEffect(() => {
+    if (!loadedInitialEntries.current) return;
+    refreshHasMoreHistory();
+  }, [idListKey, refreshHasMoreHistory]);
+
+  return {
+    isFirstTurn,
+    isLoadingHistory: isLoadingHistoryState,
+    hasMoreHistory,
+    loadMoreHistory,
+  };
 };

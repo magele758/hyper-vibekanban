@@ -1,7 +1,21 @@
 import type { PatchTypeWithKey } from './types';
 
+/** Initial load: newest completed coding-agent turn only (scroll loads older). */
+export const INITIAL_HISTORIC_CODING_AGENT_PROCESSES = 1;
+
+/** Older history loaded per scroll-to-top trigger (coding-agent turns). */
+export const LOAD_MORE_CODING_AGENT_PROCESSES = 2;
+
+/** @deprecated Prefer process-based initial load; kept for any legacy callers. */
 export const MIN_INITIAL_ENTRIES = 10;
 export const REMAINING_BATCH_SIZE = 50;
+
+/**
+ * Prefetch older history when within this many viewports of the list top.
+ * Larger = earlier trigger / smoother upward scroll; avoids waiting until
+ * the user hits the absolute top.
+ */
+export const LOAD_MORE_TOP_VIEWPORTS = 1.75;
 
 export const makeLoadingPatch = (
   executionProcessId: string
