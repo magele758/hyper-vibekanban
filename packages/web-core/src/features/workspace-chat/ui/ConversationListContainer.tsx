@@ -41,6 +41,7 @@ import { useConversationHistory } from '../model/hooks/useConversationHistory';
 import { useSetTokenUsageInfo } from '../model/contexts/EntriesContext';
 import type { WorkspaceWithSession } from '@/shared/types/attempt';
 import type { RepoWithTargetBranch } from 'shared/types';
+import { LOAD_MORE_TOP_VIEWPORTS } from '@/shared/hooks/useConversationHistory/constants';
 import { ChatEmptyState } from '@vibe/ui/components/ChatEmptyState';
 import { ChatScriptPlaceholder } from '@vibe/ui/components/ChatScriptPlaceholder';
 import { ScriptFixerDialog } from '@/shared/dialogs/scripts/ScriptFixerDialog';
@@ -393,11 +394,12 @@ export const ConversationList = forwardRef<
     }
   };
 
-  const { isFirstTurn, isLoadingHistory } = useConversationHistory({
-    attempt,
-    onTimelineUpdated,
-    scopeKey: conversationScopeKey,
-  });
+  const { isFirstTurn, isLoadingHistory, hasMoreHistory, loadMoreHistory } =
+    useConversationHistory({
+      attempt,
+      onTimelineUpdated,
+      scopeKey: conversationScopeKey,
+    });
 
   const prevEntriesRef = useRef<DisplayEntry[]>([]);
   const prevRowsRef = useRef<ConversationRow[]>([]);
@@ -755,13 +757,67 @@ export const ConversationList = forwardRef<
   const showLoader = loading && conversationRows.length === 0;
   const showEmptyState = !loading && conversationRows.length === 0;
 
-  const { virtualItems, totalSize, measureElement } = conversationVirtualizer;
+  const { virtualItems, totalSize, measureElement, isAtBottom } =
+    conversationVirtualizer;
 
   useEffect(() => {
     return () => {
       clearPendingInteractionAnchor();
     };
   }, [clearPendingInteractionAnchor]);
+
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const tryLoadMoreHistory = useCallback(() => {
+    if (!hasMoreHistory || isLoadingHistory) return;
+    const scrollEl = tanstackScrollRef.current;
+    if (!scrollEl) return;
+    // Short content while stuck at bottom: do not eagerly backfill.
+    if (isAtBottom && scrollEl.scrollHeight <= scrollEl.clientHeight + 1) {
+      return;
+    }
+    if (isAtBottom) return;
+    const prefetchDistance = scrollEl.clientHeight * LOAD_MORE_TOP_VIEWPORTS;
+    if (scrollEl.scrollTop > prefetchDistance) return;
+    void loadMoreHistory();
+  }, [hasMoreHistory, isAtBottom, isLoadingHistory, loadMoreHistory]);
+
+  useEffect(() => {
+    const scrollEl = tanstackScrollRef.current;
+    if (!scrollEl) return;
+    scrollEl.addEventListener('scroll', tryLoadMoreHistory, { passive: true });
+    return () => {
+      scrollEl.removeEventListener('scroll', tryLoadMoreHistory);
+    };
+  }, [tryLoadMoreHistory]);
+
+  // Prefetch via sentinel: rootMargin expands the hit-box above the viewport
+  // so history starts loading ~1.75 viewports before the user reaches the top.
+  useEffect(() => {
+    const scrollEl = tanstackScrollRef.current;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!scrollEl || !sentinel || !hasMoreHistory) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          tryLoadMoreHistory();
+        }
+      },
+      {
+        root: scrollEl,
+        rootMargin: `${Math.round(scrollEl.clientHeight * LOAD_MORE_TOP_VIEWPORTS)}px 0px 0px 0px`,
+        threshold: 0,
+      }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreHistory, tryLoadMoreHistory, dataVersion]);
+
+  // After a batch lands, keep loading while the user remains in the prefetch zone.
+  useEffect(() => {
+    tryLoadMoreHistory();
+  }, [dataVersion, tryLoadMoreHistory]);
 
   return (
     <ApprovalFormProvider>
@@ -801,6 +857,26 @@ export const ConversationList = forwardRef<
           onClickCapture={handleConversationClickCapture}
         >
           <div className="pt-2">
+            <div
+              ref={loadMoreSentinelRef}
+              aria-hidden
+              className="h-px w-full"
+            />
+            {hasMoreHistory && !isLoadingHistory && (
+              <div className="flex justify-center px-double pb-2">
+                <button
+                  type="button"
+                  className="text-xs text-low hover:text-normal"
+                  onClick={() => {
+                    void loadMoreHistory();
+                  }}
+                >
+                  {t('conversation.loadEarlierMessages', {
+                    defaultValue: 'Load earlier messages',
+                  })}
+                </button>
+              </div>
+            )}
             {showSetupPlaceholder && (
               <div className="my-base px-double">
                 <ChatScriptPlaceholder
