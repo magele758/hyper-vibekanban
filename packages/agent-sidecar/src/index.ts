@@ -575,7 +575,7 @@ app.post("/copilot/chat", async (req, res) => {
       }
     }
 
-    await persistMessage(session_id, "assistant", finalReply, auth);
+    // Unblock the UI as soon as the reply is ready; persist can lag on Remote.
     send({
       type: "done",
       reply: finalReply,
@@ -584,6 +584,14 @@ app.post("/copilot/chat", async (req, res) => {
       cwd: effectiveCwd,
       cwd_source: cwdSource,
     });
+    try {
+      await persistMessage(session_id, "assistant", finalReply, auth);
+    } catch (persistErr) {
+      console.error(
+        "[agent-sidecar] persist assistant message failed:",
+        persistErr instanceof Error ? persistErr.message : persistErr,
+      );
+    }
   } catch (err) {
     const messageText = err instanceof Error ? err.message : String(err);
     console.error("[agent-sidecar] chat error:", messageText);

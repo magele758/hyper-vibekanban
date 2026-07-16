@@ -77,30 +77,52 @@ export async function openaiCompatibleChat(
   const decoder = new TextDecoder();
   let buffer = "";
   let reply = "";
+  let streamFinished = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(data) as {
-          choices?: Array<{ delta?: { content?: string } }>;
-        };
-        const delta = parsed.choices?.[0]?.delta?.content;
-        if (delta) {
-          reply += delta;
-          params.onDelta?.(delta);
+  try {
+    while (!streamFinished) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        // Some gateways keep the TCP connection open after the last token.
+        // Stop as soon as we see the terminal marker / finish_reason.
+        if (data === "[DONE]") {
+          streamFinished = true;
+          break;
         }
-      } catch {
-        // ignore partial JSON
+        try {
+          const parsed = JSON.parse(data) as {
+            choices?: Array<{
+              delta?: { content?: string };
+              finish_reason?: string | null;
+            }>;
+          };
+          const choice = parsed.choices?.[0];
+          const delta = choice?.delta?.content;
+          if (delta) {
+            reply += delta;
+            params.onDelta?.(delta);
+          }
+          if (choice?.finish_reason) {
+            streamFinished = true;
+            break;
+          }
+        } catch {
+          // ignore partial JSON
+        }
       }
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // ignore
     }
   }
 
