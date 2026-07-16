@@ -484,6 +484,8 @@ export const boardAgentsApi = {
     onEvent?: (event: unknown) => void;
     onStatus?: (status: {
       runtime?: string;
+      transport?: string;
+      history_turns?: number;
       cwd?: string;
       cwd_source?: 'request' | 'saved' | 'default';
     }) => void;
@@ -542,6 +544,8 @@ export const boardAgentsApi = {
           tool_name?: string;
           ok?: boolean;
           runtime?: string;
+          transport?: string;
+          history_turns?: number;
           cwd?: string;
           cwd_source?: 'request' | 'saved' | 'default';
         };
@@ -553,6 +557,8 @@ export const boardAgentsApi = {
           if (payload.cwd_source) cwd_source = payload.cwd_source;
           params.onStatus?.({
             runtime: payload.runtime,
+            transport: payload.transport,
+            history_turns: payload.history_turns,
             cwd: payload.cwd,
             cwd_source: payload.cwd_source,
           });

@@ -401,15 +401,27 @@ app.post("/copilot/chat", async (req, res) => {
         );
       }
       const history = await loadRecentMessages(session_id, auth);
+      const historyTurns = history
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-20);
+      console.log(
+        `[agent-sidecar] multi-turn openai-compatible session=${session_id} history=${historyTurns.length} model=${modelId}`,
+      );
+      send({
+        type: "status",
+        message: "running",
+        runtime,
+        transport: "openai-compatible",
+        history_turns: historyTurns.length,
+        cwd: effectiveCwd,
+        cwd_source: cwdSource,
+      });
       const messages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
-        ...history
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .slice(-20)
-          .map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })),
+        ...historyTurns.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
       ];
       // history already includes the just-persisted user message
 
@@ -575,7 +587,9 @@ app.post("/copilot/chat", async (req, res) => {
       }
     }
 
-    // Unblock the UI as soon as the reply is ready; persist can lag on Remote.
+    // Persist before `done` so the next turn's history load always includes
+    // this assistant reply (UI unblocks only after done).
+    await persistMessage(session_id, "assistant", finalReply, auth);
     send({
       type: "done",
       reply: finalReply,
@@ -584,14 +598,6 @@ app.post("/copilot/chat", async (req, res) => {
       cwd: effectiveCwd,
       cwd_source: cwdSource,
     });
-    try {
-      await persistMessage(session_id, "assistant", finalReply, auth);
-    } catch (persistErr) {
-      console.error(
-        "[agent-sidecar] persist assistant message failed:",
-        persistErr instanceof Error ? persistErr.message : persistErr,
-      );
-    }
   } catch (err) {
     const messageText = err instanceof Error ? err.message : String(err);
     console.error("[agent-sidecar] chat error:", messageText);
