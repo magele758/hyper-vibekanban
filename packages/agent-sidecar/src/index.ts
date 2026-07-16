@@ -369,6 +369,11 @@ app.post("/copilot/chat", async (req, res) => {
       );
     }
 
+    // Cursor + custom base_url is treated as OpenAI-compatible (same as /models).
+    // Official Cursor User API Key path only when base_url is empty.
+    const useOpenAiCompatible =
+      runtime === "pi" || runtime === "opencode" || !!baseUrl?.trim();
+
     if ((runtime === "pi" || runtime === "opencode") && !baseUrl) {
       throw new Error(
         `Runtime "${runtime}" requires agent LLM base_url (OpenAI-compatible endpoint).`,
@@ -382,13 +387,19 @@ app.post("/copilot/chat", async (req, res) => {
       runtime,
       cwd: effectiveCwd,
       cwd_source: cwdSource,
+      transport: useOpenAiCompatible ? "openai-compatible" : "cursor-sdk",
     });
 
     const systemPrompt = buildSystemPrompt(boardAgent);
     let finalReply = "";
     let externalAgentId = session.external_agent_id;
 
-    if (runtime === "pi" || runtime === "opencode") {
+    if (useOpenAiCompatible) {
+      if (!baseUrl?.trim()) {
+        throw new Error(
+          "OpenAI-compatible chat requires agent LLM base_url.",
+        );
+      }
       const history = await loadRecentMessages(session_id, auth);
       const messages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
