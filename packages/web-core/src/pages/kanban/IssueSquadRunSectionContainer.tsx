@@ -73,9 +73,7 @@ export function IssueSquadRunSectionContainer({ issueId }: Props) {
               <span
                 className={cn(
                   'shrink-0 text-xs',
-                  run.status === 'waiting_approval'
-                    ? 'text-brand'
-                    : 'text-low'
+                  run.status === 'waiting_approval' ? 'text-brand' : 'text-low'
                 )}
               >
                 {run.id.slice(0, 8)}…

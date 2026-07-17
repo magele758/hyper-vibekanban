@@ -1644,10 +1644,7 @@ export const queueApi = {
     return handleApiResponse<QueueStatus>(response);
   },
 
-  remove: async (
-    sessionId: string,
-    itemId: string
-  ): Promise<QueueStatus> => {
+  remove: async (sessionId: string, itemId: string): Promise<QueueStatus> => {
     const response = await makeRequest(
       `/api/sessions/${sessionId}/queue/${itemId}`,
       {

@@ -292,9 +292,7 @@ export const boardAgentsApi = {
     );
   },
 
-  async installFeatureCloseout(
-    projectId: string
-  ): Promise<{
+  async installFeatureCloseout(projectId: string): Promise<{
     squad: Squad;
     agent_ids: string[];
     created_agent_names: string[];

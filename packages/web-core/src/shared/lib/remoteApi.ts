@@ -98,9 +98,7 @@ export function resolveSharedRemoteApiBase(
       if (
         baked.hostname !== hostname &&
         isSelfHostedDevHostname(hostname) &&
-        !(
-          isLoopbackHostname(hostname) && !isLoopbackHostname(baked.hostname)
-        )
+        !(isLoopbackHostname(hostname) && !isLoopbackHostname(baked.hostname))
       ) {
         baked.hostname = hostname;
         return baked.origin;

@@ -222,9 +222,7 @@ function controlDetail(node: SquadPipelineNode): string | undefined {
     }
     case 'wait_approval':
       return (
-        node.approval_kind?.trim() ||
-        node.entry_label?.trim() ||
-        '等人确认'
+        node.approval_kind?.trim() || node.entry_label?.trim() || '等人确认'
       );
     case 'script':
       return node.command?.trim() || '脚本（Batch 2）';
