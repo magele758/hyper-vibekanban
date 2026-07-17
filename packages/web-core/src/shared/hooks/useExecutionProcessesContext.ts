@@ -31,3 +31,6 @@ export const useExecutionProcessesContext = () => {
   }
   return ctx;
 };
+
+export const useExecutionProcessesContextOptional = () =>
+  useContext(ExecutionProcessesContext);

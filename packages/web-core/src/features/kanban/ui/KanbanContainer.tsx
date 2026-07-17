@@ -705,6 +705,7 @@ export function KanbanContainer() {
 
     const map = new Map<string, WorkspaceWithStats[]>();
 
+    // getWorkspacesForIssue is O(1) via ProjectProvider index — one pass over issues.
     for (const issue of issues) {
       const nonArchivedWorkspaces = getWorkspacesForIssue(issue.id)
         .filter(

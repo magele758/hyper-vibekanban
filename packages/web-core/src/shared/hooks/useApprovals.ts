@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import type { ApprovalInfo } from 'shared/types';
-import { useJsonPatchWsStream } from './useJsonPatchWsStream';
+import { useSharedJsonPatchWsStream } from '@/shared/lib/sharedJsonPatchStream';
 
 interface UseApprovalsResult {
   pendingApprovals: ApprovalInfo[];
@@ -13,11 +13,14 @@ type ApprovalState = {
   pending: Record<string, ApprovalInfo>;
 };
 
+const initialApprovals = (): ApprovalState => ({ pending: {} });
+
 export function useApprovals(): UseApprovalsResult {
-  const { data, isConnected } = useJsonPatchWsStream<ApprovalState>(
+  // Shared across ChatBox + every PendingApprovalEntry — one global WS.
+  const { data, isConnected } = useSharedJsonPatchWsStream<ApprovalState>(
     '/api/approvals/stream/ws',
     true,
-    () => ({ pending: {} })
+    initialApprovals
   );
 
   const pendingById = useMemo(() => data?.pending ?? {}, [data?.pending]);

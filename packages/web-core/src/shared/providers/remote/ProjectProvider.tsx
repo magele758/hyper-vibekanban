@@ -201,6 +201,89 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
     return map;
   }, [tagsResult.data]);
 
+  const issuesByStatusId = useMemo(() => {
+    const map = new Map<string, Issue[]>();
+    for (const issue of issuesResult.data) {
+      const list = map.get(issue.status_id);
+      if (list) list.push(issue);
+      else map.set(issue.status_id, [issue]);
+    }
+    return map;
+  }, [issuesResult.data]);
+
+  const assigneesByIssueId = useMemo(() => {
+    const map = new Map<string, typeof issueAssigneesResult.data>();
+    for (const row of issueAssigneesResult.data) {
+      const list = map.get(row.issue_id);
+      if (list) list.push(row);
+      else map.set(row.issue_id, [row]);
+    }
+    return map;
+  }, [issueAssigneesResult.data]);
+
+  const followersByIssueId = useMemo(() => {
+    const map = new Map<string, typeof issueFollowersResult.data>();
+    for (const row of issueFollowersResult.data) {
+      const list = map.get(row.issue_id);
+      if (list) list.push(row);
+      else map.set(row.issue_id, [row]);
+    }
+    return map;
+  }, [issueFollowersResult.data]);
+
+  const tagsByIssueId = useMemo(() => {
+    const map = new Map<string, typeof issueTagsResult.data>();
+    for (const row of issueTagsResult.data) {
+      const list = map.get(row.issue_id);
+      if (list) list.push(row);
+      else map.set(row.issue_id, [row]);
+    }
+    return map;
+  }, [issueTagsResult.data]);
+
+  const relationshipsByIssueId = useMemo(() => {
+    const map = new Map<string, typeof issueRelationshipsResult.data>();
+    for (const row of issueRelationshipsResult.data) {
+      for (const issueId of [row.issue_id, row.related_issue_id]) {
+        const list = map.get(issueId);
+        if (list) {
+          if (!list.includes(row)) list.push(row);
+        } else {
+          map.set(issueId, [row]);
+        }
+      }
+    }
+    return map;
+  }, [issueRelationshipsResult.data]);
+
+  const pullRequestIdsByIssueId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const link of pullRequestIssuesResult.data) {
+      const list = map.get(link.issue_id);
+      if (list) list.push(link.pull_request_id);
+      else map.set(link.issue_id, [link.pull_request_id]);
+    }
+    return map;
+  }, [pullRequestIssuesResult.data]);
+
+  const pullRequestsById = useMemo(() => {
+    const map = new Map(
+      pullRequestsResult.data.map((pr) => [pr.id, pr] as const)
+    );
+    return map;
+  }, [pullRequestsResult.data]);
+
+  const workspacesByIssueId = useMemo(() => {
+    const map = new Map<string, typeof workspacesResult.data>();
+    for (const workspace of workspacesResult.data) {
+      if (!workspace.issue_id) continue;
+      const list = map.get(workspace.issue_id);
+      if (list) list.push(workspace);
+      else map.set(workspace.issue_id, [workspace]);
+    }
+    return map;
+  }, [workspacesResult.data]);
+
   // Lookup helpers
   const getIssue = useCallback(
     (issueId: string) => issuesById.get(issueId),
@@ -208,47 +291,38 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
   );
 
   const getIssuesForStatus = useCallback(
-    (statusId: string) =>
-      issuesResult.data.filter((i) => i.status_id === statusId),
-    [issuesResult.data]
+    (statusId: string) => issuesByStatusId.get(statusId) ?? [],
+    [issuesByStatusId]
   );
 
   const getAssigneesForIssue = useCallback(
-    (issueId: string) =>
-      issueAssigneesResult.data.filter((a) => a.issue_id === issueId),
-    [issueAssigneesResult.data]
+    (issueId: string) => assigneesByIssueId.get(issueId) ?? [],
+    [assigneesByIssueId]
   );
 
   const getFollowersForIssue = useCallback(
-    (issueId: string) =>
-      issueFollowersResult.data.filter((f) => f.issue_id === issueId),
-    [issueFollowersResult.data]
+    (issueId: string) => followersByIssueId.get(issueId) ?? [],
+    [followersByIssueId]
   );
 
   const getTagsForIssue = useCallback(
-    (issueId: string) =>
-      issueTagsResult.data.filter((t) => t.issue_id === issueId),
-    [issueTagsResult.data]
+    (issueId: string) => tagsByIssueId.get(issueId) ?? [],
+    [tagsByIssueId]
   );
 
   const getTagObjectsForIssue = useCallback(
     (issueId: string) => {
-      const issueTags = issueTagsResult.data.filter(
-        (t) => t.issue_id === issueId
-      );
+      const issueTags = tagsByIssueId.get(issueId) ?? [];
       return issueTags
         .map((it) => tagsById.get(it.tag_id))
         .filter((t): t is Tag => t !== undefined);
     },
-    [issueTagsResult.data, tagsById]
+    [tagsByIssueId, tagsById]
   );
 
   const getRelationshipsForIssue = useCallback(
-    (issueId: string) =>
-      issueRelationshipsResult.data.filter(
-        (r) => r.issue_id === issueId || r.related_issue_id === issueId
-      ),
-    [issueRelationshipsResult.data]
+    (issueId: string) => relationshipsByIssueId.get(issueId) ?? [],
+    [relationshipsByIssueId]
   );
 
   const getStatus = useCallback(
@@ -263,19 +337,17 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
 
   const getPullRequestsForIssue = useCallback(
     (issueId: string) => {
-      const prIds = pullRequestIssuesResult.data
-        .filter((link) => link.issue_id === issueId)
-        .map((link) => link.pull_request_id);
-      const prIdSet = new Set(prIds);
-      return pullRequestsResult.data.filter((pr) => prIdSet.has(pr.id));
+      const prIds = pullRequestIdsByIssueId.get(issueId) ?? [];
+      return prIds
+        .map((id) => pullRequestsById.get(id))
+        .filter((pr): pr is NonNullable<typeof pr> => pr !== undefined);
     },
-    [pullRequestIssuesResult.data, pullRequestsResult.data]
+    [pullRequestIdsByIssueId, pullRequestsById]
   );
 
   const getWorkspacesForIssue = useCallback(
-    (issueId: string) =>
-      workspacesResult.data.filter((w) => w.issue_id === issueId),
-    [workspacesResult.data]
+    (issueId: string) => workspacesByIssueId.get(issueId) ?? [],
+    [workspacesByIssueId]
   );
 
   const value = useMemo<ProjectContextValue>(

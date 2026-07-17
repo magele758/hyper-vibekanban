@@ -12,6 +12,7 @@ import {
 import { executionProcessesApi } from '@/shared/lib/api';
 import { ProfileVariantBadge } from '@/shared/components/common/ProfileVariantBadge.tsx';
 import { useExecutionProcesses } from '@/shared/hooks/useExecutionProcesses';
+import { useExecutionProcessesContextOptional } from '@/shared/hooks/useExecutionProcessesContext';
 import { useLogStream } from '@/shared/hooks/useLogStream';
 import { ProcessLogsViewerContent } from './ProcessLogsViewer';
 import type { ExecutionProcessStatus, ExecutionProcess } from 'shared/types';
@@ -25,13 +26,19 @@ interface ProcessesTabProps {
 
 function ProcessesTab({ sessionId }: ProcessesTabProps) {
   const { t } = useTranslation('tasks');
-  const {
-    executionProcesses,
-    executionProcessesById,
-    isLoading: processesLoading,
-    isConnected,
-    error: processesError,
-  } = useExecutionProcesses(sessionId ?? '', { showSoftDeleted: true });
+  // Prefer shared provider stream to avoid a second session WS.
+  const shared = useExecutionProcessesContextOptional();
+  const standalone = useExecutionProcesses(
+    shared ? undefined : (sessionId ?? ''),
+    { showSoftDeleted: true }
+  );
+  const executionProcesses =
+    shared?.executionProcessesAll ?? standalone.executionProcesses;
+  const executionProcessesById =
+    shared?.executionProcessesByIdAll ?? standalone.executionProcessesById;
+  const processesLoading = shared?.isLoading ?? standalone.isLoading;
+  const isConnected = shared?.isConnected ?? standalone.isConnected;
+  const processesError = shared?.error ?? standalone.error;
   const { selectedProcessId, setSelectedProcessId } = useProcessSelection();
   const [loadingProcessId, setLoadingProcessId] = useState<string | null>(null);
   const [localProcessDetails, setLocalProcessDetails] = useState<
