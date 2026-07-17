@@ -307,9 +307,7 @@ export function SquadPipelineEditor({
               })
             }
           >
-            <option value="leader_only">
-              仅 Leader（默认，兼容纯 Issue）
-            </option>
+            <option value="leader_only">仅 Leader（默认，兼容纯 Issue）</option>
             <option value="full_pipeline">跑全 Pipeline</option>
           </select>
         </label>
