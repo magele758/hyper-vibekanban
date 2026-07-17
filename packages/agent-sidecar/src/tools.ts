@@ -34,7 +34,7 @@ async function remoteFetch<T>(
 }
 
 export const TOOL_SYSTEM_PROMPT = `You are a board Copilot for Vibe Kanban (参谋，不是 coding agent).
-You help clarify requirements, prioritize, edit issues, and suggest assigning Agents.
+You help clarify requirements, prioritize, edit issues, and suggest assigning Agents/Squads/Autopilots.
 
 When you need to mutate the board, emit ONE fenced block exactly like:
 
@@ -66,11 +66,54 @@ or
 {"tool":"create_issue","title":"...","description":"...","status_id":"<optional>"}
 \`\`\`
 
+or
+
+\`\`\`vk-tool
+{"tool":"list_squads"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"create_squad","name":"...","leader_agent_id":"<uuid>","working_directory":"<optional>","issue_id":"<optional>"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"run_squad","squad_id":"<uuid>","issue_id":"<optional>","working_directory":"<optional>"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"approve_squad_run","run_id":"<uuid>","decision":"approve|reject|comment","comment":"<optional>"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"list_autopilots"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"create_autopilot","name":"...","agent_id":"<optional>","squad_id":"<optional>","cron_expression":"<optional>","issue_title_template":"<optional>"}
+\`\`\`
+
+or
+
+\`\`\`vk-tool
+{"tool":"trigger_autopilot","autopilot_id":"<uuid>"}
+\`\`\`
+
 Rules:
 - Prefer asking clarifying questions before mutating.
 - After a tool runs you will receive a tool result; then continue in natural language.
-- Do NOT pretend to write code or open workspaces yourself — suggest assigning an Agent instead.
+- Do NOT pretend to write code or open workspaces yourself — suggest assigning an Agent/Squad instead.
 - Only use vk-tool blocks for real mutations; otherwise reply in Chinese or English as the user prefers.
+- Squads are multi-agent pipelines; Autopilots are scheduled automations; use them for complex workflows.
 `;
 
 const VK_TOOL_RE = /```vk-tool\s*([\s\S]*?)```/i;
@@ -113,6 +156,27 @@ export async function executeTool(
         break;
       case 'create_issue':
         result = await createIssue(ctx, args);
+        break;
+      case 'list_squads':
+        result = await listSquads(ctx);
+        break;
+      case 'create_squad':
+        result = await createSquad(ctx, args);
+        break;
+      case 'run_squad':
+        result = await runSquad(ctx, args);
+        break;
+      case 'approve_squad_run':
+        result = await approveSquadRun(ctx, args);
+        break;
+      case 'list_autopilots':
+        result = await listAutopilots(ctx);
+        break;
+      case 'create_autopilot':
+        result = await createAutopilot(ctx, args);
+        break;
+      case 'trigger_autopilot':
+        result = await triggerAutopilot(ctx, args);
         break;
       default:
         result = { ok: false, summary: `Unknown tool: ${tool}` };
@@ -260,5 +324,201 @@ async function createIssue(
     ok: true,
     summary: `Created issue ${data.data?.simple_id ?? data.data?.id ?? ''}`,
     data: data.data ?? data,
+  };
+}
+
+async function listSquads(ctx: ToolContext): Promise<ToolResult> {
+  const data = await remoteFetch<{ squads: Array<{ id: string; name: string }> }>(
+    ctx.remoteApi,
+    `/v1/squads?project_id=${ctx.projectId}`,
+    ctx.auth
+  );
+  return {
+    ok: true,
+    summary: `Found ${data.squads.length} squads`,
+    data: data.squads,
+  };
+}
+
+async function createSquad(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const name = String(args.name ?? '').trim();
+  if (!name) return { ok: false, summary: 'name required' };
+
+  const body: Record<string, unknown> = {
+    project_id: ctx.projectId,
+    name,
+  };
+  if (typeof args.leader_agent_id === 'string') {
+    body.leader_agent_id = args.leader_agent_id;
+  }
+  if (typeof args.working_directory === 'string') {
+    body.working_directory = args.working_directory;
+  }
+  if (typeof args.issue_id === 'string') {
+    body.issue_id = args.issue_id;
+  }
+
+  const data = await remoteFetch<{ data: { id: string; name: string } }>(
+    ctx.remoteApi,
+    `/v1/squads`,
+    ctx.auth,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
+  return {
+    ok: true,
+    summary: `Created squad ${data.data.name} (${data.data.id})`,
+    data: data.data,
+  };
+}
+
+async function runSquad(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const squadId = String(args.squad_id ?? '');
+  if (!squadId) return { ok: false, summary: 'squad_id required' };
+
+  const body: Record<string, unknown> = {};
+  if (typeof args.issue_id === 'string') {
+    body.issue_id = args.issue_id;
+  }
+  if (typeof args.working_directory === 'string') {
+    body.working_directory = args.working_directory;
+  }
+  if (typeof args.start_from_node_id === 'string') {
+    body.start_from_node_id = args.start_from_node_id;
+  }
+  if (typeof args.resume_run_id === 'string') {
+    body.resume_run_id = args.resume_run_id;
+  }
+
+  const data = await remoteFetch<{ run_id: string; status?: string }>(
+    ctx.remoteApi,
+    `/v1/squads/${squadId}/run`,
+    ctx.auth,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
+  return {
+    ok: true,
+    summary: `Squad run started: ${data.run_id}`,
+    data,
+  };
+}
+
+async function approveSquadRun(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const runId = String(args.run_id ?? '');
+  const decision = String(args.decision ?? '');
+  if (!runId || !decision) {
+    return { ok: false, summary: 'run_id and decision required' };
+  }
+
+  const body: Record<string, unknown> = { decision };
+  if (typeof args.comment === 'string') {
+    body.comment = args.comment;
+  }
+
+  const data = await remoteFetch<{ run: { id: string; status?: string } }>(
+    ctx.remoteApi,
+    `/v1/squad-runs/${runId}/approve`,
+    ctx.auth,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
+  return {
+    ok: true,
+    summary: `Squad run ${runId} ${decision}d`,
+    data,
+  };
+}
+
+async function listAutopilots(ctx: ToolContext): Promise<ToolResult> {
+  const data = await remoteFetch<{ autopilots: Array<{ id: string; name: string }> }>(
+    ctx.remoteApi,
+    `/v1/autopilots?project_id=${ctx.projectId}`,
+    ctx.auth
+  );
+  return {
+    ok: true,
+    summary: `Found ${data.autopilots.length} autopilots`,
+    data: data.autopilots,
+  };
+}
+
+async function createAutopilot(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const name = String(args.name ?? '').trim();
+  if (!name) return { ok: false, summary: 'name required' };
+
+  const body: Record<string, unknown> = {
+    project_id: ctx.projectId,
+    name,
+  };
+  if (typeof args.agent_id === 'string') {
+    body.agent_id = args.agent_id;
+  }
+  if (typeof args.squad_id === 'string') {
+    body.squad_id = args.squad_id;
+  }
+  if (typeof args.cron_expression === 'string') {
+    body.cron_expression = args.cron_expression;
+  }
+  if (typeof args.issue_title_template === 'string') {
+    body.issue_title_template = args.issue_title_template;
+  }
+  if (typeof args.issue_description_template === 'string') {
+    body.issue_description_template = args.issue_description_template;
+  }
+
+  const data = await remoteFetch<{ data: { id: string; name: string } }>(
+    ctx.remoteApi,
+    `/v1/autopilots`,
+    ctx.auth,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }
+  );
+  return {
+    ok: true,
+    summary: `Created autopilot ${data.data.name} (${data.data.id})`,
+    data: data.data,
+  };
+}
+
+async function triggerAutopilot(
+  ctx: ToolContext,
+  args: Record<string, unknown>
+): Promise<ToolResult> {
+  const autopilotId = String(args.autopilot_id ?? '');
+  if (!autopilotId) return { ok: false, summary: 'autopilot_id required' };
+
+  await remoteFetch<unknown>(
+    ctx.remoteApi,
+    `/v1/autopilots/${autopilotId}/trigger`,
+    ctx.auth,
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
+  );
+  return {
+    ok: true,
+    summary: `Autopilot ${autopilotId} triggered`,
   };
 }
