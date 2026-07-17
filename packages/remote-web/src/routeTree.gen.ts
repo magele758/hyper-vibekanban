@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExportRouteImport } from './routes/export'
+import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects.$projectId'
@@ -46,6 +47,11 @@ const LoginRoute = LoginRouteImport.update({
 const ExportRoute = ExportRouteImport.update({
   id: '/export',
   path: '/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -167,6 +173,7 @@ const ProjectsProjectIdIssuesIssueIdHostsHostIdWorkspacesCreateDraftIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/agents': typeof AgentsRoute
   '/export': typeof ExportRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/agents': typeof AgentsRoute
   '/export': typeof ExportRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -218,6 +226,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/agents': typeof AgentsRoute
   '/export': typeof ExportRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -245,6 +254,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/agents'
     | '/export'
     | '/login'
     | '/notifications'
@@ -270,6 +280,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/agents'
     | '/export'
     | '/login'
     | '/notifications'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/agents'
     | '/export'
     | '/login'
     | '/notifications'
@@ -321,6 +333,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
+  AgentsRoute: typeof AgentsRoute
   ExportRoute: typeof ExportRoute
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
@@ -364,6 +377,13 @@ declare module '@tanstack/react-router' {
       path: '/export'
       fullPath: '/export'
       preLoaderRoute: typeof ExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -526,6 +546,7 @@ const HostsHostIdWorkspacesRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
+  AgentsRoute: AgentsRoute,
   ExportRoute: ExportRoute,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
