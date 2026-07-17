@@ -10,12 +10,8 @@ export const LOAD_MORE_CODING_AGENT_PROCESSES = 2;
 export const MIN_INITIAL_ENTRIES = 10;
 export const REMAINING_BATCH_SIZE = 50;
 
-/**
- * Prefetch older history when within this many viewports of the list top.
- * Larger = earlier trigger / smoother upward scroll; avoids waiting until
- * the user hits the absolute top.
- */
-export const LOAD_MORE_TOP_VIEWPORTS = 1.75;
+/** Load older history only when scrollTop is within this many px of the top. */
+export const LOAD_MORE_TOP_THRESHOLD_PX = 96;
 
 export const makeLoadingPatch = (
   executionProcessId: string

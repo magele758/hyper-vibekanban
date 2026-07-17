@@ -131,6 +131,13 @@ export function resolveScrollIntent(
     return { type: 'preserve-anchor' };
   }
 
+  // Further 'initial' emits after first paint are progressive/final snapshots
+  // of the same historic turn. Re-firing follow-bottom every patch causes
+  // jumpy scrolling while the virtualizer remeasures; bottom-lock handles pin.
+  if (addType === 'initial') {
+    return { type: 'preserve-anchor' };
+  }
+
   if (addType === 'plan') {
     return shouldStickToBottom
       ? { type: 'plan-reveal', align: 'start' }

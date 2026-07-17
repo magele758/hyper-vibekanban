@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -41,7 +42,8 @@ import { useConversationHistory } from '../model/hooks/useConversationHistory';
 import { useSetTokenUsageInfo } from '../model/contexts/EntriesContext';
 import type { WorkspaceWithSession } from '@/shared/types/attempt';
 import type { RepoWithTargetBranch } from 'shared/types';
-import { LOAD_MORE_TOP_VIEWPORTS } from '@/shared/hooks/useConversationHistory/constants';
+import { LOAD_MORE_TOP_THRESHOLD_PX } from '@/shared/hooks/useConversationHistory/constants';
+import { isNearBottom } from '../model/conversation-scroll-commands';
 import { ChatEmptyState } from '@vibe/ui/components/ChatEmptyState';
 import { ChatScriptPlaceholder } from '@vibe/ui/components/ChatScriptPlaceholder';
 import { ScriptFixerDialog } from '@/shared/dialogs/scripts/ScriptFixerDialog';
@@ -192,6 +194,13 @@ export const ConversationList = forwardRef<
   const pendingInteractionAnchorFrameRef = useRef<number | null>(null);
   const pendingInteractionAnchorDeadlineRef = useRef(0);
   const initialScrollAppliedRef = useRef(false);
+  /** Prefetch older history only after the reader leaves the bottom once. */
+  const historyPrefetchArmedRef = useRef(false);
+  /** Compensate scrollTop when older rows are prepended (loadMore). */
+  const pendingHistoricScrollAnchorRef = useRef<{
+    scrollTop: number;
+    scrollHeight: number;
+  } | null>(null);
 
   // Use ref to access current repos without causing callback recreation
   const reposRef = useRef(repos);
@@ -247,6 +256,7 @@ export const ConversationList = forwardRef<
     setDataVersion(0);
     lastSettledTailStartIndexRef.current = null;
     initialScrollAppliedRef.current = false;
+    historyPrefetchArmedRef.current = false;
     reset();
   }, [conversationScopeKey, reset]);
 
@@ -356,6 +366,28 @@ export const ConversationList = forwardRef<
 
     prevEntriesRef.current = derivedTimeline.displayEntries;
     prevRowsRef.current = derivedTimeline.rows;
+
+    // Capture scroll metrics before React commits prepended historic rows.
+    if (pending.addType === 'historic') {
+      const scrollEl = tanstackScrollRef.current;
+      if (
+        scrollEl &&
+        !isNearBottom(
+          scrollEl.scrollTop,
+          scrollEl.clientHeight,
+          scrollEl.scrollHeight
+        )
+      ) {
+        pendingHistoricScrollAnchorRef.current = {
+          scrollTop: scrollEl.scrollTop,
+          scrollHeight: scrollEl.scrollHeight,
+        };
+      } else {
+        pendingHistoricScrollAnchorRef.current = null;
+      }
+    } else {
+      pendingHistoricScrollAnchorRef.current = null;
+    }
 
     setFilteredEntries(derivedTimeline.displayEntries);
     setDataVersion((current) => current + 1);
@@ -770,29 +802,51 @@ export const ConversationList = forwardRef<
 
   const tryLoadMoreHistory = useCallback(() => {
     if (!hasMoreHistory || isLoadingHistory) return;
+    // Do not prefetch during/after first paint while still stuck to bottom —
+    // height remasure + dataVersion used to fire loadMore and prepend history,
+    // which fights bottom-lock and feels like random scrolling.
+    if (!historyPrefetchArmedRef.current) return;
     const scrollEl = tanstackScrollRef.current;
     if (!scrollEl) return;
-    // Short content while stuck at bottom: do not eagerly backfill.
-    if (isAtBottom && scrollEl.scrollHeight <= scrollEl.clientHeight + 1) {
-      return;
-    }
     if (isAtBottom) return;
-    const prefetchDistance = scrollEl.clientHeight * LOAD_MORE_TOP_VIEWPORTS;
-    if (scrollEl.scrollTop > prefetchDistance) return;
+    // Only when truly near the top — large rootMargin prefetch felt jumpy.
+    if (scrollEl.scrollTop > LOAD_MORE_TOP_THRESHOLD_PX) return;
     void loadMoreHistory();
   }, [hasMoreHistory, isAtBottom, isLoadingHistory, loadMoreHistory]);
+
+  useLayoutEffect(() => {
+    const anchor = pendingHistoricScrollAnchorRef.current;
+    const scrollEl = tanstackScrollRef.current;
+    if (!anchor || !scrollEl) return;
+    pendingHistoricScrollAnchorRef.current = null;
+    const delta = scrollEl.scrollHeight - anchor.scrollHeight;
+    if (delta !== 0) {
+      scrollEl.scrollTop = anchor.scrollTop + delta;
+    }
+  }, [dataVersion]);
 
   useEffect(() => {
     const scrollEl = tanstackScrollRef.current;
     if (!scrollEl) return;
-    scrollEl.addEventListener('scroll', tryLoadMoreHistory, { passive: true });
-    return () => {
-      scrollEl.removeEventListener('scroll', tryLoadMoreHistory);
-    };
-  }, [tryLoadMoreHistory]);
 
-  // Prefetch via sentinel: rootMargin expands the hit-box above the viewport
-  // so history starts loading ~1.75 viewports before the user reaches the top.
+    const onScroll = () => {
+      if (
+        initialScrollAppliedRef.current &&
+        !isAtBottom &&
+        scrollEl.scrollHeight > scrollEl.clientHeight + 1
+      ) {
+        historyPrefetchArmedRef.current = true;
+      }
+      tryLoadMoreHistory();
+    };
+
+    scrollEl.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scrollEl.removeEventListener('scroll', onScroll);
+    };
+  }, [isAtBottom, tryLoadMoreHistory]);
+
+  // Sentinel without expanded rootMargin — only when it actually enters view.
   useEffect(() => {
     const scrollEl = tanstackScrollRef.current;
     const sentinel = loadMoreSentinelRef.current;
@@ -804,20 +858,17 @@ export const ConversationList = forwardRef<
           tryLoadMoreHistory();
         }
       },
-      {
-        root: scrollEl,
-        rootMargin: `${Math.round(scrollEl.clientHeight * LOAD_MORE_TOP_VIEWPORTS)}px 0px 0px 0px`,
-        threshold: 0,
-      }
+      { root: scrollEl, rootMargin: '0px', threshold: 0 }
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMoreHistory, tryLoadMoreHistory, dataVersion]);
+  }, [hasMoreHistory, tryLoadMoreHistory]);
 
-  // After a batch lands, keep loading while the user remains in the prefetch zone.
+  // Continue load-more only after a batch finishes while still near the top.
   useEffect(() => {
+    if (isLoadingHistory) return;
     tryLoadMoreHistory();
-  }, [dataVersion, tryLoadMoreHistory]);
+  }, [isLoadingHistory, tryLoadMoreHistory]);
 
   return (
     <ApprovalFormProvider>
@@ -850,6 +901,23 @@ export const ConversationList = forwardRef<
             </span>
           </div>
         )}
+        {/* Always overlay — never in-flow, or leaving bottom inserts top chrome and jumps. */}
+        {hasMoreHistory && !isLoadingHistory && !showLoader && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-double">
+            <button
+              type="button"
+              className="pointer-events-auto text-xs text-low hover:text-normal"
+              onClick={() => {
+                historyPrefetchArmedRef.current = true;
+                void loadMoreHistory();
+              }}
+            >
+              {t('conversation.loadEarlierMessages', {
+                defaultValue: 'Load earlier messages',
+              })}
+            </button>
+          </div>
+        )}
         <div
           ref={tanstackScrollRef}
           className="h-full overflow-y-auto scrollbar-none"
@@ -862,21 +930,6 @@ export const ConversationList = forwardRef<
               aria-hidden
               className="h-px w-full"
             />
-            {hasMoreHistory && !isLoadingHistory && (
-              <div className="flex justify-center px-double pb-2">
-                <button
-                  type="button"
-                  className="text-xs text-low hover:text-normal"
-                  onClick={() => {
-                    void loadMoreHistory();
-                  }}
-                >
-                  {t('conversation.loadEarlierMessages', {
-                    defaultValue: 'Load earlier messages',
-                  })}
-                </button>
-              </div>
-            )}
             {showSetupPlaceholder && (
               <div className="my-base px-double">
                 <ChatScriptPlaceholder
