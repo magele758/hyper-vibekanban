@@ -50,6 +50,7 @@ interface AppBarProps {
   onPairHostClick?: () => void;
   activeHostId?: string | null;
   onCreateProject: () => void;
+  onAgentsClick?: () => void;
   onExportClick?: () => void;
   onWorkspacesClick: () => void;
   onHostClick?: (hostId: string, status: AppBarHostStatus) => void;
@@ -58,6 +59,7 @@ interface AppBarProps {
   onProjectHover?: (projectId: string) => void;
   onProjectsDragEnd: (result: DropResult) => void;
   isSavingProjectOrder?: boolean;
+  isAgentsActive?: boolean;
   isWorkspacesActive: boolean;
   isExportActive?: boolean;
   activeProjectId: string | null;
@@ -145,7 +147,7 @@ function AppBarItemLabel({ children }: { children: ReactNode }) {
 }
 
 type AppBarSection = {
-  key: 'local' | 'remote' | 'projects' | 'export';
+  key: 'local' | 'remote' | 'projects' | 'agents' | 'export';
   label: string;
   items: AppBarSectionItem[];
 };
@@ -240,6 +242,7 @@ export function AppBar({
   onPairHostClick,
   activeHostId = null,
   onCreateProject,
+  onAgentsClick,
   onExportClick,
   onWorkspacesClick,
   onHostClick,
@@ -248,6 +251,7 @@ export function AppBar({
   onProjectHover,
   onProjectsDragEnd,
   isSavingProjectOrder,
+  isAgentsActive = false,
   isWorkspacesActive,
   isExportActive = false,
   activeProjectId,
@@ -370,6 +374,23 @@ export function AppBar({
       key: 'projects',
       label: 'Projects',
       items: projectSectionItems,
+    });
+  }
+
+  if (isSignedIn && onAgentsClick) {
+    sections.push({
+      key: 'agents',
+      label: 'Agents',
+      items: [
+        {
+          key: 'global-agents',
+          kind: 'icon-button',
+          label: 'Global Agents',
+          icon: RobotIcon,
+          isActive: isAgentsActive,
+          onClick: onAgentsClick,
+        },
+      ],
     });
   }
 

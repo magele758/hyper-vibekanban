@@ -30,6 +30,8 @@ export function resolveRemoteDestinationFromPath(
   switch (foundRoute.id as RemoteRouteId) {
     case "/":
       return { kind: "root" };
+    case "/agents":
+      return { kind: "agents" };
     case "/export":
       return { kind: "export" };
     case "/hosts/$hostId/workspaces": {
@@ -185,6 +187,8 @@ function destinationToRemoteTarget(
         } as const;
       }
       return { to: "/" } as const;
+    case "agents":
+      return { to: "/agents" } as const;
     case "export":
       return { to: "/export" } as const;
     case "project":
@@ -294,6 +298,7 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
       navigateTo({ kind: "workspace", hostId, workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
       navigateTo({ kind: "workspace-vscode", hostId, workspaceId }, transition),
+    goToAgents: (transition) => navigateTo({ kind: "agents" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProject: (projectId, transition) =>
       navigateTo({ kind: "project", projectId }, transition),
@@ -375,6 +380,7 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
       navigateTo({ kind: "workspace", workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
       navigateTo({ kind: "workspace-vscode", workspaceId }, transition),
+    goToAgents: (transition) => navigateTo({ kind: "agents" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProject: (projectId, transition) =>
       navigateTo({ kind: "project", projectId }, transition),

@@ -194,6 +194,7 @@ export function SharedAppLayout() {
   // routes. Remote hosts are highlighted via their own host buttons.
   const isLocalWorkspacesActive =
     isLocalWorkspacesDestination(currentDestination);
+  const isAgentsActive = currentDestination?.kind === 'agents';
   const isExportActive = currentDestination?.kind === 'export';
   const isWorkspaceSidebarPreviewEnabled =
     !isMobile && isLocalWorkspacesActive && !isLeftSidebarVisible;
@@ -280,6 +281,10 @@ export function SharedAppLayout() {
     setExecutionHostId(null);
     void navigate({ to: '/workspaces' });
   }, [navigate, setExecutionHostId]);
+
+  const handleAgentsClick = useCallback(() => {
+    void navigate({ to: '/agents' });
+  }, [navigate]);
 
   const handleExportClick = useCallback(() => {
     appNavigation.goToExport();
@@ -502,6 +507,7 @@ export function SharedAppLayout() {
               hosts={remoteCloudHosts}
               activeHostId={activeHostId}
               onCreateProject={handleCreateProject}
+              onAgentsClick={handleAgentsClick}
               onExportClick={handleExportClick}
               onWorkspacesClick={handleWorkspacesClick}
               onHostClick={handleHostClick}
@@ -510,6 +516,7 @@ export function SharedAppLayout() {
               onProjectHover={handleProjectHover}
               onProjectsDragEnd={handleProjectsDragEnd}
               isSavingProjectOrder={isSavingProjectOrder}
+              isAgentsActive={isAgentsActive}
               isWorkspacesActive={isLocalWorkspacesActive}
               isExportActive={isExportActive}
               activeProjectId={activeProjectId}
