@@ -87,7 +87,7 @@ export default defineConfig({
   plugins: [
     tanstackRouter({
       target: "react",
-      autoCodeSplitting: false,
+      autoCodeSplitting: true,
     }),
     react({
       babel: {
@@ -153,6 +153,24 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['wa-sqlite'],
+    include: [
+      'react',
+      'react-dom',
+      'react-i18next',
+      'i18next',
+      '@tanstack/react-query',
+      '@tanstack/react-router',
+      '@tanstack/react-virtual',
+      'immer',
+      'zustand',
+      'lexical',
+      '@pierre/diffs',
+      '@pierre/diffs/react',
+      'highlight.js',
+      'rehype-highlight',
+      'framer-motion',
+      'posthog-js',
+    ],
   },
   build: { sourcemap: true },
 });
