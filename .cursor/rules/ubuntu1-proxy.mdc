@@ -1,0 +1,37 @@
+---
+description: 在 ubuntu1 上访问 GitHub/外网前必须先开 Clash 代理；不要改脚本注入代理
+alwaysApply: true
+---
+
+# ubuntu1 外网代理（先开代理再干活）
+
+在 **ubuntu1** 上拉 GitHub、cargo git 依赖、Docker build 拉源码等外网操作前，**先开启代理**。不要改 `vk-preview-*.sh` / compose 去注入代理。
+
+## 代理配置（已在 ubuntu1 `~/.bashrc`）
+
+- Windows Clash Verge：`WINDOWS_CLASH_HOST=10.1.20.28`
+- 端口：`7897`（HTTP / SOCKS 同端口）
+- 开关：`clash_proxy_on` / `pon`（关：`clash_proxy_off` / `poff`）
+
+交互登录会自动 `clash_proxy_on`；**非交互 SSH、Docker build、后台任务不会自动带代理**。
+
+## Agent 操作约定
+
+1. 对 ubuntu1 执行会碰外网的命令前，在同一 shell 里显式开代理，例如：
+
+```bash
+ssh ubuntu1 'bash -lc "
+  export WINDOWS_CLASH_HOST=10.1.20.28
+  export WINDOWS_CLASH_HTTP_PORT=7897
+  export http_proxy=http://10.1.20.28:7897
+  export https_proxy=http://10.1.20.28:7897
+  export HTTP_PROXY=\$https_proxy HTTPS_PROXY=\$https_proxy
+  # 再跑 git/cargo/curl/docker build …
+"'
+```
+
+或先 `source ~/.bashrc` / `pon`（需确保 bashrc 被加载）。
+
+2. 直连失败时先测：`curl -x http://10.1.20.28:7897 -I https://github.com`（应 200）。本机 `127.0.0.1:7890` **不是**代理地址。
+
+3. **禁止**为“省事”把代理写进仓库脚本并提交；用户明确要求再改。
