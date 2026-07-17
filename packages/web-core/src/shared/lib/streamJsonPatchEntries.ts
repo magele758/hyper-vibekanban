@@ -14,6 +14,17 @@ export interface StreamOptions<E = unknown> {
   onError?: (err: unknown) => void;
   /** called once when a "finished" event is received */
   onFinished?: (entries: E[]) => void;
+  /**
+   * When true, a socket close without a prior `finished` message is treated as
+   * success and invokes `onFinished` with the current entries (historic replay).
+   * When false/omitted, that close invokes `onError` instead (live streams).
+   */
+  finishOnClose?: boolean;
+  /**
+   * When true, apply JsonPatch ops immediately instead of batching on rAF.
+   * Prefer for historic replay where we only care about Finished latency.
+   */
+  immediateFlush?: boolean;
 }
 
 interface StreamController<E = unknown> {
@@ -45,6 +56,7 @@ export function streamJsonPatchEntries<E = unknown>(
 ): StreamController<E> {
   let connected = false;
   let closed = false;
+  let finished = false;
   let ws: WebSocket | null = null;
   let snapshot: PatchContainer<E> = structuredClone(
     opts.initial ?? ({ entries: [] } as PatchContainer<E>)
@@ -53,7 +65,7 @@ export function streamJsonPatchEntries<E = unknown>(
   const subscribers = new Set<(entries: E[]) => void>();
   if (opts.onEntries) subscribers.add(opts.onEntries);
 
-  // --- rAF batching state ---
+  // --- batching state ---
   let pendingOps: Operation[] = [];
   let rafId: number | null = null;
 
@@ -74,31 +86,46 @@ export function streamJsonPatchEntries<E = unknown>(
     const ops = dedupeOps(pendingOps);
     pendingOps = [];
 
-    snapshot = produce(snapshot, (draft) => {
-      applyUpsertPatch(draft, ops);
-    });
+    if (opts.immediateFlush) {
+      // Historic replay: mutate in place to avoid O(n²) immer array copies.
+      // Must stay synchronous — async batching races with WS close/abort and
+      // can drop the entire historic payload (empty load-more).
+      applyUpsertPatch(snapshot, ops);
+    } else {
+      snapshot = produce(snapshot, (draft) => {
+        applyUpsertPatch(draft, ops);
+      });
+    }
     notify();
+  };
+
+  const flushPendingSync = () => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    flush();
   };
 
   const handleMessage = (event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
 
-      // Handle JsonPatch messages — accumulate ops for next rAF flush
+      // Handle JsonPatch messages — historic flushes sync; live batches on rAF
       if (msg.JsonPatch) {
         const raw = msg.JsonPatch as Operation[];
         pendingOps.push(...raw);
-        if (rafId === null) {
+        if (opts.immediateFlush) {
+          flushPendingSync();
+        } else if (rafId === null) {
           rafId = requestAnimationFrame(flush);
         }
       }
 
       // Handle Finished messages — flush synchronously before closing
       if (msg.finished !== undefined) {
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-        }
-        flush();
+        finished = true;
+        flushPendingSync();
         opts.onFinished?.(snapshot.entries);
         ws?.close();
       }
@@ -126,18 +153,25 @@ export function streamJsonPatchEntries<E = unknown>(
 
       ws.addEventListener('error', (err) => {
         connected = false;
-        opts.onError?.(err);
+        if (!finished && !closed) {
+          opts.onError?.(err);
+        }
       });
 
       ws.addEventListener('close', () => {
         connected = false;
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-          rafId = null;
+        flushPendingSync();
+        // Client `close()` already settled via the caller; do not double-fire.
+        if (finished || closed) return;
+        if (opts.finishOnClose) {
+          finished = true;
+          opts.onFinished?.(snapshot.entries);
+        } else {
+          opts.onError?.(new Error('WebSocket closed before finished'));
         }
       });
     } catch (error) {
-      if (!closed) {
+      if (!closed && !finished) {
         opts.onError?.(error);
       }
     }
@@ -160,11 +194,14 @@ export function streamJsonPatchEntries<E = unknown>(
       return () => subscribers.delete(cb);
     },
     close(): void {
+      // Flush first so abort/settle cannot discard an in-flight historic batch.
+      flushPendingSync();
       closed = true;
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
         rafId = null;
       }
+      pendingOps = [];
       ws?.close();
       subscribers.clear();
       connected = false;

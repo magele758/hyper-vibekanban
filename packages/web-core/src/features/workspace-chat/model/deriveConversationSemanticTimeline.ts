@@ -68,6 +68,16 @@ function toConversationSemanticProcessKind(
   return 'unknown';
 }
 
+type SemanticProcessCacheEntry = {
+  entriesRef: PatchTypeWithKey[];
+  executionProcessRef: ExecutionProcessState['executionProcess'];
+  liveStatus: ExecutionProcess['status'] | undefined;
+  item: ConversationSemanticProcessItem;
+};
+
+/** Per-process cache: unchanged historic processes skip filter/find on every rAF. */
+const semanticProcessCache = new Map<string, SemanticProcessCacheEntry>();
+
 export function deriveConversationSemanticTimeline(
   source: ConversationTimelineSource
 ): ConversationSemanticTimeline {
@@ -75,16 +85,30 @@ export function deriveConversationSemanticTimeline(
     source.liveExecutionProcesses.map((process) => [process.id, process])
   );
 
+  const seenIds = new Set<string>();
+
   const processes = Object.values(source.executionProcessState)
     .sort(
       (a, b) =>
-        new Date(a.executionProcess.created_at as unknown as string).getTime() -
-        new Date(b.executionProcess.created_at as unknown as string).getTime()
+        Date.parse(String(a.executionProcess.created_at)) -
+        Date.parse(String(b.executionProcess.created_at))
     )
     .map((processState) => {
       const executionProcessId = processState.executionProcess.id;
+      seenIds.add(executionProcessId);
       const liveExecutionProcess =
         liveExecutionProcessesById.get(executionProcessId) ?? null;
+      const liveStatus = liveExecutionProcess?.status;
+      const cached = semanticProcessCache.get(executionProcessId);
+      if (
+        cached &&
+        cached.entriesRef === processState.entries &&
+        cached.executionProcessRef === processState.executionProcess &&
+        cached.liveStatus === liveStatus
+      ) {
+        return cached.item;
+      }
+
       const latestTokenUsageEntry =
         processState.entries.findLast(
           (entry) =>
@@ -108,7 +132,7 @@ export function deriveConversationSemanticTimeline(
         );
       });
 
-      return {
+      const item = {
         executionProcessId,
         executionProcess: processState.executionProcess,
         kind: toConversationSemanticProcessKind(processState.executionProcess),
@@ -117,13 +141,26 @@ export function deriveConversationSemanticTimeline(
         visibleEntries,
         latestTokenUsageEntry,
         hasPendingApprovalEntry,
-        isRunning:
-          liveExecutionProcess?.status === ExecutionProcessStatus.running,
+        isRunning: liveStatus === ExecutionProcessStatus.running,
         failedOrKilled:
-          liveExecutionProcess?.status === ExecutionProcessStatus.failed ||
-          liveExecutionProcess?.status === ExecutionProcessStatus.killed,
+          liveStatus === ExecutionProcessStatus.failed ||
+          liveStatus === ExecutionProcessStatus.killed,
       } satisfies ConversationSemanticProcessItem;
+
+      semanticProcessCache.set(executionProcessId, {
+        entriesRef: processState.entries,
+        executionProcessRef: processState.executionProcess,
+        liveStatus,
+        item,
+      });
+      return item;
     });
+
+  for (const id of semanticProcessCache.keys()) {
+    if (!seenIds.has(id)) {
+      semanticProcessCache.delete(id);
+    }
+  }
 
   return {
     processes,

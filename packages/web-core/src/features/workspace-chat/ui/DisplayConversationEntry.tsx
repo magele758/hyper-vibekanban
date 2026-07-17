@@ -1,4 +1,11 @@
-import { useMemo, useCallback, useLayoutEffect, useRef, useState } from 'react';
+import {
+  memo,
+  useMemo,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import {
@@ -1387,20 +1394,22 @@ function AggregatedDiffGroupEntry({ group }: { group: AggregatedDiffGroup }) {
   );
 }
 
-const DisplayConversationEntrySpaced = (props: Props) => {
-  const { isEntryGreyed } = useMessageEditContext();
-  const isGreyed = isEntryGreyed(props.expansionKey);
+const DisplayConversationEntrySpaced = memo(
+  function DisplayConversationEntrySpaced(props: Props) {
+    const { isEntryGreyed } = useMessageEditContext();
+    const isGreyed = isEntryGreyed(props.expansionKey);
 
-  return (
-    <div
-      className={cn(
-        'py-base px-double',
-        isGreyed && 'opacity-50 pointer-events-none'
-      )}
-    >
-      <DisplayConversationEntry {...props} />
-    </div>
-  );
-};
+    return (
+      <div
+        className={cn(
+          'py-base px-double',
+          isGreyed && 'opacity-50 pointer-events-none'
+        )}
+      >
+        <DisplayConversationEntry {...props} />
+      </div>
+    );
+  }
+);
 
 export default DisplayConversationEntrySpaced;

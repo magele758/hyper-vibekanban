@@ -53,6 +53,7 @@ export const useConversationHistory = ({
   const emittedEmptyInitialRef = useRef(false);
   const streamingProcessIdsRef = useRef<Set<string>>(new Set());
   const loadingMoreRef = useRef(false);
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
   const onTimelineUpdatedRef = useRef<
     UseConversationHistoryParams['onTimelineUpdated'] | null
   >(null);
@@ -116,7 +117,11 @@ export const useConversationHistory = ({
   }, []);
 
   const loadEntriesForHistoricExecutionProcess = (
-    executionProcess: ExecutionProcess
+    executionProcess: ExecutionProcess,
+    options?: {
+      onProgress?: (entries: PatchType[]) => void;
+      signal?: AbortSignal;
+    }
   ) => {
     let url = '';
     if (executionProcess.executor_action.typ.type === 'ScriptRequest') {
@@ -126,20 +131,50 @@ export const useConversationHistory = ({
     }
 
     return new Promise<PatchType[]>((resolve) => {
+      if (options?.signal?.aborted) {
+        resolve([]);
+        return;
+      }
+
+      let settled = false;
+      let latestEntries: PatchType[] = [];
+
+      const settle = (entries: PatchType[]) => {
+        if (settled) return;
+        settled = true;
+        options?.signal?.removeEventListener('abort', onAbort);
+        controller.close();
+        resolve(entries);
+      };
+
+      const onAbort = () => {
+        settle(latestEntries);
+      };
+
       const controller = streamJsonPatchEntries<PatchType>(url, {
+        // Historic replay: server often closes after the last patch without a
+        // separate `finished` frame. Treat that as success so Promise.all
+        // cannot hang the whole batch (initial / loadMore).
+        finishOnClose: true,
+        // Skip rAF batching — we only emit after Finished; sync flush finishes sooner.
+        immediateFlush: true,
+        onEntries: (entries) => {
+          latestEntries = entries;
+          options?.onProgress?.(entries);
+        },
         onFinished: (allEntries) => {
-          controller.close();
-          resolve(allEntries);
+          settle(allEntries);
         },
         onError: (err) => {
           console.warn(
             `Error loading entries for historic execution process ${executionProcess.id}`,
             err
           );
-          controller.close();
-          resolve([]);
+          settle(latestEntries);
         },
       });
+
+      options?.signal?.addEventListener('abort', onAbort, { once: true });
     });
   };
 
@@ -153,6 +188,31 @@ export const useConversationHistory = ({
       patchKey: `${executionProcessId}:${index}`,
       executionProcessId,
     };
+  };
+
+  /** Reuse prior keyed entries when immer kept the underlying patch identity. */
+  const keyEntriesIncremental = (
+    entries: PatchType[],
+    executionProcessId: string,
+    previous: ReturnType<typeof patchWithKey>[] | undefined
+  ) => {
+    const next = new Array(entries.length);
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index]!;
+      const existing = previous?.[index];
+      if (
+        existing &&
+        existing.type === entry.type &&
+        // Structural sharing from immer keeps prior entry objects stable.
+        (existing as { content?: unknown }).content ===
+          (entry as { content?: unknown }).content
+      ) {
+        next[index] = existing;
+      } else {
+        next[index] = patchWithKey(entry, executionProcessId, index);
+      }
+    }
+    return next as ReturnType<typeof patchWithKey>[];
   };
 
   const getActiveAgentProcesses = (): ExecutionProcess[] => {
@@ -174,18 +234,20 @@ export const useConversationHistory = ({
       const timelineSource = buildTimelineSource(executionProcessState);
       let modifiedAddEntryType = addEntryType;
 
-      const latestEntry = Object.values(executionProcessState)
-        .sort(
-          (a, b) =>
-            new Date(
-              a.executionProcess.created_at as unknown as string
-            ).getTime() -
-            new Date(
-              b.executionProcess.created_at as unknown as string
-            ).getTime()
-        )
-        .flatMap((processState) => processState.entries)
-        .at(-1);
+      // Only inspect the chronologically latest process's last entry —
+      // avoid sort+flatMap of the full history on every streaming frame.
+      let latestProcessTime = -Infinity;
+      let latestEntry:
+        | (typeof executionProcessState)[string]['entries'][number]
+        | undefined;
+      for (const processState of Object.values(executionProcessState)) {
+        const time = Date.parse(
+          String(processState.executionProcess.created_at)
+        );
+        if (!Number.isFinite(time) || time < latestProcessTime) continue;
+        latestProcessTime = time;
+        latestEntry = processState.entries.at(-1);
+      }
 
       if (
         latestEntry?.type === 'NORMALIZED_ENTRY' &&
@@ -216,8 +278,12 @@ export const useConversationHistory = ({
         }
         const controller = streamJsonPatchEntries<PatchType>(url, {
           onEntries(entries) {
-            const patchesWithKey = entries.map((entry, index) =>
-              patchWithKey(entry, executionProcess.id, index)
+            const previous =
+              displayedExecutionProcesses.current[executionProcess.id]?.entries;
+            const patchesWithKey = keyEntriesIncremental(
+              entries,
+              executionProcess.id,
+              previous
             );
             mergeIntoDisplayed((state) => {
               state[executionProcess.id] = {
@@ -258,22 +324,25 @@ export const useConversationHistory = ({
   );
 
   /**
-   * Load historic processes newest-first until `maxCodingAgentProcesses` turn
-   * processes are included, plus the setup script immediately older than the
-   * last included turn (so the turn's setup placeholder is not missing).
+   * Select historic processes newest-first until `maxCodingAgentProcesses`
+   * coding-agent turns are included. When `includeSidecarScripts` is true,
+   * also include cleanup newer than the turn and setup immediately older.
    */
-  const loadHistoricTurnProcesses = useCallback(
-    async (
+  const selectHistoricTurnProcesses = useCallback(
+    (
       maxCodingAgentProcesses: number,
-      options?: { skipAlreadyDisplayed?: boolean }
-    ): Promise<ExecutionProcessStateStore> => {
-      const localDisplayedExecutionProcesses: ExecutionProcessStateStore = {};
+      options?: {
+        skipAlreadyDisplayed?: boolean;
+        includeSidecarScripts?: boolean;
+      }
+    ): ExecutionProcess[] => {
       const skipAlreadyDisplayed = options?.skipAlreadyDisplayed ?? false;
-
-      if (!executionProcesses?.current) return localDisplayedExecutionProcesses;
-
+      const includeSidecarScripts = options?.includeSidecarScripts ?? true;
+      const toLoad: ExecutionProcess[] = [];
       let codingAgentCount = 0;
       let reachedTurnLimit = false;
+
+      if (!executionProcesses?.current) return toLoad;
 
       for (const executionProcess of [
         ...executionProcesses.current,
@@ -290,34 +359,121 @@ export const useConversationHistory = ({
         }
 
         if (reachedTurnLimit) {
+          if (!includeSidecarScripts) break;
           // After the turn budget, only pull the immediately older setup script(s).
           if (executionProcess.run_reason !== 'setupscript') {
             break;
           }
         }
 
-        const entries =
-          await loadEntriesForHistoricExecutionProcess(executionProcess);
-        const entriesWithKey = entries.map((e, idx) =>
-          patchWithKey(e, executionProcess.id, idx)
-        );
+        if (!includeSidecarScripts && !isCodingAgentProcess(executionProcess)) {
+          // Agent-first path: skip cleanup/setup until deferred phase.
+          continue;
+        }
 
-        localDisplayedExecutionProcesses[executionProcess.id] = {
-          executionProcess,
-          entries: entriesWithKey,
-        };
+        toLoad.push(executionProcess);
 
         if (isCodingAgentProcess(executionProcess)) {
           codingAgentCount += 1;
           if (codingAgentCount >= maxCodingAgentProcesses) {
             reachedTurnLimit = true;
+            if (!includeSidecarScripts) break;
           }
         }
       }
 
+      return toLoad;
+    },
+    []
+  );
+
+  /**
+   * Fetch log WS for a selected process list in parallel.
+   * When `onLatestAgentProgress` is set, the newest coding-agent streams
+   * throttled progress callbacks before Finished.
+   */
+  const fetchHistoricProcesses = useCallback(
+    async (
+      toLoad: ExecutionProcess[],
+      options?: {
+        signal?: AbortSignal;
+        onLatestAgentProgress?: (
+          executionProcess: ExecutionProcess,
+          entries: PatchType[]
+        ) => void;
+      }
+    ): Promise<ExecutionProcessStateStore> => {
+      const localDisplayedExecutionProcesses: ExecutionProcessStateStore = {};
+      if (toLoad.length === 0 || options?.signal?.aborted) {
+        return localDisplayedExecutionProcesses;
+      }
+
+      const progressiveProcessId = options?.onLatestAgentProgress
+        ? toLoad.find(isCodingAgentProcess)?.id
+        : undefined;
+
+      const loaded = await Promise.all(
+        toLoad.map(async (executionProcess) => {
+          const isProgressive = executionProcess.id === progressiveProcessId;
+          const entries = await loadEntriesForHistoricExecutionProcess(
+            executionProcess,
+            {
+              signal: options?.signal,
+              onProgress: isProgressive
+                ? (progressEntries) => {
+                    options?.onLatestAgentProgress?.(
+                      executionProcess,
+                      progressEntries
+                    );
+                  }
+                : undefined,
+            }
+          );
+          return { executionProcess, entries };
+        })
+      );
+
+      if (options?.signal?.aborted) return localDisplayedExecutionProcesses;
+
+      for (const { executionProcess, entries } of loaded) {
+        localDisplayedExecutionProcesses[executionProcess.id] = {
+          executionProcess,
+          entries: keyEntriesIncremental(
+            entries,
+            executionProcess.id,
+            undefined
+          ),
+        };
+      }
+
       return localDisplayedExecutionProcesses;
     },
-    [executionProcesses]
+    []
+  );
+
+  const loadHistoricTurnProcesses = useCallback(
+    async (
+      maxCodingAgentProcesses: number,
+      options?: {
+        skipAlreadyDisplayed?: boolean;
+        includeSidecarScripts?: boolean;
+        signal?: AbortSignal;
+        onLatestAgentProgress?: (
+          executionProcess: ExecutionProcess,
+          entries: PatchType[]
+        ) => void;
+      }
+    ): Promise<ExecutionProcessStateStore> => {
+      const toLoad = selectHistoricTurnProcesses(maxCodingAgentProcesses, {
+        skipAlreadyDisplayed: options?.skipAlreadyDisplayed,
+        includeSidecarScripts: options?.includeSidecarScripts,
+      });
+      return fetchHistoricProcesses(toLoad, {
+        signal: options?.signal,
+        onLatestAgentProgress: options?.onLatestAgentProgress,
+      });
+    },
+    [fetchHistoricProcesses, selectHistoricTurnProcesses]
   );
 
   const ensureProcessVisible = useCallback((p: ExecutionProcess) => {
@@ -361,23 +517,44 @@ export const useConversationHistory = ({
 
     loadingMoreRef.current = true;
     setIsLoadingHistory(true);
+    const abort = new AbortController();
+    loadMoreAbortRef.current = abort;
     try {
       const batch = await loadHistoricTurnProcesses(
         LOAD_MORE_CODING_AGENT_PROCESSES,
-        { skipAlreadyDisplayed: true }
+        {
+          skipAlreadyDisplayed: true,
+          includeSidecarScripts: true,
+          signal: abort.signal,
+        }
       );
-      const loadedIds = Object.keys(batch);
+      if (abort.signal.aborted) return;
+
+      // Ignore empty fetches so a failed/aborted WS does not mark the process
+      // displayed and permanently hide "load earlier".
+      const nonEmptyBatch: ExecutionProcessStateStore = {};
+      for (const [id, state] of Object.entries(batch)) {
+        if (state.entries.length > 0) {
+          nonEmptyBatch[id] = state;
+        }
+      }
+
+      const loadedIds = Object.keys(nonEmptyBatch);
       if (loadedIds.length === 0) {
-        setHasMoreHistory(false);
+        // Keep hasMore true if unloaded processes remain — user can retry.
+        refreshHasMoreHistory();
         return;
       }
 
       mergeIntoDisplayed((state) => {
-        Object.assign(state, batch);
+        Object.assign(state, nonEmptyBatch);
       });
       emitEntries(displayedExecutionProcesses.current, 'historic', false);
       refreshHasMoreHistory();
     } finally {
+      if (loadMoreAbortRef.current === abort) {
+        loadMoreAbortRef.current = null;
+      }
       loadingMoreRef.current = false;
       setIsLoadingHistory(false);
     }
@@ -411,6 +588,8 @@ export const useConversationHistory = ({
   ]);
 
   useEffect(() => {
+    loadMoreAbortRef.current?.abort();
+    loadMoreAbortRef.current = null;
     displayedExecutionProcesses.current = {};
     loadedInitialEntries.current = false;
     emittedEmptyInitialRef.current = false;
@@ -423,10 +602,13 @@ export const useConversationHistory = ({
   }, [scopeKey, emitEntries]);
 
   useEffect(() => {
-    let cancelled = false;
+    const abort = new AbortController();
+
     (async () => {
       if (loadedInitialEntries.current) return;
 
+      // Wait for processes WS Ready (full snapshot). No extra debounce — Ready
+      // already means the initial list is complete.
       if (isLoading) return;
 
       if (executionProcesses.current.length === 0) {
@@ -439,19 +621,25 @@ export const useConversationHistory = ({
 
       emittedEmptyInitialRef.current = false;
 
-      const allInitialEntries = await loadHistoricTurnProcesses(
-        INITIAL_HISTORIC_CODING_AGENT_PROCESSES
+      // Newest turn in one parallel batch (agent + adjacent setup/cleanup).
+      // Single emit avoids a second prepend/layout shift after first paint.
+      const initialEntries = await loadHistoricTurnProcesses(
+        INITIAL_HISTORIC_CODING_AGENT_PROCESSES,
+        {
+          signal: abort.signal,
+          includeSidecarScripts: true,
+        }
       );
-      if (cancelled) return;
+      if (abort.signal.aborted) return;
       loadedInitialEntries.current = true;
       mergeIntoDisplayed((state) => {
-        Object.assign(state, allInitialEntries);
+        Object.assign(state, initialEntries);
       });
       emitEntries(displayedExecutionProcesses.current, 'initial', false);
       refreshHasMoreHistory();
     })();
     return () => {
-      cancelled = true;
+      abort.abort();
     };
   }, [
     scopeKey,
@@ -460,7 +648,7 @@ export const useConversationHistory = ({
     loadHistoricTurnProcesses,
     emitEntries,
     refreshHasMoreHistory,
-  ]); // include idListKey so new processes trigger reload
+  ]);
 
   useEffect(() => {
     const activeProcesses = getActiveAgentProcesses();
@@ -502,6 +690,7 @@ export const useConversationHistory = ({
     if (!executionProcessesRaw) return;
 
     const processesToReload: ExecutionProcess[] = [];
+    let metadataOnlyUpdate = false;
 
     for (const process of executionProcessesRaw) {
       const previousStatus = previousStatusMapRef.current.get(process.id);
@@ -512,23 +701,55 @@ export const useConversationHistory = ({
         currentStatus !== ExecutionProcessStatus.running &&
         displayedExecutionProcesses.current[process.id]
       ) {
-        processesToReload.push(process);
+        const existing =
+          displayedExecutionProcesses.current[process.id]?.entries ?? [];
+        // Live stream already delivered the full turn — only re-fetch when
+        // we have no entries (stream failed / never connected).
+        if (existing.length > 0) {
+          mergeIntoDisplayed((state) => {
+            const current = state[process.id];
+            if (current) {
+              state[process.id] = {
+                ...current,
+                executionProcess: process,
+              };
+            }
+          });
+          metadataOnlyUpdate = true;
+        } else {
+          processesToReload.push(process);
+        }
       }
 
       previousStatusMapRef.current.set(process.id, currentStatus);
     }
 
+    if (metadataOnlyUpdate && processesToReload.length === 0) {
+      emitEntries(displayedExecutionProcesses.current, 'running', false);
+      refreshHasMoreHistory();
+      return;
+    }
+
     if (processesToReload.length === 0) return;
 
     (async () => {
-      let anyUpdated = false;
+      const reloaded = await Promise.all(
+        processesToReload.map(async (process) => {
+          const entries = await loadEntriesForHistoricExecutionProcess(process);
+          return { process, entries };
+        })
+      );
 
-      for (const process of processesToReload) {
-        const entries = await loadEntriesForHistoricExecutionProcess(process);
+      let anyUpdated = false;
+      for (const { process, entries } of reloaded) {
         if (entries.length === 0) continue;
 
-        const entriesWithKey = entries.map((e, idx) =>
-          patchWithKey(e, process.id, idx)
+        const previous =
+          displayedExecutionProcesses.current[process.id]?.entries;
+        const entriesWithKey = keyEntriesIncremental(
+          entries,
+          process.id,
+          previous
         );
 
         mergeIntoDisplayed((state) => {
