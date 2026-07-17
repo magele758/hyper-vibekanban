@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   PlusIcon,
   GitBranchIcon,
@@ -17,6 +17,7 @@ import { RunningDots } from '@vibe/ui/components/RunningDots';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
+import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
 import { cn } from '@/shared/lib/utils';
 
 const formatRelativeElapsed = (dateString: string): string => {
@@ -40,6 +41,12 @@ export function MobileWorkspacesList() {
     useWorkspaceContext();
   const [showArchive, setShowArchive] = useState(false);
   const workspaces = showArchive ? archivedWorkspaces : activeWorkspaces;
+
+  useEffect(() => {
+    if (showArchive) {
+      enableArchivedWorkspaceStream();
+    }
+  }, [showArchive]);
 
   const handleSelectWorkspace = (id: string) => {
     selectWorkspace(id);

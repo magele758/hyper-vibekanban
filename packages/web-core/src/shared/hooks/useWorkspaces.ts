@@ -13,6 +13,7 @@ import {
   isRelayLocalStreamEnabled,
   resolveRelayLocalStreamHostId,
 } from '@/shared/lib/relayLocalStreams';
+import { useArchivedWorkspaceStreamEnabled } from '@/shared/lib/archivedWorkspaceStreamGate';
 import type {
   WorkspaceWithStatus,
   WorkspaceSummary,
@@ -212,9 +213,9 @@ export function useWorkspaces(): UseWorkspacesResult {
     fallbackHostId,
     true
   );
+  const archivedStreamEnabled = useArchivedWorkspaceStreamEnabled();
 
-  // Two separate WebSocket connections: one for active, one for archived
-  // No limit param - we fetch all and slice on frontend so backfill works when archiving
+  // Active stream is always on; archived opens only after archive UI / archived workspace.
   // Own-machine host id is treated as local (/api), not /api/host/{id}.
   const useHostPrefix =
     Boolean(streamHostId) && !isLocalRelayHostId(streamHostId);
@@ -245,7 +246,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     error: archivedError,
   } = useJsonPatchWsStream<WorkspacesState>(
     archivedEndpoint,
-    workspaceStreamsEnabled,
+    workspaceStreamsEnabled && archivedStreamEnabled,
     initialData
   );
 
@@ -357,15 +358,15 @@ export function useWorkspaces(): UseWorkspacesResult {
       );
   }, [archivedData, archivedSummaries, archivedDiffStats]);
 
-  // isLoading is true when we haven't received initial data from either stream
+  // Wait for archived only when that stream is intentionally enabled.
   const isLoading =
-    workspaceStreamsEnabled && (!activeIsInitialized || !archivedIsInitialized);
+    workspaceStreamsEnabled &&
+    (!activeIsInitialized || (archivedStreamEnabled && !archivedIsInitialized));
 
-  // Combined connection status
-  const isConnected = activeIsConnected && archivedIsConnected;
+  const isConnected =
+    activeIsConnected && (!archivedStreamEnabled || archivedIsConnected);
 
-  // Combined error (show first error if any)
-  const error = activeError || archivedError;
+  const error = activeError || (archivedStreamEnabled ? archivedError : null);
 
   return {
     workspaces,

@@ -16,6 +16,7 @@ import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 
 import { WorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
+import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
 
 interface WorkspaceProviderProps {
   children: ReactNode;
@@ -79,7 +80,10 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     enabled: !isCreateMode && hasPrAttached,
   });
 
-  const { diffs } = useDiffStream(workspaceId ?? null, !isCreateMode);
+  // Stats/paths only at provider level — Changes panel opens a full-content stream.
+  const { diffs } = useDiffStream(workspaceId ?? null, !isCreateMode, {
+    statsOnly: true,
+  });
 
   const diffPaths = useMemo(
     () =>
@@ -174,6 +178,15 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
       console.warn('Failed to mark workspace as seen:', error);
     });
   }, [workspaceId, isCreateMode, queryClient, hostId]);
+
+  // Deep-link / restore into an archived workspace: open archived stream on demand.
+  useEffect(() => {
+    if (!workspaceId || isCreateMode || isLoadingList) return;
+    const inActive = activeWorkspaces.some((w) => w.id === workspaceId);
+    if (!inActive) {
+      enableArchivedWorkspaceStream();
+    }
+  }, [workspaceId, isCreateMode, isLoadingList, activeWorkspaces]);
 
   const selectWorkspace = useCallback(
     (id: string) => {

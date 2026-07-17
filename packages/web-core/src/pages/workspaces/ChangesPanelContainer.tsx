@@ -25,6 +25,7 @@ import {
   useShowGitHubComments,
   useGetGitHubCommentsForFile,
 } from '@/shared/stores/useWorkspaceDiffStore';
+import { useDiffStream } from '@/shared/hooks/useDiffStream';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import {
   useDiffViewMode,
@@ -598,7 +599,12 @@ export const ChangesPanelContainer = memo(function ChangesPanelContainer({
   className,
   workspaceId,
 }: ChangesPanelContainerProps) {
-  const diffs = useDiffs();
+  // Provider keeps stats-only diffs for sidebar/chat; this panel needs full content.
+  const { diffs: fullDiffs } = useDiffStream(workspaceId, true, {
+    statsOnly: false,
+  });
+  const statsDiffs = useDiffs();
+  const diffs = fullDiffs.length > 0 ? fullDiffs : statsDiffs;
   const { registerScrollToFile } = useChangesView();
   const [processedPaths] = useState(() => new Set<string>());
   const [mountedCount, setMountedCount] = useState(0);

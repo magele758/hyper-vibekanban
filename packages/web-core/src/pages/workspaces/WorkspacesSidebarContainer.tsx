@@ -20,6 +20,7 @@ import {
   type WorkspaceSortOrder,
 } from '@/shared/stores/useUiPreferencesStore';
 import type { Workspace } from '@/shared/hooks/useWorkspaces';
+import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import {
@@ -273,6 +274,12 @@ export function WorkspacesSidebarContainer({
     PERSIST_KEYS.workspacesSidebarArchived,
     false
   );
+
+  useEffect(() => {
+    if (showArchive) {
+      enableArchivedWorkspaceStream();
+    }
+  }, [showArchive]);
   const [isAccordionLayout, setAccordionLayout] = usePersistedExpanded(
     PERSIST_KEYS.workspacesSidebarAccordionLayout,
     true
