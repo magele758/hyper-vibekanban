@@ -168,7 +168,12 @@ pub enum ControlResponseType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Message {
-    User { message: ClaudeUserMessage },
+    User {
+        message: ClaudeUserMessage,
+        /// Required by Claude Code `--input-format stream-json` (SDKUserMessage).
+        parent_tool_use_id: Option<String>,
+        session_id: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -184,6 +189,8 @@ impl Message {
                 role: "user".to_string(),
                 content,
             },
+            parent_tool_use_id: None,
+            session_id: String::new(),
         }
     }
 }

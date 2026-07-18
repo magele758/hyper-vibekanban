@@ -1286,7 +1286,13 @@ impl ClaudeLogProcessor {
                             patches.push(add_system_message(status.clone(), entry_index_provider));
                         }
                     }
-                    Some("compact_boundary") | Some("thinking_tokens") => {}
+                    // SessionStart plugin hooks (ponytail/warp/etc.) are noisy and
+                    // were previously the only visible lines when a resume raced
+                    // an orphan task-notification result against stdin EOF.
+                    Some("compact_boundary")
+                    | Some("thinking_tokens")
+                    | Some("hook_started")
+                    | Some("hook_response") => {}
                     Some("task_started") => {
                         if let Some(tool_use_id) = tool_use_id
                             && !self.tool_map.contains_key(tool_use_id)

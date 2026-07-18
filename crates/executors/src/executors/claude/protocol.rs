@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -22,7 +25,19 @@ use crate::{
 /// Handles bidirectional control protocol communication
 #[derive(Clone)]
 pub struct ProtocolPeer {
-    stdin: Arc<Mutex<ChildStdin>>,
+    stdin: Arc<Mutex<Option<ChildStdin>>>,
+    /// Set after the follow-up/user prompt has been written to stdin.
+    ///
+    /// Claude Code may emit an early `result` for orphaned background-task
+    /// notifications during `--resume` (origin `task-notification`, often
+    /// `num_turns: 0`) *before* it reads our user message. Previously we
+    /// broke the read loop on any `result`, which dropped `ChildStdin` and
+    /// sent EOF — so Claude exited with only SessionStart hooks visible and
+    /// never processed the prompt. We only close stdin after the prompt has
+    /// been sent (and a later `result` arrives), so Claude can drain the
+    /// prompt and then exit cleanly.
+    prompt_sent: Arc<AtomicBool>,
+    stdin_closed: Arc<AtomicBool>,
 }
 
 impl ProtocolPeer {
@@ -33,7 +48,9 @@ impl ProtocolPeer {
         cancel: CancellationToken,
     ) -> Self {
         let peer = Self {
-            stdin: Arc::new(Mutex::new(stdin)),
+            stdin: Arc::new(Mutex::new(Some(stdin))),
+            prompt_sent: Arc::new(AtomicBool::new(false)),
+            stdin_closed: Arc::new(AtomicBool::new(false)),
         };
 
         let reader_peer = peer.clone();
@@ -87,8 +104,8 @@ impl ProtocolPeer {
                                     self.handle_control_request(&client, request_id, request)
                                         .await;
                                 }
-                                Ok(CLIMessage::Result(_)) => {
-                                    break;
+                                Ok(CLIMessage::Result(result)) => {
+                                    self.on_result_message(&result).await;
                                 }
                                 _ => {}
                             }
@@ -99,6 +116,45 @@ impl ProtocolPeer {
                         }
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// After the user prompt is in-flight, close stdin on `result` so Claude
+    /// leaves `-p` / stream-json mode. Ignore earlier results (e.g. resume
+    /// task-notification drains) so we do not EOF before the prompt is written.
+    async fn on_result_message(&self, result: &serde_json::Value) {
+        if !self.prompt_sent.load(Ordering::SeqCst) {
+            let origin = result
+                .get("origin")
+                .and_then(|o| o.get("kind"))
+                .and_then(|k| k.as_str())
+                .unwrap_or("unknown");
+            let num_turns = result.get("num_turns").and_then(|t| t.as_u64());
+            tracing::warn!(
+                origin,
+                num_turns,
+                "Ignoring Claude result before user prompt was sent (keeping stdin open)"
+            );
+            return;
+        }
+
+        if let Err(e) = self.close_stdin().await {
+            tracing::warn!("Failed to close Claude stdin after result: {e}");
+        }
+    }
+
+    async fn close_stdin(&self) -> Result<(), ExecutorError> {
+        if self.stdin_closed.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        let mut guard = self.stdin.lock().await;
+        if let Some(mut stdin) = guard.take() {
+            // Half-close the write side so Claude sees EOF and can exit after
+            // finishing the current turn, while we keep reading stdout.
+            if let Err(e) = stdin.shutdown().await {
+                tracing::debug!("Claude stdin shutdown: {e}");
             }
         }
         Ok(())
@@ -188,7 +244,13 @@ impl ProtocolPeer {
 
     async fn send_json<T: serde::Serialize>(&self, message: &T) -> Result<(), ExecutorError> {
         let json = serde_json::to_string(message)?;
-        let mut stdin = self.stdin.lock().await;
+        let mut guard = self.stdin.lock().await;
+        let stdin = guard.as_mut().ok_or_else(|| {
+            ExecutorError::Io(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "Claude stdin already closed",
+            ))
+        })?;
         stdin.write_all(json.as_bytes()).await?;
         stdin.write_all(b"\n").await?;
         stdin.flush().await?;
@@ -197,7 +259,11 @@ impl ProtocolPeer {
 
     pub async fn send_user_message(&self, content: String) -> Result<(), ExecutorError> {
         let message = Message::new_user(content);
-        self.send_json(&message).await
+        self.send_json(&message).await?;
+        // Mark only after a successful write so a failed send cannot cause a
+        // premature stdin close on a later orphan result.
+        self.prompt_sent.store(true, Ordering::SeqCst);
+        Ok(())
     }
 
     pub async fn initialize(&self, hooks: Option<serde_json::Value>) -> Result<(), ExecutorError> {
@@ -216,5 +282,35 @@ impl ProtocolPeer {
             SDKControlRequestType::SetPermissionMode { mode },
         ))
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn early_result_without_prompt_keeps_stdin_open_flag() {
+        let prompt_sent = AtomicBool::new(false);
+        assert!(!prompt_sent.load(Ordering::SeqCst));
+        prompt_sent.store(true, Ordering::SeqCst);
+        assert!(prompt_sent.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn task_notification_result_shape_is_detectable() {
+        let result = serde_json::json!({
+            "type": "result",
+            "subtype": "success",
+            "num_turns": 0,
+            "origin": { "kind": "task-notification" },
+            "result": ""
+        });
+        let origin = result
+            .get("origin")
+            .and_then(|o| o.get("kind"))
+            .and_then(|k| k.as_str());
+        assert_eq!(origin, Some("task-notification"));
+        assert_eq!(result.get("num_turns").and_then(|t| t.as_u64()), Some(0));
     }
 }
