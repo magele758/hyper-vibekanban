@@ -75,12 +75,20 @@ function GlobalAgentsChatInner() {
           has_api_key: c.has_api_key,
         })
       )
-      .catch(() => {});
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(
+          msg.includes('Failed to fetch') || msg.includes('NetworkError')
+            ? '模型服务 sidecar 不可达（/agent-sidecar）。请确认预览机 sidecar 已在正确端口启动。'
+            : `加载模型配置失败: ${msg}`
+        );
+      });
   }, [selectedProjectId]);
 
   const saveModelCfg = useCallback(async () => {
     if (!selectedProjectId) return;
     setSavingCfg(true);
+    setError(null);
     try {
       const body: { base_url?: string; api_key?: string; model?: string } = {
         base_url: modelCfg.base_url,
@@ -100,7 +108,12 @@ function GlobalAgentsChatInner() {
       });
       setShowSettings(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(
+        msg.includes('Failed to fetch') || msg.includes('NetworkError')
+          ? '保存失败：模型服务 sidecar 不可达。请确认预览机 agent-sidecar 在 :23110 运行。'
+          : msg
+      );
     } finally {
       setSavingCfg(false);
     }
