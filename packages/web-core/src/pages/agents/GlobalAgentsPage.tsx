@@ -4,6 +4,7 @@ import {
   PaperPlaneTiltIcon,
   SpinnerIcon,
   CaretDownIcon,
+  GearIcon,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
@@ -51,6 +52,25 @@ function GlobalAgentsChatInner() {
   const [error, setError] = useState<string | null>(null);
   const [justFinished, setJustFinished] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // 模型服务配置（浏览器本地存储，随 chat 请求透传给 sidecar）
+  const [showSettings, setShowSettings] = useState(false);
+  const [modelCfg, setModelCfg] = useState(() => {
+    try {
+      return (
+        JSON.parse(localStorage.getItem('vk-copilot-model') || '') || {
+          base_url: '',
+          api_key: '',
+          model: '',
+        }
+      );
+    } catch {
+      return { base_url: '', api_key: '', model: '' };
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem('vk-copilot-model', JSON.stringify(modelCfg));
+  }, [modelCfg]);
 
   const refreshSessions = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -147,6 +167,9 @@ function GlobalAgentsChatInner() {
         agent_id: null,
         message: text,
         cwd: null,
+        copilot_base_url: modelCfg.base_url,
+        copilot_api_key: modelCfg.api_key,
+        copilot_model: modelCfg.model,
         token,
         onDelta: (t) => setStreaming((s) => s + t),
         onStatus: () => {},
@@ -242,7 +265,66 @@ function GlobalAgentsChatInner() {
           <span className="text-xs text-low">
             （全局指挥台 • 可创建/运行 Squad/Autopilot）
           </span>
+          <div className="ml-auto flex items-center gap-2">
+            {!modelCfg.base_url && (
+              <span className="text-xs text-amber-600">未配置模型服务</span>
+            )}
+            <Tooltip content="模型服务设置" side="bottom">
+              <button
+                type="button"
+                className="shrink-0 rounded-md p-1.5 text-low hover:bg-primary hover:text-normal"
+                onClick={() => setShowSettings((v) => !v)}
+              >
+                <GearIcon className="size-4" />
+              </button>
+            </Tooltip>
+          </div>
         </div>
+
+        {showSettings && (
+          <div className="flex flex-col gap-2 border-b border-border bg-primary px-4 py-3">
+            <div className="text-xs font-medium text-normal">
+              模型服务（OpenAI 兼容）· 仅存本浏览器
+            </div>
+            <input
+              value={modelCfg.base_url}
+              onChange={(e) =>
+                setModelCfg((c: typeof modelCfg) => ({
+                  ...c,
+                  base_url: e.target.value,
+                }))
+              }
+              placeholder="base_url，如 https://api.openai.com/v1"
+              className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <input
+              value={modelCfg.api_key}
+              onChange={(e) =>
+                setModelCfg((c: typeof modelCfg) => ({
+                  ...c,
+                  api_key: e.target.value,
+                }))
+              }
+              type="password"
+              placeholder="api_key，如 sk-..."
+              className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <input
+              value={modelCfg.model}
+              onChange={(e) =>
+                setModelCfg((c: typeof modelCfg) => ({
+                  ...c,
+                  model: e.target.value,
+                }))
+              }
+              placeholder="model_name，如 gpt-4o / deepseek-chat"
+              className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+            <p className="text-xs text-low">
+              留空则回落到 sidecar 的环境变量配置。
+            </p>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-4 py-4">

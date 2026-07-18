@@ -478,6 +478,9 @@ export const boardAgentsApi = {
     agent_id?: string | null;
     message: string;
     cwd?: string | null;
+    copilot_base_url?: string | null;
+    copilot_api_key?: string | null;
+    copilot_model?: string | null;
     onDelta?: (text: string) => void;
     onEvent?: (event: unknown) => void;
     onStatus?: (status: {
@@ -508,6 +511,9 @@ export const boardAgentsApi = {
         agent_id: params.agent_id ?? null,
         message: params.message,
         cwd: params.cwd?.trim() || undefined,
+        copilot_base_url: params.copilot_base_url?.trim() || undefined,
+        copilot_api_key: params.copilot_api_key?.trim() || undefined,
+        copilot_model: params.copilot_model?.trim() || undefined,
       }),
     });
     if (!res.ok || !res.body) {
