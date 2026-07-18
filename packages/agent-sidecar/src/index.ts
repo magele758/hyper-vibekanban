@@ -36,6 +36,10 @@ const ChatBody = z.object({
   agent_id: z.string().uuid().optional().nullable(),
   message: z.string().min(1),
   cwd: z.string().optional(),
+  // 全局指挥台（无 agent）在浏览器里配的模型服务，随请求透传。
+  copilot_base_url: z.string().optional(),
+  copilot_api_key: z.string().optional(),
+  copilot_model: z.string().optional(),
 });
 
 type LlmSecret = {
@@ -310,7 +314,16 @@ app.post("/copilot/chat", async (req, res) => {
     return;
   }
 
-  const { project_id, session_id, agent_id, message, cwd } = parsed.data;
+  const {
+    project_id,
+    session_id,
+    agent_id,
+    message,
+    cwd,
+    copilot_base_url,
+    copilot_api_key,
+    copilot_model,
+  } = parsed.data;
   console.log(
     `[agent-sidecar] chat session=${session_id} agent=${agent_id ?? "-"} msg_len=${message.length}`,
   );
@@ -351,14 +364,14 @@ app.post("/copilot/chat", async (req, res) => {
       if (llm.base_url) baseUrl = llm.base_url;
       if (llm.working_directory) savedWorkingDirectory = llm.working_directory;
     } else {
-      // 全局指挥台（agent_id: null）用环境变量配模型服务。
-      // 一旦设了 VK_COPILOT_BASE_URL，下方 useOpenAiCompatible 自动为 true，
-      // 走 OpenAI 兼容的 /chat/completions，支持任意兼容网关。
-      if (process.env.VK_COPILOT_API_KEY)
-        apiKey = process.env.VK_COPILOT_API_KEY;
-      if (process.env.VK_COPILOT_BASE_URL)
-        baseUrl = process.env.VK_COPILOT_BASE_URL;
-      if (process.env.VK_COPILOT_MODEL) modelId = process.env.VK_COPILOT_MODEL;
+      // 全局指挥台（agent_id: null）：优先用请求体里浏览器配的模型服务，
+      // 否则回落到环境变量。设了 base_url 后 useOpenAiCompatible 自动为 true。
+      const base = copilot_base_url?.trim() || process.env.VK_COPILOT_BASE_URL;
+      const key = copilot_api_key?.trim() || process.env.VK_COPILOT_API_KEY;
+      const model = copilot_model?.trim() || process.env.VK_COPILOT_MODEL;
+      if (key) apiKey = key;
+      if (base) baseUrl = base;
+      if (model) modelId = model;
     }
 
     const requestCwd = cwd?.trim() || "";
