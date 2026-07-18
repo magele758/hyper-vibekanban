@@ -123,12 +123,22 @@ cmd_up_host() {
   _ensure_toolchain
   _ensure_deps
 
-  if _is_running server || _is_running vite; then
+  if _is_running server || _is_running vite || _is_running sidecar; then
     echo "==> Desktop host already running; restarting..."
     _stop_named server
     _stop_named vite
     _stop_named sidecar
   fi
+  # Free host ports + kill stray preview sidecar (often left on default :13110).
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${FRONTEND_PORT}/tcp" 2>/dev/null || true
+    fuser -k "${BACKEND_PORT}/tcp" 2>/dev/null || true
+    fuser -k "${PREVIEW_PROXY_PORT}/tcp" 2>/dev/null || true
+    fuser -k "${SIDECAR_PORT}/tcp" 2>/dev/null || true
+  fi
+  pkill -f "${ROOT}/packages/agent-sidecar" 2>/dev/null || true
+  pkill -f "cargo-watch watch -q -w ${ROOT}/crates" 2>/dev/null || true
+  sleep 1
 
   local access
   access="$(_access_host)"
@@ -194,15 +204,21 @@ cmd_up_host() {
       pnpm exec tsx src/index.ts \
       >"${LOG_DIR}/sidecar.log" 2>&1 &
     echo $! >"$(_pid_file sidecar)"
-  ) || echo "WARN: agent-sidecar failed to start (Agents chat may be limited)"
+  )
 
-  echo "  Waiting for Desktop health..."
+  echo "  Waiting for Desktop + sidecar health..."
   local ok=0
+  local side_ok=0
   for _ in $(seq 1 90); do
+    if _http_ok "http://127.0.0.1:${SIDECAR_PORT}/health"; then
+      side_ok=1
+    fi
     if _http_ok "http://127.0.0.1:${BACKEND_PORT}/api/health" \
       && _http_ok "http://127.0.0.1:${FRONTEND_PORT}/"; then
       ok=1
-      break
+      if [[ "$side_ok" -eq 1 ]]; then
+        break
+      fi
     fi
     echo -n "."
     sleep 2
@@ -212,6 +228,11 @@ cmd_up_host() {
     echo "WARN: Desktop did not become healthy in time. See ${LOG_DIR}/" >&2
   else
     echo "  Desktop host healthy."
+  fi
+  if [[ "$side_ok" -eq 0 ]]; then
+    echo "WARN: agent-sidecar :${SIDECAR_PORT} 未就绪（/agents 模型配置会失败）。见 ${LOG_DIR}/sidecar.log" >&2
+  else
+    echo "  agent-sidecar healthy (:${SIDECAR_PORT})."
   fi
 }
 
@@ -285,6 +306,10 @@ cmd_smoke() {
   if _http_ok "http://127.0.0.1:${FRONTEND_PORT}/"; then echo OK; else echo FAIL; fail=1; fi
   echo -n "  Local API:    "
   if _http_ok "http://127.0.0.1:${BACKEND_PORT}/api/health"; then echo OK; else echo FAIL; fail=1; fi
+  echo -n "  Sidecar:      "
+  if _http_ok "http://127.0.0.1:${SIDECAR_PORT}/health"; then echo OK; else echo FAIL; fail=1; fi
+  echo -n "  Sidecar proxy:"
+  if _http_ok "http://127.0.0.1:${FRONTEND_PORT}/agent-sidecar/health"; then echo OK; else echo FAIL; fail=1; fi
   if [[ "$fail" -eq 0 ]]; then
     echo ""; echo "✓ Full smoke passed."
   else
