@@ -53,24 +53,58 @@ function GlobalAgentsChatInner() {
   const [justFinished, setJustFinished] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // 模型服务配置（浏览器本地存储，随 chat 请求透传给 sidecar）
+  // 模型服务配置（服务端存储，按 project_id，多端共享）
   const [showSettings, setShowSettings] = useState(false);
-  const [modelCfg, setModelCfg] = useState(() => {
-    try {
-      return (
-        JSON.parse(localStorage.getItem('vk-copilot-model') || '') || {
-          base_url: '',
-          api_key: '',
-          model: '',
-        }
-      );
-    } catch {
-      return { base_url: '', api_key: '', model: '' };
-    }
-  });
+  const [modelCfg, setModelCfg] = useState<{
+    base_url: string;
+    api_key: string;
+    model: string;
+    has_api_key: boolean;
+  }>({ base_url: '', api_key: '', model: '', has_api_key: false });
+  const [savingCfg, setSavingCfg] = useState(false);
+
   useEffect(() => {
-    localStorage.setItem('vk-copilot-model', JSON.stringify(modelCfg));
-  }, [modelCfg]);
+    if (!selectedProjectId) return;
+    void boardAgentsApi
+      .getCopilotConfig(selectedProjectId)
+      .then((c) =>
+        setModelCfg({
+          base_url: c.base_url ?? '',
+          api_key: '',
+          model: c.model ?? '',
+          has_api_key: c.has_api_key,
+        })
+      )
+      .catch(() => {});
+  }, [selectedProjectId]);
+
+  const saveModelCfg = useCallback(async () => {
+    if (!selectedProjectId) return;
+    setSavingCfg(true);
+    try {
+      const body: { base_url?: string; api_key?: string; model?: string } = {
+        base_url: modelCfg.base_url,
+        model: modelCfg.model,
+      };
+      // 只在用户输入了新 key 时才提交，避免覆盖成空。
+      if (modelCfg.api_key) body.api_key = modelCfg.api_key;
+      const saved = await boardAgentsApi.putCopilotConfig(
+        selectedProjectId,
+        body
+      );
+      setModelCfg({
+        base_url: saved.base_url ?? '',
+        api_key: '',
+        model: saved.model ?? '',
+        has_api_key: saved.has_api_key,
+      });
+      setShowSettings(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingCfg(false);
+    }
+  }, [selectedProjectId, modelCfg]);
 
   const refreshSessions = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -167,9 +201,6 @@ function GlobalAgentsChatInner() {
         agent_id: null,
         message: text,
         cwd: null,
-        copilot_base_url: modelCfg.base_url,
-        copilot_api_key: modelCfg.api_key,
-        copilot_model: modelCfg.model,
         token,
         onDelta: (t) => setStreaming((s) => s + t),
         onStatus: () => {},
@@ -266,7 +297,7 @@ function GlobalAgentsChatInner() {
             （全局指挥台 • 可创建/运行 Squad/Autopilot）
           </span>
           <div className="ml-auto flex items-center gap-2">
-            {!modelCfg.base_url && (
+            {!modelCfg.base_url && !modelCfg.has_api_key && (
               <span className="text-xs text-amber-600">未配置模型服务</span>
             )}
             <Tooltip content="模型服务设置" side="bottom">
@@ -284,15 +315,12 @@ function GlobalAgentsChatInner() {
         {showSettings && (
           <div className="flex flex-col gap-2 border-b border-border bg-primary px-4 py-3">
             <div className="text-xs font-medium text-normal">
-              模型服务（OpenAI 兼容）· 仅存本浏览器
+              模型服务（OpenAI 兼容）· 存服务端，按项目多端共享
             </div>
             <input
               value={modelCfg.base_url}
               onChange={(e) =>
-                setModelCfg((c: typeof modelCfg) => ({
-                  ...c,
-                  base_url: e.target.value,
-                }))
+                setModelCfg((c) => ({ ...c, base_url: e.target.value }))
               }
               placeholder="base_url，如 https://api.openai.com/v1"
               className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
@@ -300,29 +328,37 @@ function GlobalAgentsChatInner() {
             <input
               value={modelCfg.api_key}
               onChange={(e) =>
-                setModelCfg((c: typeof modelCfg) => ({
-                  ...c,
-                  api_key: e.target.value,
-                }))
+                setModelCfg((c) => ({ ...c, api_key: e.target.value }))
               }
               type="password"
-              placeholder="api_key，如 sk-..."
+              placeholder={
+                modelCfg.has_api_key
+                  ? 'api_key 已保存（留空不改）'
+                  : 'api_key，如 sk-...'
+              }
               className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
             />
             <input
               value={modelCfg.model}
               onChange={(e) =>
-                setModelCfg((c: typeof modelCfg) => ({
-                  ...c,
-                  model: e.target.value,
-                }))
+                setModelCfg((c) => ({ ...c, model: e.target.value }))
               }
               placeholder="model_name，如 gpt-4o / deepseek-chat"
               className="rounded-md border border-border bg-secondary px-3 py-1.5 text-sm text-normal placeholder:text-low focus:outline-none focus:ring-2 focus:ring-brand"
             />
-            <p className="text-xs text-low">
-              留空则回落到 sidecar 的环境变量配置。
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-low">
+                留空则回落到 sidecar 的环境变量配置。
+              </p>
+              <button
+                type="button"
+                onClick={() => void saveModelCfg()}
+                disabled={savingCfg || !selectedProjectId}
+                className="rounded-md bg-brand px-3 py-1.5 text-sm font-medium text-white hover:bg-brand/90 disabled:opacity-50"
+              >
+                {savingCfg ? '保存中…' : '保存'}
+              </button>
+            </div>
           </div>
         )}
 

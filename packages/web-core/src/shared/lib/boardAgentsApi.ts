@@ -436,6 +436,35 @@ export const boardAgentsApi = {
   },
 
   /**
+   * Global-copilot model config (per project, server-side, multi-device).
+   * GET never returns the api_key — only has_api_key.
+   */
+  async getCopilotConfig(projectId: string): Promise<{
+    base_url: string | null;
+    model: string | null;
+    has_api_key: boolean;
+  }> {
+    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`);
+    return json(res);
+  },
+
+  async putCopilotConfig(
+    projectId: string,
+    body: { base_url?: string; api_key?: string; model?: string }
+  ): Promise<{
+    base_url: string | null;
+    model: string | null;
+    has_api_key: boolean;
+  }> {
+    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return json(res);
+  },
+
+  /**
    * List models via sidecar.
    * - With base_url: OpenAI-compatible gateway listing.
    * - Without base_url: Cursor SDK `Cursor.models.list()` (not CLI --list-models).
