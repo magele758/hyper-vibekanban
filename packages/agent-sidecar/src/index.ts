@@ -350,6 +350,15 @@ app.post("/copilot/chat", async (req, res) => {
       if (llm.model_name) modelId = llm.model_name;
       if (llm.base_url) baseUrl = llm.base_url;
       if (llm.working_directory) savedWorkingDirectory = llm.working_directory;
+    } else {
+      // 全局指挥台（agent_id: null）用环境变量配模型服务。
+      // 一旦设了 VK_COPILOT_BASE_URL，下方 useOpenAiCompatible 自动为 true，
+      // 走 OpenAI 兼容的 /chat/completions，支持任意兼容网关。
+      if (process.env.VK_COPILOT_API_KEY)
+        apiKey = process.env.VK_COPILOT_API_KEY;
+      if (process.env.VK_COPILOT_BASE_URL)
+        baseUrl = process.env.VK_COPILOT_BASE_URL;
+      if (process.env.VK_COPILOT_MODEL) modelId = process.env.VK_COPILOT_MODEL;
     }
 
     const requestCwd = cwd?.trim() || "";
