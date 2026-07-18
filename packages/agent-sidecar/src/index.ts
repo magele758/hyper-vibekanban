@@ -24,6 +24,10 @@ import {
   resolveCursorSdkModelId,
   type ChatMessage,
 } from "./runtimes.js";
+import {
+  getConfig as getCopilotConfig,
+  upsertConfig as upsertCopilotConfig,
+} from "./copilotConfigStore.js";
 
 const PORT = Number(process.env.PORT ?? 13110);
 const LOCAL_API = process.env.VK_LOCAL_API_BASE ?? "http://127.0.0.1:13002";
@@ -364,11 +368,18 @@ app.post("/copilot/chat", async (req, res) => {
       if (llm.base_url) baseUrl = llm.base_url;
       if (llm.working_directory) savedWorkingDirectory = llm.working_directory;
     } else {
-      // 全局指挥台（agent_id: null）：优先用请求体里浏览器配的模型服务，
-      // 否则回落到环境变量。设了 base_url 后 useOpenAiCompatible 自动为 true。
-      const base = copilot_base_url?.trim() || process.env.VK_COPILOT_BASE_URL;
-      const key = copilot_api_key?.trim() || process.env.VK_COPILOT_API_KEY;
-      const model = copilot_model?.trim() || process.env.VK_COPILOT_MODEL;
+      // 全局指挥台（agent_id: null）：优先请求体 → 服务端存储（多端共享）→ 环境变量。
+      const saved = await getCopilotConfig(project_id);
+      const base =
+        copilot_base_url?.trim() ||
+        saved?.base_url ||
+        process.env.VK_COPILOT_BASE_URL;
+      const key =
+        copilot_api_key?.trim() ||
+        saved?.api_key ||
+        process.env.VK_COPILOT_API_KEY;
+      const model =
+        copilot_model?.trim() || saved?.model || process.env.VK_COPILOT_MODEL;
       if (key) apiKey = key;
       if (base) baseUrl = base;
       if (model) modelId = model;
@@ -683,6 +694,43 @@ app.post("/models", async (req, res) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[agent-sidecar] /models error:", message);
     res.status(500).json({ error: message });
+  }
+});
+
+// 全局指挥台模型配置（按 project_id，服务端存储，多端共享）。
+// GET 只回 has_api_key，不回传 key；PUT 合并保存（空串清除）。
+app.get("/copilot/config/:projectId", async (req, res) => {
+  try {
+    const cfg = await getCopilotConfig(req.params.projectId);
+    res.json({
+      base_url: cfg?.base_url ?? null,
+      model: cfg?.model ?? null,
+      has_api_key: !!cfg?.api_key,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.put("/copilot/config/:projectId", async (req, res) => {
+  try {
+    const { base_url, api_key, model } = (req.body ?? {}) as {
+      base_url?: string;
+      api_key?: string;
+      model?: string;
+    };
+    const saved = await upsertCopilotConfig(req.params.projectId, {
+      base_url,
+      api_key,
+      model,
+    });
+    res.json({
+      base_url: saved.base_url ?? null,
+      model: saved.model ?? null,
+      has_api_key: !!saved.api_key,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
   }
 });
 
