@@ -11,8 +11,14 @@ use crate::{
         ExecutorError,
         cursor::{CursorAgent, cursor_reasoning_options},
     },
-    model_selector::{ModelInfo, ReasoningOption},
+    model_selector::{ModelInfo, ModelProvider, ReasoningOption},
 };
+
+fn pi_thinking_options() -> Vec<ReasoningOption> {
+    ReasoningOption::from_names(
+        ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map(String::from),
+    )
+}
 
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(45);
 
@@ -52,6 +58,58 @@ pub async fn discover_cursor_models(
             "failed to parse Cursor agent --list-models output",
         ))
     })
+}
+
+pub async fn discover_pi_models(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Result<Vec<ModelInfo>, ExecutorError> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["--list-models"]),
+        cmd,
+    )
+    .map_err(|err| ExecutorError::Io(std::io::Error::other(err.to_string())))?;
+
+    match run_command_capture(&builder, &[], &cmd_env(cmd)).await {
+        Ok(output) => {
+            if let Some(models) = parse_pi_list_models(&output) {
+                return Ok(models);
+            }
+            // `pi --list-models` prints a help message (and often exits 0) when
+            // no auth/config is available. Fall through to models.json.
+            tracing::debug!("pi --list-models returned no parseable models; trying models.json");
+        }
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                "pi --list-models failed; trying ~/.pi/agent/models.json"
+            );
+        }
+    }
+
+    load_pi_models_from_config().ok_or_else(|| {
+        ExecutorError::Io(std::io::Error::other(
+            "failed to discover Pi models via --list-models or ~/.pi/agent/models.json",
+        ))
+    })
+}
+
+/// Providers extracted from a discovered Pi model list (stable order).
+pub fn pi_providers_from_models(models: &[ModelInfo]) -> Vec<ModelProvider> {
+    let mut seen = std::collections::HashSet::new();
+    let mut providers = Vec::new();
+    for model in models {
+        let Some(provider_id) = model.provider_id.as_deref() else {
+            continue;
+        };
+        if seen.insert(provider_id.to_string()) {
+            providers.push(ModelProvider {
+                id: provider_id.to_string(),
+                name: provider_id.to_string(),
+            });
+        }
+    }
+    providers
 }
 
 pub async fn discover_codex_models(
@@ -206,6 +264,134 @@ struct CodexReasoningLevel {
     description: Option<String>,
 }
 
+/// Parse `pi --list-models` aligned table output.
+///
+/// Example:
+/// ```text
+/// provider     model                                context  max-out  thinking  images
+/// tokenpony    kimi-k3                              128K     16.4K    no        no
+/// ```
+pub fn parse_pi_list_models(output: &str) -> Option<Vec<ModelInfo>> {
+    let lines: Vec<&str> = output
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    if lines.is_empty() {
+        return None;
+    }
+
+    // Help / empty catalog messages are not tables.
+    let header_idx = lines.iter().position(|line| {
+        let lower = line.to_ascii_lowercase();
+        lower.contains("provider") && lower.contains("model") && lower.contains("thinking")
+    })?;
+    let header = lines[header_idx];
+    let provider_start = header.to_ascii_lowercase().find("provider")?;
+    let model_start = header.to_ascii_lowercase().find("model")?;
+    let context_start = header.to_ascii_lowercase().find("context")?;
+    let thinking_start = header.to_ascii_lowercase().find("thinking")?;
+    let images_start = header.to_ascii_lowercase().find("images");
+
+    let mut models = Vec::new();
+    for line in &lines[header_idx + 1..] {
+        if line.len() <= model_start {
+            continue;
+        }
+        let provider = slice_col(line, provider_start, model_start);
+        let model = slice_col(line, model_start, context_start);
+        if provider.is_empty()
+            || model.is_empty()
+            || provider.eq_ignore_ascii_case("provider")
+            || model.eq_ignore_ascii_case("model")
+        {
+            continue;
+        }
+
+        let thinking_end = images_start.unwrap_or(line.len());
+        let thinking = slice_col(line, thinking_start, thinking_end).to_ascii_lowercase();
+        let supports_thinking = matches!(thinking.as_str(), "yes" | "true" | "y");
+
+        let id = format!("{provider}/{model}");
+        models.push(ModelInfo {
+            id: id.clone(),
+            name: id,
+            provider_id: Some(provider),
+            reasoning_options: if supports_thinking {
+                pi_thinking_options()
+            } else {
+                vec![]
+            },
+        });
+    }
+
+    // Prefer user-configured providers (non-catalog) first for UX.
+    models.sort_by(|a, b| {
+        let a_hf = a.provider_id.as_deref() == Some("huggingface");
+        let b_hf = b.provider_id.as_deref() == Some("huggingface");
+        match (a_hf, b_hf) {
+            (false, true) => std::cmp::Ordering::Less,
+            (true, false) => std::cmp::Ordering::Greater,
+            _ => a.id.cmp(&b.id),
+        }
+    });
+
+    (!models.is_empty()).then_some(models)
+}
+
+fn slice_col(line: &str, start: usize, end: usize) -> String {
+    let start = start.min(line.len());
+    let end = end.min(line.len()).max(start);
+    line.get(start..end).unwrap_or("").trim().to_string()
+}
+
+/// Read configured custom providers from `~/.pi/agent/models.json`.
+fn load_pi_models_from_config() -> Option<Vec<ModelInfo>> {
+    let path = dirs::home_dir()?
+        .join(".pi")
+        .join("agent")
+        .join("models.json");
+    let raw = std::fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let providers = value.get("providers")?.as_object()?;
+
+    let mut models = Vec::new();
+    for (provider_id, provider) in providers {
+        let Some(list) = provider.get("models").and_then(|m| m.as_array()) else {
+            continue;
+        };
+        for entry in list {
+            let model_id = entry
+                .get("id")
+                .and_then(|v| v.as_str())
+                .or_else(|| entry.as_str())
+                .unwrap_or("")
+                .trim();
+            if model_id.is_empty() {
+                continue;
+            }
+            let id = format!("{provider_id}/{model_id}");
+            let supports_thinking = entry
+                .get("reasoning")
+                .and_then(|v| v.as_bool())
+                .or_else(|| entry.get("thinking").and_then(|v| v.as_bool()))
+                .unwrap_or(false);
+            models.push(ModelInfo {
+                id: id.clone(),
+                name: id,
+                provider_id: Some(provider_id.clone()),
+                reasoning_options: if supports_thinking {
+                    pi_thinking_options()
+                } else {
+                    vec![]
+                },
+            });
+        }
+    }
+
+    (!models.is_empty()).then_some(models)
+}
+
 pub fn parse_codex_models_json(output: &str) -> Option<Vec<ModelInfo>> {
     let payload: CodexModelsResponse = serde_json::from_str(output.trim()).ok()?;
     let models = payload
@@ -274,5 +460,29 @@ Tip: use --model <id> to switch.";
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "gpt-5.5");
         assert_eq!(models[0].reasoning_options.len(), 1);
+    }
+
+    #[test]
+    fn parse_pi_list_models_output() {
+        let output = r"provider     model                                context  max-out  thinking  images
+huggingface  deepseek-ai/DeepSeek-R1              64K      32.8K    yes       no    
+tokenpony    kimi-k3                              128K     16.4K    no        no    
+xunmeng      claude-opus-4-8                      128K     16.4K    no        no    
+";
+        let models = parse_pi_list_models(output).expect("models");
+        assert_eq!(models.len(), 3);
+        // Custom providers first.
+        assert_eq!(models[0].id, "tokenpony/kimi-k3");
+        assert_eq!(models[0].provider_id.as_deref(), Some("tokenpony"));
+        assert!(models[0].reasoning_options.is_empty());
+        assert_eq!(models[1].id, "xunmeng/claude-opus-4-8");
+        assert_eq!(models[2].id, "huggingface/deepseek-ai/DeepSeek-R1");
+        assert!(!models[2].reasoning_options.is_empty());
+    }
+
+    #[test]
+    fn parse_pi_list_models_rejects_help_text() {
+        let output = "No models available. Use /login to log into a provider via OAuth or API key.";
+        assert!(parse_pi_list_models(output).is_none());
     }
 }

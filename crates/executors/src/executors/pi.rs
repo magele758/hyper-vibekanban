@@ -29,7 +29,7 @@ use crate::{
             ConversationPatch, EntryIndexProvider, patch, shell_command_parsing::CommandCategory,
         },
     },
-    model_selector::{ModelInfo, ModelSelectorConfig, PermissionPolicy, ReasoningOption},
+    model_selector::{ModelSelectorConfig, PermissionPolicy},
     profile::ExecutorConfig,
 };
 
@@ -261,87 +261,72 @@ impl StandardCodingAgentExecutor for Pi {
         _workdir: Option<&Path>,
         _repo_path: Option<&Path>,
     ) -> Result<futures::stream::BoxStream<'static, json_patch::Patch>, ExecutorError> {
-        let thinking_options = ReasoningOption::from_names(
-            ["off", "minimal", "low", "medium", "high", "xhigh", "max"].map(String::from),
-        );
+        use crate::{
+            executor_discovery::ExecutorConfigCacheKey, executors::utils::executor_options_cache,
+            model_discovery::pi_providers_from_models,
+        };
 
-        let models = discover_pi_models().await;
-        let options = ExecutorDiscoveredOptions {
+        let cache = executor_options_cache();
+        let cmd_key = serde_json::to_string(&self.cmd).unwrap_or_default();
+        let cache_key = ExecutorConfigCacheKey::new(None, cmd_key, BaseCodingAgent::Pi);
+
+        if let Some(cached) = cache.get(&cache_key) {
+            return Ok(Box::pin(futures::stream::once(async move {
+                patch::executor_discovered_options(cached.as_ref().clone().with_loading(false))
+            })));
+        }
+
+        let initial_options = ExecutorDiscoveredOptions {
             model_selector: ModelSelectorConfig {
-                models: models
-                    .into_iter()
-                    .map(|(id, name)| ModelInfo {
-                        id,
-                        name,
-                        provider_id: None,
-                        reasoning_options: thinking_options.clone(),
-                    })
-                    .collect(),
-                default_model: None,
+                models: Vec::new(),
+                permissions: vec![PermissionPolicy::Auto, PermissionPolicy::Supervised],
                 ..Default::default()
             },
+            loading_models: true,
             ..Default::default()
         };
-        Ok(Box::pin(futures::stream::once(async move {
-            patch::executor_discovered_options(options)
-        })))
+        let initial_patch = patch::executor_discovered_options(initial_options);
+
+        let this = self.clone();
+        let discovery_stream = async_stream::stream! {
+            let models = match crate::model_discovery::discover_pi_models(
+                Self::base_command(),
+                &this.cmd,
+            )
+            .await
+            {
+                Ok(models) => models,
+                Err(error) => {
+                    tracing::warn!(
+                        ?error,
+                        "Pi model discovery failed; leaving model list empty"
+                    );
+                    yield patch::models_loaded();
+                    return;
+                }
+            };
+
+            let providers = pi_providers_from_models(&models);
+            yield patch::update_models(models.clone());
+            yield patch::models_loaded();
+
+            let options = ExecutorDiscoveredOptions {
+                model_selector: ModelSelectorConfig {
+                    providers,
+                    models,
+                    permissions: vec![PermissionPolicy::Auto, PermissionPolicy::Supervised],
+                    ..Default::default()
+                },
+                loading_models: false,
+                ..Default::default()
+            };
+            cache.put(cache_key, options);
+        };
+
+        Ok(Box::pin(
+            futures::stream::once(async move { initial_patch }).chain(discovery_stream),
+        ))
     }
-}
-
-async fn discover_pi_models() -> Vec<(String, String)> {
-    let Some(pi) = resolve_executable_path_blocking(Pi::base_command()) else {
-        return default_pi_models();
-    };
-
-    let output = tokio::process::Command::new(pi)
-        .args(["--list-models"])
-        .output()
-        .await;
-
-    let Ok(output) = output else {
-        return default_pi_models();
-    };
-    if !output.status.success() {
-        return default_pi_models();
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut models = Vec::new();
-    for line in stdout.lines().skip(1) {
-        let cols: Vec<&str> = line.split_whitespace().collect();
-        if cols.len() < 2 {
-            continue;
-        }
-        let provider = cols[0];
-        let model = cols[1];
-        if provider == "provider" || model == "model" {
-            continue;
-        }
-        let id = format!("{provider}/{model}");
-        models.push((id.clone(), id));
-        if models.len() >= 80 {
-            break;
-        }
-    }
-
-    if models.is_empty() {
-        default_pi_models()
-    } else {
-        models
-    }
-}
-
-fn default_pi_models() -> Vec<(String, String)> {
-    [
-        ("anthropic/claude-sonnet-4-20250514", "Claude Sonnet 4"),
-        ("anthropic/claude-opus-4-20250514", "Claude Opus 4"),
-        ("openai/gpt-4o", "GPT-4o"),
-        ("openai/gpt-4.1", "GPT-4.1"),
-        ("google/gemini-2.5-pro", "Gemini 2.5 Pro"),
-    ]
-    .into_iter()
-    .map(|(id, name)| (id.to_string(), name.to_string()))
-    .collect()
 }
 
 #[derive(Debug, Clone, Deserialize)]
