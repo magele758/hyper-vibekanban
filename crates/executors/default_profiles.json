@@ -63,6 +63,13 @@
           "autonomy": "skip-permissions-unsafe"
         }
       }
+    },
+    "PI": {
+      "DEFAULT": {
+        "PI": {
+          "approve": true
+        }
+      }
     }
   }
 }
