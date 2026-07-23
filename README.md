@@ -8,7 +8,7 @@
   </a>
 </p>
 
-<p align="center">Get 10X more out of Claude Code, Gemini CLI, Codex, Amp and other coding agents...</p>
+<p align="center">Get 10X more out of Claude Code, Gemini CLI, Codex, Cursor, Pi and other coding agents...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
@@ -23,52 +23,165 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **Note:** The official Vibe Kanban cloud service has been discontinued. This fork remains open source and fully functional for local self-hosting.
+> **Note:** The official Vibe Kanban cloud has been discontinued. This repo is a fork of [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) (hyper-vibekanban): **all upstream capabilities are kept**, plus a new **dynamic board-agent** layer and self-hosted Remote.
 
-![](packages/public/vibe-kanban-screenshot-overview.png)
+![](packages/public/screenshots/hyper-board.png)
 
-## Overview
+## vs upstream: what we keep / what we add
 
-Vibe Kanban is a local-first project management tool built for developers running AI coding agents. It streamlines the plan → execute → review loop so you can ship more, faster.
+Upstream is a strong “manually open a Workspace” agent workbench + kanban. This fork keeps that intact, and adds **board event → auto enqueue → execute → write-back**, plus a self-hosted replacement for the retired cloud.
 
-- **Plan with kanban issues** — create, prioritise, and manage issues on a kanban board
-- **Run coding agents in workspaces** — each workspace provisions a git worktree, launches your chosen agent, and streams its output live
-- **Review diffs and leave inline comments** — examine every changed line, annotate it, and send feedback back to the agent without leaving the UI
-- **Preview your app** — built-in browser with devtools, inspect mode, and device emulation
-- **10+ supported coding agents** — Claude Code, OpenAI Codex, Gemini CLI, GitHub Copilot, Amp, Cursor Agent CLI, OpenCode, Factory Droid, Claude Code Router (CCR), Qwen Code
-- **Create pull requests and merge** — open PRs with AI-generated descriptions, review on GitHub/Azure, and merge
+### ✅ Inherited from upstream (fully kept)
 
-![](packages/public/vibe-kanban-screenshot-workspace.png)
+| Capability | What it is |
+|------------|------------|
+| **Kanban issues** | Create / priority / tags / sub-issues / Team·Personal |
+| **Workspace + git worktree** | Pick an agent, isolated worktree, live log stream |
+| **Sessions & follow-ups** | Multi-session chat, attachments, @-files |
+| **Inline diff review** | Unified / side-by-side; comments go back to the agent |
+| **App preview** | Built-in browser, DevTools, inspect, device emulation |
+| **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen |
+| **Git / PRs** | Rebase, conflict UX, AI PR descriptions, GitHub / Azure merge |
+| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **Settings** | Agent profiles, MCP, editor integration, notifications, org / projects |
+
+Classic path still works: **issue → open Workspace by hand → logs → review diff → PR**.
+
+### ✨ Added in this fork (not in upstream)
+
+| Capability | What it is |
+|------------|------------|
+| **Board Agents** | Agents are first-class on the board; **assign → enqueue**; local watcher opens a Workspace and writes progress / comments back |
+| **Project Copilot** | Board-side chat (default Cursor SDK) to clarify work and suggest assignments — **not** the coding executor that edits files |
+| **Squad DAG** | Multi-agent pipelines: Fork / Join / If / While; canvas editor; optional chat-to-pipeline |
+| **Autopilot** | Cron + timezone; create issues or run an agent / squad; concurrency skip / queue |
+| **Webhooks** | External POST → create issue / enqueue work |
+| **Feishu bot** | Feishu message → issue queue; optional reply when done |
+| **Console workspaces** | Run in the repo’s **current dir / branch** without forcing a new worktree |
+| **Host picker on create** | Run a workspace on this machine or a paired remote worker |
+| **Mobile board layout** | Single-column + status pills for phones |
+| **Pi coding agent** | Pi CLI as an additional Workspace executor |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL after cloud shutdown (`scripts/vk-*.sh`) |
+
+### 🔄 Enhanced vs upstream
+
+| Area | Upstream | This fork |
+|------|----------|-----------|
+| Remote Access | Official cloud pairing | **Self-hosted** Remote / Relay; worker-host SOP |
+| Board | Static cards + manual Workspace | **Assignable agents / squads** with progress write-back |
+| Triggers | UI / MCP create Workspace | Also: assign, @, Autopilot, webhook, Feishu |
+
+---
+
+## Feature showcase
+
+Demo data only (Demo Org / Demo Showcase). Marked **[New]** / **[Inherited]**.
+
+### 1. [New] Dynamic board + Board Agents
+
+Assign an agent on the board; execution is enqueued automatically and written back.
+
+![](packages/public/screenshots/hyper-board.png)
+
+![](packages/public/screenshots/hyper-agents.png)
+
+### 2. [New] Project Copilot
+
+Chat/orchestration layer for clarifying work; coding still happens in Workspace executors.
+
+![](packages/public/screenshots/hyper-copilot.png)
+
+### 3. [New] Squad pipelines (DAG)
+
+Plan → Fork → Implement / Review → Join; create from chat, fine-tune on the canvas.
+
+![](packages/public/screenshots/hyper-squad.png)
+
+![](packages/public/screenshots/hyper-squad-canvas.png)
+
+### 4. [New] Autopilot / Webhooks / Feishu
+
+Three extra entry points that all land on “create issue → enqueue”.
+
+![](packages/public/screenshots/hyper-autopilot.png)
+
+![](packages/public/screenshots/hyper-webhooks.png)
+
+![](packages/public/screenshots/hyper-feishu.png)
+
+### 5. [New] Console workspace + host picker
+
+- **Isolated worktree (inherited, default)** — dedicated branch / dir
+- **Console (new)** — current dir / branch; no auto branch / commit
+- **Execution host (new)** — this machine or a paired remote worker
+
+![](packages/public/screenshots/hyper-create-console.png)
+
+![](packages/public/screenshots/hyper-remote-access.png)
+
+### 6. [New] Mobile board layout
+
+![](packages/public/screenshots/hyper-mobile-board.png)
+
+### 7. [Inherited] Workspace sessions / diffs / preview
+
+Upstream core, kept and polished.
+
+![](packages/public/screenshots/hyper-sessions.png)
+
+![](packages/public/screenshots/hyper-diffs.png)
+
+![](packages/public/screenshots/hyper-preview.png)
+
+---
 
 ## Quick Start
 
-Make sure you have authenticated with your preferred coding agent first. Then run:
+Authenticate with your preferred coding agent first, then:
 
 ```bash
 npx vibe-kanban
 ```
 
-That's it. Vibe Kanban starts a local server, opens your browser, and you're ready to go.
+That starts the local server and opens your browser.
+
+### Self-hosted Remote (optional)
+
+After the official cloud shutdown, this repo ships a Docker Remote + Relay + ElectricSQL stack for multi-device sync. Dev helpers live under `scripts/vk-*.sh` (ports in `scripts/vk-ports.sh`). See the [self-hosting guide](docs/self-hosting/deploy-docker.mdx).
+
+---
 
 ## How It Works
 
-### Core Concepts
+### Core concepts
 
 | Concept | What it is |
-|---------|-----------|
-| **Project** | A git repository on your local machine |
-| **Issue** | A task card on the kanban board (title + description + priority + tags) |
-| **Workspace** | An isolated execution environment — git worktree + coding agent + optional dev server |
+|---------|------------|
+| **Project** | A kanban project (can link multiple local git repos) |
+| **Issue** | A task card on the board |
+| **Workspace** | Execution env: worktree or Console + coding agent |
+| **Board Agent** | Assignable chat role; execution reuses workspaces |
+| **Squad** | Multi-agent + DAG pipeline |
+| **Host** | Machine that actually runs agents (local or paired) |
 
-### Typical Workflow
+### Two workflows
 
-1. **Create a project** — point Vibe Kanban at a local git repository
-2. **Add issues** — describe what needs to be done on the kanban board
-3. **Start a workspace** — choose your agent, branch, and optional setup/cleanup scripts; a git worktree is created automatically
-4. **Watch the agent work** — live log streaming in the workspace view
-5. **Review the diff** — unified or side-by-side diff viewer with line-level comment support
-6. **Iterate** — submit your review comments; the agent reads them and continues
-7. **Ship** — create a PR with an AI-generated description, review on GitHub, and merge
+**A. Upstream flow (inherited, still fully supported)**
+
+1. Create an issue → open a Workspace manually  
+2. Watch logs / Preview → review diffs → iterate  
+3. Open a PR and merge  
+
+**B. Dynamic board flow (new in this fork)**
+
+1. Create a Board Agent (persona + default executor)  
+2. Assign the issue (or trigger via @ / webhook / Feishu / Autopilot)  
+3. Local watcher enqueues work and opens a Workspace  
+4. Progress / comments write back; optionally clarify with Copilot  
+5. Orchestrate multi-role work with a Squad canvas  
+6. Review diffs → open a PR (same as upstream)
+
+---
 
 ## Supported Coding Agents
 
@@ -84,19 +197,17 @@ That's it. Vibe Kanban starts a local server, opens your browser, and you're rea
 | Factory Droid | Factory AI |
 | Claude Code Router (CCR) | Community |
 | Qwen Code | Alibaba |
+| Pi | Pi (**added in this fork**) |
 
-See the [supported coding agents docs](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx) for installation and authentication instructions.
+See [supported coding agents](docs/supported-coding-agents.mdx). Board chat runtimes (Copilot / agent chat) are a separate layer from these coding executors — chat/orchestration is new in this fork; coding executors are the upstream execution layer.
+
+---
 
 ## MCP Server
 
-Vibe Kanban exposes a local [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, so external clients (Claude Desktop, Raycast, other agents) can manage issues and workspaces programmatically.
-
 ```bash
-# Start the MCP server
 npx vibe-kanban --mcp
 ```
-
-Or add it to your agent's MCP configuration:
 
 ```json
 {
@@ -112,30 +223,21 @@ Or add it to your agent's MCP configuration:
 ## CLI Reference
 
 ```bash
-npx vibe-kanban               # Start the local UI (default)
-npx vibe-kanban --mcp         # Start the MCP stdio server
-npx vibe-kanban review        # Run the code review CLI
+npx vibe-kanban               # Local UI
+npx vibe-kanban --mcp         # MCP stdio
+npx vibe-kanban review        # Review CLI
 npx vibe-kanban --help
-npx vibe-kanban --version
 ```
 
 ## Documentation
 
-See the [`docs/`](docs/) directory in this repository for full documentation and user guides.
+- [`docs/`](docs/) — user + self-hosting docs
+- [`docs/board-agents-plan.md`](docs/board-agents-plan.md) — board-agent design
+- [`docs/remote-access.mdx`](docs/remote-access.mdx) — remote access / pairing
 
+## Support & Contributing
 
-## Self-Hosting
-
-Want to host your own Vibe Kanban Cloud instance? See the [self-hosting guide](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx).
-
-
-## Support
-
-Use [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) for feature requests and [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues) for bugs.
-
-## Contributing
-
-Please open a [GitHub Discussion](https://github.com/magele758/hyper-vibekanban/discussions) before submitting a PR so we can align on implementation details and roadmap fit.
+Use [Discussions](https://github.com/magele758/hyper-vibekanban/discussions) for ideas and [Issues](https://github.com/magele758/hyper-vibekanban/issues) for bugs. Please open a Discussion before large PRs.
 
 ---
 
@@ -153,77 +255,45 @@ cargo install sqlx-cli
 pnpm i
 ```
 
-### Running the dev server
+### Dev server
 
 ```bash
 pnpm run dev
 ```
 
-Starts the Rust backend (hot-reload via `cargo-watch`) and the Vite frontend dev server concurrently. A blank SQLite database is copied from `dev_assets_seed/` on first run.
+Starts the Rust backend (`cargo-watch`) and Vite. A blank SQLite DB is copied from `dev_assets_seed/` on first run.
 
-### Building the web app only
+Full local stack (Remote Docker + Relay + Desktop):
 
 ```bash
-cd packages/local-web
-pnpm run build
+bash scripts/vk-start.sh
+bash scripts/vk-status.sh
 ```
 
-### Build from source (creates npx-cli distributable)
+### Build npx package from source
 
 ```bash
 ./local-build.sh
-# Test the result:
 cd npx-cli && node bin/cli.js
 ```
 
-The script builds the React frontend, compiles three Rust binaries (`server`, `vibe-kanban-mcp`, `review`), zips them, and assembles the npx-cli package.
-
-### Type checks & linting
+### Checks & types
 
 ```bash
-pnpm run check   # TypeScript (all packages) + Rust cargo check
-pnpm run lint    # ESLint + cargo clippy
-pnpm run format  # Prettier + cargo fmt
+pnpm run check
+pnpm run lint
+pnpm run format
+pnpm run generate-types   # do not edit shared/types.ts by hand
 ```
 
-### Regenerate shared TypeScript types
+### Common environment variables
 
-```bash
-pnpm run generate-types
-```
+| Variable | Description |
+|----------|-------------|
+| `FRONTEND_PORT` / `BACKEND_PORT` / `HOST` | Dev ports / bind |
+| `VK_ALLOWED_ORIGINS` | Allowed origins behind a reverse proxy |
+| `VK_SHARED_API_BASE` | Remote API (server should use http) |
+| `VK_SHARED_RELAY_API_BASE` | Relay API |
+| `VK_TUNNEL` | Enable relay tunnel mode |
 
-Types are derived from Rust structs via [ts-rs](https://github.com/Aleph-Alpha/ts-rs). Do **not** edit `shared/types.ts` directly — edit `crates/server/src/bin/generate_types.rs` instead.
-
-### Environment Variables
-
-| Variable | When | Default | Description |
-|----------|------|---------|-------------|
-| `PORT` | Runtime | Auto | Production server port. In dev: frontend port (backend = PORT+1) |
-| `FRONTEND_PORT` | Runtime | `3000` | Dev-mode Vite port |
-| `BACKEND_PORT` | Runtime | `0` (auto) | Dev-mode backend port |
-| `HOST` | Runtime | `127.0.0.1` | Backend bind address |
-| `MCP_HOST` | Runtime | `HOST` | MCP server connection host |
-| `MCP_PORT` | Runtime | `BACKEND_PORT` | MCP server connection port |
-| `VK_ALLOWED_ORIGINS` | Runtime | — | Comma-separated allowed origins (required behind a reverse proxy) |
-| `VK_SHARED_API_BASE` | Runtime | — | Remote/cloud API base URL |
-| `VK_SHARED_RELAY_API_BASE` | Runtime | — | Relay API base URL for tunnel-mode connections |
-| `VK_TUNNEL` | Runtime | — | Enable relay tunnel mode |
-| `DISABLE_WORKTREE_CLEANUP` | Runtime | — | Disable git worktree cleanup (useful during debugging) |
-| `POSTHOG_API_KEY` | Build-time | — | PostHog analytics key (analytics disabled if empty) |
-| `POSTHOG_API_ENDPOINT` | Build-time | — | PostHog analytics endpoint |
-
-**Build-time variables** must be set when running `pnpm run build`. **Runtime variables** are read at startup.
-
-#### Running behind a reverse proxy
-
-Set `VK_ALLOWED_ORIGINS` to the full origin of your frontend — otherwise the backend rejects requests with `403 Forbidden`:
-
-```bash
-VK_ALLOWED_ORIGINS=https://vk.example.com npx vibe-kanban
-# Multiple origins:
-VK_ALLOWED_ORIGINS=https://vk.example.com,https://vk-staging.example.com npx vibe-kanban
-```
-
-#### Remote SSH editor integration
-
-When running Vibe Kanban on a remote server, configure **Settings → Editor Integration** with your SSH host and user. The "Open in VSCode" buttons will generate `vscode://vscode-remote/ssh-remote+…` URLs that open your local editor connected to the remote machine.
+Set `VK_ALLOWED_ORIGINS` when reverse-proxying, or the backend returns `403`. Remote SSH editor integration is under **Settings → Editor Integration**.

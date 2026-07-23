@@ -8,10 +8,10 @@
   </a>
 </p>
 
-<p align="center">Claude Code、Gemini CLI、Codex、Amp などのコーディング Agent を 10 倍活用しよう...</p>
+<p align="center">Claude Code、Gemini CLI、Codex、Cursor、Pi をはじめとするコーディングエージェントの生産性を 10 倍に...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="ビルド状態" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
+  <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
 <p align="center">
@@ -23,57 +23,170 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **お知らせ：** 公式の Vibe Kanban クラウドサービスは終了しました。本リポジトリはオープンソースとして公開を継続しており、ローカル自己ホスティングは引き続き完全に利用可能です。
+> **注意：** 公式の Vibe Kanban クラウドは終了しました。本リポジトリは [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) のフォーク（hyper-vibekanban）です：**上流の機能はすべて維持**しつつ、新しい **動的ボードエージェント** レイヤーとセルフホスト Remote を追加しています。
 
-![](packages/public/vibe-kanban-screenshot-overview.png)
+![](packages/public/screenshots/hyper-board.png)
 
-## 概要
+## 上流との比較：継承するもの / 追加するもの
 
-Vibe Kanban は、AI コーディング Agent と連携する開発者向けのローカルファーストなプロジェクト管理ツールです。**計画 → 実行 → レビュー** のサイクルを効率化し、より速くコードをリリースできます。
+上流は強力な「手作業で Workspace を開く」エージェント作業台 + かんばんです。本フォークはそのまま維持し、さらに **ボードイベント → 自動エンキュー → 実行 → 書き戻し**、および終了したクラウドのセルフホスト代替を追加します。
 
-- **カンバン Issue で計画管理** — カンバンボード上で Issue を作成・優先順位付け・管理
-- **Workspace で AI Agent を実行** — 各 Workspace は独立した git worktree を自動作成し、選択した Agent を起動してログをリアルタイムストリーミング
-- **Diff をレビューしてインラインコメントを追加** — UI 内で変更内容を1行ずつ確認し、コメントを付けて Agent にフィードバックを送信
-- **アプリプレビュー** — DevTools・要素検査・デバイスエミュレーション対応の内蔵ブラウザ
-- **10 種以上の AI Agent に対応** — Claude Code、OpenAI Codex、Gemini CLI、GitHub Copilot、Amp、Cursor Agent CLI、OpenCode、Factory Droid、Claude Code Router (CCR)、Qwen Code
-- **PR 作成 & マージ** — AI 生成の説明文で PR を作成し、GitHub/Azure でレビューしてマージ
+### ✅ 上流から継承（完全維持）
 
-![](packages/public/vibe-kanban-screenshot-workspace.png)
+| 機能 | 内容 |
+|------------|------------|
+| **Kanban issues** | 作成 / 優先度 / タグ / サブ issue / Team·Personal |
+| **Workspace + git worktree** | エージェント選択、隔離された worktree、ライブログストリーム |
+| **Sessions & follow-ups** | マルチセッションチャット、添付、@-files |
+| **Inline diff review** | Unified / side-by-side；コメントはエージェントへ戻る |
+| **App preview** | 内蔵ブラウザ、DevTools、inspect、デバイスエミュレーション |
+| **Coding agents** | Claude Code、Codex、Gemini、Copilot、Amp、Cursor、OpenCode、Droid、CCR、Qwen |
+| **Git / PRs** | Rebase、競合 UX、AI PR 説明、GitHub / Azure マージ |
+| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **Settings** | Agent profiles、MCP、エディタ連携、通知、org / projects |
+
+従来のパスはそのまま使えます：**issue → 手で Workspace を開く → ログ → diff レビュー → PR**。
+
+### ✨ 本フォークで追加（上流にはない）
+
+| 機能 | 内容 |
+|------------|------------|
+| **Board Agents** | ボード上でエージェントが第一級；**assign → enqueue**；ローカル watcher が Workspace を開き、進捗 / コメントを書き戻す |
+| **Project Copilot** | ボード側チャット（既定は Cursor SDK）で作業を明確化しアサインを提案 — ファイルを編集するコーディング実行器では**ない** |
+| **Squad DAG** | マルチエージェントパイプライン：Fork / Join / If / While；キャンバスエディタ；任意でチャットからパイプライン生成 |
+| **Autopilot** | Cron + タイムゾーン；issue 作成または agent / squad 実行；同時実行の skip / queue |
+| **Webhooks** | 外部 POST → issue 作成 / 作業のエンキュー |
+| **Feishu bot** | Feishu メッセージ → issue キュー；完了時の任意返信 |
+| **Console workspaces** | 新しい worktree を強制せず、リポジトリの**現在の dir / branch**で実行 |
+| **Host picker on create** | このマシン、またはペアリング済み remote worker で workspace を実行 |
+| **Mobile board layout** | スマートフォン向け単一列 + ステータス pills |
+| **Pi coding agent** | 追加の Workspace 実行器としての Pi CLI |
+| **Self-hosted Remote stack** | クラウド終了後の Docker Remote + Relay + ElectricSQL（`scripts/vk-*.sh`） |
+
+### 🔄 上流からの強化
+
+| 領域 | 上流 | 本フォーク |
+|------|----------|-----------|
+| Remote Access | 公式クラウドペアリング | **Self-hosted** Remote / Relay；worker-host SOP |
+| Board | 静的カード + 手動 Workspace | 進捗書き戻し付きの**アサイン可能な agents / squads** |
+| Triggers | UI / MCP で Workspace 作成 | さらに：assign、@、Autopilot、webhook、Feishu |
+
+---
+
+## 機能紹介
+
+デモデータのみ（Demo Org / Demo Showcase）。**[新規]** / **[継承]** で標記。
+
+### 1. [新規] 動的ボード + Board Agents
+
+ボード上でエージェントをアサイン；実行は自動エンキューされ、結果が書き戻されます。
+
+![](packages/public/screenshots/hyper-board.png)
+
+![](packages/public/screenshots/hyper-agents.png)
+
+### 2. [新規] Project Copilot
+
+作業を明確化するためのチャット / オーケストレーション層；コーディングは引き続き Workspace 実行器で行われます。
+
+![](packages/public/screenshots/hyper-copilot.png)
+
+### 3. [新規] Squad パイプライン（DAG）
+
+Plan → Fork → Implement / Review → Join；チャットから作成し、キャンバスで微調整。
+
+![](packages/public/screenshots/hyper-squad.png)
+
+![](packages/public/screenshots/hyper-squad-canvas.png)
+
+### 4. [新規] Autopilot / Webhooks / Feishu
+
+いずれも「issue 作成 → エンキュー」に着地する 3 つの追加エントリポイント。
+
+![](packages/public/screenshots/hyper-autopilot.png)
+
+![](packages/public/screenshots/hyper-webhooks.png)
+
+![](packages/public/screenshots/hyper-feishu.png)
+
+### 5. [新規] Console workspace + host picker
+
+- **Isolated worktree（継承、既定）** — 専用 branch / dir
+- **Console（新規）** — 現在の dir / branch；自動 branch / commit なし
+- **Execution host（新規）** — このマシン、またはペアリング済み remote worker
+
+![](packages/public/screenshots/hyper-create-console.png)
+
+![](packages/public/screenshots/hyper-remote-access.png)
+
+### 6. [新規] モバイルボードレイアウト
+
+![](packages/public/screenshots/hyper-mobile-board.png)
+
+### 7. [継承] Workspace sessions / diffs / preview
+
+上流のコア機能を維持し、磨き上げています。
+
+![](packages/public/screenshots/hyper-sessions.png)
+
+![](packages/public/screenshots/hyper-diffs.png)
+
+![](packages/public/screenshots/hyper-preview.png)
+
+---
 
 ## クイックスタート
 
-使用する AI Agent の認証を事前に完了させてから、以下を実行してください：
+まず好みのコーディングエージェントで認証してから：
 
 ```bash
 npx vibe-kanban
 ```
 
-たった 1 コマンド。ローカルサーバーが起動し、ブラウザが自動で開きます。
+ローカルサーバーが起動し、ブラウザが開きます。
+
+### Self-hosted Remote（任意）
+
+公式クラウド終了後、本リポジトリはマルチデバイス同期向けに Docker Remote + Relay + ElectricSQL スタックを同梱しています。開発ヘルパーは `scripts/vk-*.sh`（ポートは `scripts/vk-ports.sh`）にあります。[セルフホスティングガイド](docs/self-hosting/deploy-docker.mdx) を参照してください。
+
+---
 
 ## 仕組み
 
-### コアコンセプト
+### コア概念
 
-| 概念 | 説明 |
-|------|------|
-| **Project（プロジェクト）** | ローカルマシン上の git リポジトリ |
-| **Issue（タスク）** | カンバンボードのタスクカード（タイトル + 説明 + 優先度 + タグ） |
-| **Workspace（ワークスペース）** | 独立した実行環境 — git worktree + AI Agent + オプションの開発サーバー |
+| 概念 | 内容 |
+|---------|------------|
+| **Project** | かんばんプロジェクト（複数のローカル git リポジトリを紐付け可能） |
+| **Issue** | ボード上のタスクカード |
+| **Workspace** | 実行環境：worktree または Console + coding agent |
+| **Board Agent** | アサイン可能なチャットロール；実行は workspaces を再利用 |
+| **Squad** | マルチエージェント + DAG パイプライン |
+| **Host** | エージェントを実際に実行するマシン（ローカルまたはペアリング済み） |
 
-### 典型的なワークフロー
+### 2 つのワークフロー
 
-1. **プロジェクトを作成** — ローカルの git リポジトリを Vibe Kanban に登録
-2. **Issue を追加** — カンバンボードにやるべき作業を記述
-3. **Workspace を起動** — Agent・ブランチ・セットアップスクリプトを選択し、git worktree を自動作成
-4. **Agent の作業を監視** — Workspace ビューでリアルタイムのログストリームを確認
-5. **Diff をレビュー** — ユニファイド表示またはサイドバイサイド表示で行レベルのコメントを追加
-6. **イテレーション** — レビューコメントを送信し、Agent が内容を読んで修正を続行
-7. **リリース** — AI 生成の説明文で PR を作成し、GitHub でレビューしてマージ
+**A. 上流フロー（継承、引き続き完全サポート）**
 
-## 対応コーディング Agent
+1. Issue を作成 → Workspace を手動で開く  
+2. ログ / Preview を確認 → diffs をレビュー → 反復  
+3. PR を開いてマージ  
 
-| Agent | 提供元 |
-|-------|--------|
+**B. 動的ボードフロー（本フォークの新規）**
+
+1. Board Agent を作成（persona + 既定 executor）  
+2. Issue をアサイン（または @ / webhook / Feishu / Autopilot でトリガー）  
+3. ローカル watcher が作業をエンキューし Workspace を開く  
+4. 進捗 / コメントが書き戻される；任意で Copilot で明確化  
+5. Squad キャンバスでマルチロール作業をオーケストレーション  
+6. Diffs をレビュー → PR を開く（上流と同じ）
+
+---
+
+## 対応コーディングエージェント
+
+| Agent | Provider |
+|-------|----------|
 | Claude Code | Anthropic |
 | OpenAI Codex CLI | OpenAI |
 | Gemini CLI | Google |
@@ -82,21 +195,19 @@ npx vibe-kanban
 | Cursor Agent CLI | Anysphere |
 | OpenCode | SST |
 | Factory Droid | Factory AI |
-| Claude Code Router (CCR) | コミュニティ |
+| Claude Code Router (CCR) | Community |
 | Qwen Code | Alibaba |
+| Pi | Pi（**本フォークで追加**） |
 
-各 Agent のインストールと認証方法については[ドキュメント](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx)をご覧ください。
+[対応コーディングエージェント](docs/supported-coding-agents.mdx) を参照。ボードチャットランタイム（Copilot / agent chat）はこれらのコーディング実行器とは別レイヤーです — チャット / オーケストレーションは本フォークの新規機能；コーディング実行器は上流の実行レイヤーです。
 
-## MCP サーバー
+---
 
-Vibe Kanban はローカル [MCP（Model Context Protocol）](https://modelcontextprotocol.io/) サーバーを内蔵しており、外部クライアント（Claude Desktop、Raycast など）からプログラマティックに Issue や Workspace を管理できます。
+## MCP Server
 
 ```bash
-# MCP サーバーを起動
 npx vibe-kanban --mcp
 ```
-
-または Agent の MCP 設定に追加：
 
 ```json
 {
@@ -112,38 +223,29 @@ npx vibe-kanban --mcp
 ## CLI リファレンス
 
 ```bash
-npx vibe-kanban               # ローカル UI を起動（デフォルト）
-npx vibe-kanban --mcp         # MCP stdio サーバーを起動
-npx vibe-kanban review        # コードレビュー CLI を実行
+npx vibe-kanban               # Local UI
+npx vibe-kanban --mcp         # MCP stdio
+npx vibe-kanban review        # Review CLI
 npx vibe-kanban --help
-npx vibe-kanban --version
 ```
 
 ## ドキュメント
 
-完全なドキュメントとユーザーガイドは本リポジトリの [`docs/`](docs/) ディレクトリをご覧ください。
+- [`docs/`](docs/) — ユーザー向け + セルフホスティングドキュメント
+- [`docs/board-agents-plan.md`](docs/board-agents-plan.md) — board-agent 設計
+- [`docs/remote-access.mdx`](docs/remote-access.mdx) — remote access / pairing
 
+## サポートとコントリビューション
 
-## セルフホスティング
-
-自分の Vibe Kanban Cloud インスタンスをデプロイしたい場合は[セルフホスティングガイド](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx)をご参照ください。
-
-
-## サポート
-
-機能リクエストは [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions)、バグ報告は [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues) をご利用ください。
-
-## コントリビュート
-
-PR を提出する前に、[GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) でコアチームと実装方針・ロードマップの整合性について事前に相談してください。
+アイデアは [Discussions](https://github.com/magele758/hyper-vibekanban/discussions)、バグは [Issues](https://github.com/magele758/hyper-vibekanban/issues) へ。大きな PR の前に Discussion を開いてください。
 
 ---
 
 ## 開発
 
-### 必要環境
+### 前提条件
 
-- [Rust](https://rustup.rs/)（最新安定版）
+- [Rust](https://rustup.rs/)（最新の stable）
 - [Node.js](https://nodejs.org/)（≥ 20）
 - [pnpm](https://pnpm.io/)（≥ 8）
 
@@ -153,61 +255,45 @@ cargo install sqlx-cli
 pnpm i
 ```
 
-### 開発サーバーの起動
+### 開発サーバー
 
 ```bash
 pnpm run dev
 ```
 
-Rust バックエンド（`cargo-watch` によるホットリロード）と Vite フロントエンド開発サーバーを同時に起動します。初回実行時は `dev_assets_seed/` から空の SQLite データベースがコピーされます。
+Rust バックエンド（`cargo-watch`）と Vite を起動します。初回実行時に空の SQLite DB が `dev_assets_seed/` からコピーされます。
 
-### フロントエンドのみビルド
+フルローカルスタック（Remote Docker + Relay + Desktop）：
 
 ```bash
-cd packages/local-web
-pnpm run build
+bash scripts/vk-start.sh
+bash scripts/vk-status.sh
 ```
 
-### ソースからビルド（npx-cli 配布パッケージを生成）
+### ソースから npx パッケージをビルド
 
 ```bash
 ./local-build.sh
-# テスト:
 cd npx-cli && node bin/cli.js
 ```
 
-### 型チェックとリント
+### チェックと型生成
 
 ```bash
-pnpm run check   # TypeScript（全パッケージ）+ Rust cargo check
-pnpm run lint    # ESLint + cargo clippy
-pnpm run format  # Prettier + cargo fmt
+pnpm run check
+pnpm run lint
+pnpm run format
+pnpm run generate-types   # do not edit shared/types.ts by hand
 ```
 
-### 共有 TypeScript 型の再生成
+### よく使う環境変数
 
-```bash
-pnpm run generate-types
-```
+| Variable | Description |
+|----------|-------------|
+| `FRONTEND_PORT` / `BACKEND_PORT` / `HOST` | 開発ポート / bind |
+| `VK_ALLOWED_ORIGINS` | リバースプロキシ背後で許可する origins |
+| `VK_SHARED_API_BASE` | Remote API（サーバーは http を使用すること） |
+| `VK_SHARED_RELAY_API_BASE` | Relay API |
+| `VK_TUNNEL` | Relay トンネルモードを有効化 |
 
-型は [ts-rs](https://github.com/Aleph-Alpha/ts-rs) を通じて Rust の構造体から生成されます。`shared/types.ts` を**直接編集しないでください** — `crates/server/src/bin/generate_types.rs` を編集してください。
-
-### 環境変数
-
-| 変数 | タイミング | デフォルト | 説明 |
-|------|-----------|-----------|------|
-| `PORT` | 実行時 | 自動 | 本番環境のサーバーポート。開発時はフロントエンドポート（バックエンド = PORT+1） |
-| `FRONTEND_PORT` | 実行時 | `3000` | 開発モードの Vite ポート |
-| `BACKEND_PORT` | 実行時 | `0`（自動）| 開発モードのバックエンドポート |
-| `HOST` | 実行時 | `127.0.0.1` | バックエンドのバインドアドレス |
-| `VK_ALLOWED_ORIGINS` | 実行時 | — | 許可するオリジン（カンマ区切り）、リバースプロキシ使用時は必須 |
-| `DISABLE_WORKTREE_CLEANUP` | 実行時 | — | git worktree の自動クリーンアップを無効化（デバッグ用） |
-| `POSTHOG_API_KEY` | ビルド時 | — | PostHog アナリティクスキー（空の場合は無効） |
-
-#### リバースプロキシ使用時
-
-`VK_ALLOWED_ORIGINS` にフロントエンドの完全なオリジン URL を設定してください。設定がない場合、バックエンドは `403 Forbidden` を返します：
-
-```bash
-VK_ALLOWED_ORIGINS=https://vk.example.com npx vibe-kanban
-```
+リバースプロキシ時は `VK_ALLOWED_ORIGINS` を設定しないとバックエンドが `403` を返します。Remote SSH エディタ連携は **Settings → Editor Integration** にあります。

@@ -8,7 +8,7 @@
   </a>
 </p>
 
-<p align="center">让 Claude Code、Gemini CLI、Codex、Amp 等 AI 编程 Agent 的效率提升 10 倍...</p>
+<p align="center">让 Claude Code、Gemini CLI、Codex、Cursor、Pi 等 AI 编程 Agent 的效率提升 10 倍...</p>
 <p align="center">
   <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="构建状态" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
@@ -23,32 +23,133 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **注意：** 官方 Vibe Kanban 云服务已停服。本仓库仍保持开源，本地自托管完全可用。
+> **注意：** 官方 Vibe Kanban 云服务已停服。本仓库是上游 [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) 的 fork（hyper-vibekanban）：**原版能力完整保留**，并在其上新增「动态看板 Agent」编排与自托管增强。
 
-![](packages/public/vibe-kanban-screenshot-overview.png)
+![](packages/public/screenshots/hyper-board.png)
 
-## 简介
+## 相对原版：继承了什么 / 新增了什么
 
-Vibe Kanban 是一款面向开发者的本地优先项目管理工具，专为配合 AI 编程 Agent 工作而设计。它将 **计划 → 执行 → 审查** 的工作循环流程化，帮助你更高效地交付代码。
+一句话：原版是「人手开 Workspace 的 Agent 工作台 + 看板」；本 fork 在其上叠一层 **看板事件 → 自动入队执行 → 结果回写**，并把停服的云能力改成可自托管。
 
-- **用看板 Issue 规划工作** — 在看板上创建、排优先级、管理任务卡片
-- **在 Workspace 中运行 AI Agent** — 每个 Workspace 自动创建独立的 git worktree，启动选定的 Agent 并实时流式输出日志
-- **审查 Diff 并添加行内注释** — 在 UI 内逐行检查改动、添加注释，直接将反馈发回 Agent
-- **应用预览** — 内置浏览器，支持 DevTools、元素检查和设备模拟
-- **支持 10+ 款 AI Agent** — Claude Code、OpenAI Codex、Gemini CLI、GitHub Copilot、Amp、Cursor Agent CLI、OpenCode、Factory Droid、Claude Code Router (CCR)、Qwen Code
-- **创建 PR 并合并** — 用 AI 生成 PR 描述，在 GitHub/Azure 上审查，一键合并
+### ✅ 继承自原版（完整保留，用法不变）
 
-![](packages/public/vibe-kanban-screenshot-workspace.png)
+| 能力 | 说明 |
+|------|------|
+| **看板 Issue** | 创建 / 优先级 / 标签 / 子任务 / Team·Personal |
+| **Workspace + git worktree** | 选 Agent 开工，独立 worktree，实时日志流 |
+| **会话与 follow-up** | 多 Session、继续对话、附件 / @ 文件 |
+| **Diff 行内审查** | 统一 / 并排视图，注释回传 Agent |
+| **应用 Preview** | 内置浏览器、DevTools、元素检查、设备模拟 |
+| **Coding Agents** | Claude Code、Codex、Gemini、Copilot、Amp、Cursor、OpenCode、Droid、CCR、Qwen |
+| **Git / PR** | rebase、冲突处理、AI 生成 PR 描述、GitHub / Azure 合并 |
+| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **设置面** | Agent 配置、MCP、编辑器集成、通知、组织 / 项目 |
+
+原版典型路径仍可用：**建 Issue → 手开 Workspace → 看日志 → Review Diff → 开 PR**。
+
+### ✨ 本 fork 新增（原版没有）
+
+| 能力 | 说明 |
+|------|------|
+| **Board Agents（动态看板）** | Agent 成为看板一等公民；**指派即入队**，Local watcher 自动开 Workspace 并回写进度 / 评论 |
+| **项目 Copilot** | 看板侧对话层（默认 Cursor SDK）：澄清需求、拆 Issue、建议指派；**不等于** Workspace 里写代码的 Coding Agent |
+| **Squad DAG 编排** | 多 Agent 流水线：Fork / Join / If / While，画布编辑；可对话生成 pipeline |
+| **Autopilot** | Cron + 时区；定时建 Issue 或触发 Agent / Squad；并发 skip / queue |
+| **Webhook 触发** | 外部 POST → 创建 Issue / 入队执行 |
+| **飞书机器人** | 飞书消息 → Issue 入队；完成后可回飞书 |
+| **Console 工作区** | 在主仓库**当前目录 / 当前分支**直接跑，不强制新建 worktree / 分支 |
+| **创建时 Host 选择** | Workspace 可指定在本机或已配对的远程 Worker 上跑 |
+| **手机看板布局** | 窄屏单列 + 状态 pill，适合手机查看看板 |
+| **Pi Coding Agent** | 新增 Pi CLI 作为 Workspace 执行器之一 |
+| **自托管 Remote 栈** | 官方云停服后，用 Docker Remote + Relay + ElectricSQL 续上多端同步（见 `scripts/vk-*.sh`） |
+
+### 🔄 相对原版的增强（有基础，本 fork 加强）
+
+| 能力 | 原版 | 本 fork |
+|------|------|---------|
+| Remote Access | 官方云配对 | **本地自托管** Remote / Relay；Worker Host SOP |
+| 看板 | 静态卡片 + 人手开 Workspace | **可指派 Agent / Squad**，进度回写看板 |
+| 执行入口 | UI / MCP 手动创建 Workspace | 另增：指派、@、Autopilot、Webhook、飞书 |
+
+---
+
+## 功能展示
+
+截图使用演示数据（Demo Org / Demo Showcase）。标注 **【新增】** / **【继承】**。
+
+### 1. 【新增】动态看板 + Board Agents
+
+看板可指派 Agent；指派后自动入队执行并回写。
+
+![](packages/public/screenshots/hyper-board.png)
+
+![](packages/public/screenshots/hyper-agents.png)
+
+### 2. 【新增】项目 Copilot
+
+对话层负责澄清与编排；真正改代码仍走 Workspace 里的 Coding Agent。
+
+![](packages/public/screenshots/hyper-copilot.png)
+
+### 3. 【新增】Squad 流水线（DAG）
+
+Plan → Fork → Implement / Review → Join；可对话创建，再画布微调。
+
+![](packages/public/screenshots/hyper-squad.png)
+
+![](packages/public/screenshots/hyper-squad-canvas.png)
+
+### 4. 【新增】Autopilot / Webhook / 飞书
+
+定时、外部事件、飞书消息三种入口，统一落到「建 Issue → 入队」。
+
+![](packages/public/screenshots/hyper-autopilot.png)
+
+![](packages/public/screenshots/hyper-webhooks.png)
+
+![](packages/public/screenshots/hyper-feishu.png)
+
+### 5. 【新增】Console 工作区 + Host 选择
+
+- **隔离 worktree（继承，默认）** — 独立分支 / 目录
+- **主目录控制台 Console（新增）** — 当前目录与分支直接跑，不自动建分支 / 提交
+- **运行 Host（新增）** — 本机或已配对远程 Worker
+
+![](packages/public/screenshots/hyper-create-console.png)
+
+![](packages/public/screenshots/hyper-remote-access.png)
+
+### 6. 【新增】手机看板布局
+
+![](packages/public/screenshots/hyper-mobile-board.png)
+
+### 7. 【继承】Workspace 会话 / Diff / Preview
+
+原版核心能力，本 fork 原样保留并继续打磨。
+
+![](packages/public/screenshots/hyper-sessions.png)
+
+![](packages/public/screenshots/hyper-diffs.png)
+
+![](packages/public/screenshots/hyper-preview.png)
+
+---
 
 ## 快速开始
 
-先完成你所用 AI Agent 的登录认证，然后执行：
+先完成所用 AI Agent 的登录认证，然后：
 
 ```bash
 npx vibe-kanban
 ```
 
-就这一条命令。Vibe Kanban 会启动本地服务器并自动打开浏览器。
+会启动本地服务器并打开浏览器。
+
+### 自托管 Remote（可选）
+
+官方云停服后，本仓库用 Docker Remote + Relay + ElectricSQL 续上「多端同步 / 远程看板」。开发栈一键脚本见仓库根目录 `scripts/vk-*.sh`（端口约定见 `scripts/vk-ports.sh`）。部署说明：[自托管指南](docs/self-hosting/deploy-docker.mdx)。
+
+---
 
 ## 工作原理
 
@@ -56,19 +157,31 @@ npx vibe-kanban
 
 | 概念 | 说明 |
 |------|------|
-| **Project（项目）** | 本地机器上的一个 git 仓库 |
-| **Issue（任务）** | 看板上的任务卡片（标题 + 描述 + 优先级 + 标签） |
-| **Workspace（工作区）** | 独立执行环境 — git worktree + AI Agent + 可选的开发服务器 |
+| **Project** | 看板项目（可关联多个本地 git 仓库） |
+| **Issue** | 看板任务卡片 |
+| **Workspace** | 执行环境：worktree 或 Console + Coding Agent |
+| **Board Agent** | 可指派、可对话的看板角色；触发后复用 Workspace 执行 |
+| **Squad** | 多 Agent + DAG 流水线 |
+| **Host** | 实际跑 Agent 的机器（本机或配对远端） |
 
-### 典型工作流
+### 两条工作流
 
-1. **创建项目** — 将 Vibe Kanban 指向本地 git 仓库
-2. **添加 Issue** — 在看板上描述待完成的工作
-3. **启动 Workspace** — 选择 Agent、分支和可选的安装/清理脚本，自动创建 git worktree
-4. **观察 Agent 工作** — 工作区视图中实时展示日志流
-5. **审查 Diff** — 统一视图或并排视图，支持行级注释
-6. **迭代** — 提交审查意见，Agent 读取后继续修改
-7. **交付** — 创建带 AI 生成描述的 PR，在 GitHub 上审查并合并
+**A. 原版流程（继承，仍完全可用）**
+
+1. 建 Issue → 手动创建 Workspace  
+2. 看日志 / Preview → Diff 审查 → 迭代  
+3. 开 PR 合并  
+
+**B. 动态看板流程（本 fork 新增）**
+
+1. 创建 Board Agent（人设 + 默认 executor）  
+2. 指派 Issue（或 @ / Webhook / 飞书 / Autopilot）  
+3. Local watcher 入队 → 自动开 Workspace  
+4. 看板回写进度 / 评论；可用 Copilot 澄清下一轮  
+5. 复杂任务用 Squad 画布编排  
+6. Diff 审查 → 开 PR（与原版相同）
+
+---
 
 ## 支持的 AI 编程 Agent
 
@@ -84,19 +197,17 @@ npx vibe-kanban
 | Factory Droid | Factory AI |
 | Claude Code Router (CCR) | 社区 |
 | Qwen Code | 阿里巴巴 |
+| Pi | Pi（**本 fork 新增**） |
 
-各 Agent 的安装与认证方法见[文档](https://github.com/magele758/hyper-vibekanban/blob/main/docs/supported-coding-agents.mdx)。
+安装与认证见 [supported-coding-agents](docs/supported-coding-agents.mdx)。看板对话 runtime（Copilot / Agent 聊天）默认可接 Cursor SDK，与上表 Coding Executor 是不同层——前者是本 fork 新增的编排层，后者是原版执行层。
+
+---
 
 ## MCP 服务器
 
-Vibe Kanban 内置本地 [MCP（模型上下文协议）](https://modelcontextprotocol.io/) 服务器，允许外部客户端（Claude Desktop、Raycast 等）通过程序化方式管理 Issue 和 Workspace。
-
 ```bash
-# 启动 MCP 服务器
 npx vibe-kanban --mcp
 ```
-
-或将其加入 Agent 的 MCP 配置：
 
 ```json
 {
@@ -112,30 +223,21 @@ npx vibe-kanban --mcp
 ## CLI 参考
 
 ```bash
-npx vibe-kanban               # 启动本地 UI（默认）
-npx vibe-kanban --mcp         # 启动 MCP stdio 服务器
-npx vibe-kanban review        # 运行代码审查 CLI
+npx vibe-kanban               # 启动本地 UI
+npx vibe-kanban --mcp         # MCP stdio
+npx vibe-kanban review        # 代码审查 CLI
 npx vibe-kanban --help
-npx vibe-kanban --version
 ```
 
 ## 文档
 
-完整文档和使用指南请查看本仓库的 [`docs/`](docs/) 目录。
+- [`docs/`](docs/) — 用户与自托管文档
+- [`docs/board-agents-plan.md`](docs/board-agents-plan.md) — 动态看板 Agent 设计与分期
+- [`docs/remote-access.mdx`](docs/remote-access.mdx) — Remote Access / 配对
 
+## 支持与贡献
 
-## 自托管
-
-想部署自己的 Vibe Kanban Cloud 实例？参见[自托管指南](https://github.com/magele758/hyper-vibekanban/blob/main/docs/self-hosting/deploy-docker.mdx)。
-
-
-## 支持与反馈
-
-功能建议请使用 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions)，Bug 报告请提交 [GitHub Issues](https://github.com/magele758/hyper-vibekanban/issues)。
-
-## 参与贡献
-
-提交 PR 前请先在 [GitHub Discussions](https://github.com/magele758/hyper-vibekanban/discussions) 与核心团队讨论实现方案和路线图契合度。
+功能建议用 [Discussions](https://github.com/magele758/hyper-vibekanban/discussions)，Bug 用 [Issues](https://github.com/magele758/hyper-vibekanban/issues)。提 PR 前建议先开 Discussion 对齐方案。
 
 ---
 
@@ -159,69 +261,39 @@ pnpm i
 pnpm run dev
 ```
 
-同时启动 Rust 后端（通过 `cargo-watch` 热重载）和 Vite 前端开发服务器。首次运行时，会从 `dev_assets_seed/` 复制一个空白 SQLite 数据库。
+同时启动 Rust 后端（`cargo-watch`）与 Vite。首次会从 `dev_assets_seed/` 复制空白 SQLite。
 
-### 仅构建前端
+完整本机栈（Remote Docker + Relay + Desktop）可用：
 
 ```bash
-cd packages/local-web
-pnpm run build
+bash scripts/vk-start.sh
+bash scripts/vk-status.sh
 ```
 
-### 从源码构建（生成 npx-cli 发布包）
+### 从源码构建 npx 包
 
 ```bash
 ./local-build.sh
-# 测试结果：
 cd npx-cli && node bin/cli.js
 ```
 
-该脚本会构建 React 前端，编译三个 Rust 二进制文件（`server`、`vibe-kanban-mcp`、`review`），并组装 npx-cli 包。
-
-### 类型检查与代码检查
+### 检查与类型
 
 ```bash
-pnpm run check   # TypeScript（所有包）+ Rust cargo check
-pnpm run lint    # ESLint + cargo clippy
-pnpm run format  # Prettier + cargo fmt
+pnpm run check
+pnpm run lint
+pnpm run format
+pnpm run generate-types   # 勿手改 shared/types.ts
 ```
 
-### 重新生成共享 TypeScript 类型
+### 常用环境变量
 
-```bash
-pnpm run generate-types
-```
+| 变量 | 说明 |
+|------|------|
+| `FRONTEND_PORT` / `BACKEND_PORT` / `HOST` | 开发端口与绑定 |
+| `VK_ALLOWED_ORIGINS` | 反代场景允许的来源 |
+| `VK_SHARED_API_BASE` | Remote API（服务端用 http） |
+| `VK_SHARED_RELAY_API_BASE` | Relay API |
+| `VK_TUNNEL` | 启用 Relay 隧道 |
 
-类型由 Rust 结构体通过 [ts-rs](https://github.com/Aleph-Alpha/ts-rs) 派生生成。**请勿直接编辑** `shared/types.ts`，应修改 `crates/server/src/bin/generate_types.rs`。
-
-### 环境变量
-
-| 变量 | 时机 | 默认值 | 说明 |
-|------|------|--------|------|
-| `PORT` | 运行时 | 自动 | 生产环境服务端口；开发时为前端端口（后端 = PORT+1） |
-| `FRONTEND_PORT` | 运行时 | `3000` | 开发模式 Vite 端口 |
-| `BACKEND_PORT` | 运行时 | `0`（自动）| 开发模式后端端口 |
-| `HOST` | 运行时 | `127.0.0.1` | 后端绑定地址 |
-| `MCP_HOST` | 运行时 | `HOST` | MCP 服务器连接主机 |
-| `MCP_PORT` | 运行时 | `BACKEND_PORT` | MCP 服务器连接端口 |
-| `VK_ALLOWED_ORIGINS` | 运行时 | — | 允许的来源（逗号分隔），反向代理场景必填 |
-| `VK_SHARED_API_BASE` | 运行时 | — | 远程/云端 API 基础 URL |
-| `VK_SHARED_RELAY_API_BASE` | 运行时 | — | 隧道模式 Relay API 基础 URL |
-| `VK_TUNNEL` | 运行时 | — | 启用 Relay 隧道模式 |
-| `DISABLE_WORKTREE_CLEANUP` | 运行时 | — | 禁用 git worktree 自动清理（调试用） |
-| `POSTHOG_API_KEY` | 构建时 | — | PostHog 分析 Key（为空则禁用分析） |
-| `POSTHOG_API_ENDPOINT` | 构建时 | — | PostHog 分析端点 |
-
-#### 反向代理场景
-
-设置 `VK_ALLOWED_ORIGINS` 为前端完整来源地址，否则后端会返回 `403 Forbidden`：
-
-```bash
-VK_ALLOWED_ORIGINS=https://vk.example.com npx vibe-kanban
-# 多个来源：
-VK_ALLOWED_ORIGINS=https://vk.example.com,https://vk-staging.example.com npx vibe-kanban
-```
-
-#### 远程 SSH 编辑器集成
-
-在远程服务器上运行 Vibe Kanban 时，在 **设置 → 编辑器集成** 中配置 SSH 主机和用户名。"在 VSCode 中打开"按钮将生成 `vscode://vscode-remote/ssh-remote+…` 格式的 URL，自动连接到远程机器上的本地编辑器。
+反向代理时必须设置 `VK_ALLOWED_ORIGINS`，否则后端会 `403`。远程 SSH 编辑器集成见 **设置 → 编辑器集成**。
