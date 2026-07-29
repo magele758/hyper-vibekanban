@@ -83,6 +83,9 @@ type Props = {
   onChange: (draft: SquadEditorDraft) => void;
   onSave: () => void;
   onRun?: () => void;
+  /// Selected pipeline entry node ('' = topological roots).
+  startFromNodeId?: string;
+  onStartFromChange?: (nodeId: string) => void;
   onCancel: () => void;
   busy?: boolean;
   running?: boolean;
@@ -98,6 +101,8 @@ export function SquadPipelineEditor({
   onChange,
   onSave,
   onRun,
+  startFromNodeId,
+  onStartFromChange,
   onCancel,
   busy,
   running,
@@ -623,19 +628,40 @@ export function SquadPipelineEditor({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <PrimaryButton disabled={busy || !draft.name.trim()} onClick={onSave}>
           {busy ? '保存中…' : saveLabel}
         </PrimaryButton>
         {onRun && (
-          <button
-            type="button"
-            disabled={running || busy}
-            className="rounded-md border border-brand px-3 py-1.5 text-sm text-brand hover:bg-brand/10 disabled:opacity-50"
-            onClick={onRun}
-          >
-            {running ? '运行中…' : '运行一次'}
-          </button>
+          <>
+            <label className="flex items-center gap-1.5 text-xs text-low">
+              起点
+              <select
+                aria-label="流水线起点"
+                className="rounded-md border border-border bg-secondary px-2 py-1 text-xs text-normal"
+                value={startFromNodeId ?? ''}
+                disabled={running || busy}
+                onChange={(e) => onStartFromChange?.(e.target.value)}
+              >
+                <option value="">从头（拓扑根）</option>
+                {draft.pipeline.nodes.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.entry_label?.trim() ||
+                      n.label?.trim() ||
+                      `${n.type ?? 'agent'}:${n.id.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={running || busy}
+              className="rounded-md border border-brand px-3 py-1.5 text-sm text-brand hover:bg-brand/10 disabled:opacity-50"
+              onClick={onRun}
+            >
+              {running ? '启动中…' : '运行一次'}
+            </button>
+          </>
         )}
         <button
           type="button"

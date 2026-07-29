@@ -721,6 +721,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
   const [newMemberAgentId, setNewMemberAgentId] = useState('');
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
+  const [startFromNodeId, setStartFromNodeId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
 
@@ -825,41 +826,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
         editingId === squadId && draft
           ? null
           : squads.find((s) => s.id === squadId);
-      const pipeline =
-        editingId === squadId && draft
-          ? draft.pipeline
-          : (squad?.pipeline ?? { nodes: [], edges: [] });
-      const entryNodes = pipeline.nodes.filter(
-        (n) => n.entry_label?.trim() || n.type === 'wait_approval'
-      );
-      const choices = [
-        { id: '', label: '从头（拓扑根）' },
-        ...pipeline.nodes.map((n) => ({
-          id: n.id,
-          label:
-            n.entry_label?.trim() ||
-            n.label?.trim() ||
-            `${n.type ?? 'agent'}:${n.id.slice(0, 8)}`,
-        })),
-      ];
-      // Prefer prompting when there are mid-entry labels; otherwise still allow pick.
-      const picked =
-        entryNodes.length > 0 || pipeline.nodes.length > 1
-          ? window.prompt(
-              `从哪一步开始？输入编号 0-${choices.length - 1}\n` +
-                choices.map((c, i) => `${i}. ${c.label}`).join('\n'),
-              '0'
-            )
-          : '0';
-      if (picked == null) {
-        setRunning(false);
-        return;
-      }
-      const idx = Number(picked);
-      const startFrom =
-        Number.isFinite(idx) && idx > 0 && idx < choices.length
-          ? choices[idx].id
-          : undefined;
+      const startFrom = startFromNodeId.trim() || undefined;
 
       if (editingId === squadId && draft) {
         await boardAgentsApi.updateSquad(squadId, {
@@ -881,15 +848,13 @@ function SquadsTab({ projectId }: { projectId: string }) {
           editingId === squadId && draft
             ? (draft.working_directory ?? undefined)
             : (squad?.working_directory ?? undefined),
-        start_from_node_id: startFrom || undefined,
+        start_from_node_id: startFrom,
       });
-      const status = result.status ?? 'completed';
+      // `/run` now returns as soon as the run row exists; the walk continues
+      // in the background. Point the user at where progress actually shows up.
       setRunMsg(
-        status === 'waiting_approval'
-          ? `已暂停待确认（run ${result.run_id?.slice(0, 8) ?? '?'}…）。请到 Inbox / Issue 批准。`
-          : `已完成/入队 ${result.agent_task_ids.length} 个任务（Issue ${result.issue_id.slice(0, 8)}…，目标 ${result.target_type}${
-              result.working_directory ? ` @ ${result.working_directory}` : ''
-            }${startFrom ? `，从 ${startFrom}` : ''}）`
+        `已启动（run ${result.run_id?.slice(0, 8) ?? '?'}…）。进展与待确认在 Issue ${result.issue_id.slice(0, 8)}… 的「流水线」区 / Inbox 里实时更新。` +
+          (startFrom ? `（从 ${startFrom} 开始）` : '')
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1029,6 +994,8 @@ function SquadsTab({ projectId }: { projectId: string }) {
             onChange={setDraft}
             onSave={() => void handleSave()}
             onRun={editingId ? () => void handleRun(editingId) : undefined}
+            startFromNodeId={startFromNodeId}
+            onStartFromChange={setStartFromNodeId}
             onCancel={closeEditor}
             busy={busy}
             running={running}
