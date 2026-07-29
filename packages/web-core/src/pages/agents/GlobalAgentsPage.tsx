@@ -65,8 +65,11 @@ function GlobalAgentsChatInner() {
 
   useEffect(() => {
     if (!selectedProjectId) return;
-    void boardAgentsApi
-      .getCopilotConfig(selectedProjectId)
+    void getAuthRuntime()
+      .getToken()
+      .then((token) =>
+        boardAgentsApi.getCopilotConfig(selectedProjectId, token ?? undefined)
+      )
       .then((c) =>
         setModelCfg({
           base_url: c.base_url ?? '',
@@ -96,9 +99,11 @@ function GlobalAgentsChatInner() {
       };
       // 只在用户输入了新 key 时才提交，避免覆盖成空。
       if (modelCfg.api_key) body.api_key = modelCfg.api_key;
+      const token = await getAuthRuntime().getToken();
       const saved = await boardAgentsApi.putCopilotConfig(
         selectedProjectId,
-        body
+        body,
+        token ?? undefined
       );
       setModelCfg({
         base_url: saved.base_url ?? '',

@@ -189,6 +189,14 @@ impl Server {
             .map(|v| matches!(v.as_str(), "true" | "1"))
             .unwrap_or(false);
 
+        // Squad pipelines run in-process, so any run still marked running/queued
+        // belongs to a dead process. Fail them so the UI stops polling forever.
+        match db::squad_runs::SquadRunRepository::fail_orphaned_runs(&pool).await {
+            Ok(0) => {}
+            Ok(n) => tracing::warn!("failed {n} orphaned squad run(s) left over from a restart"),
+            Err(e) => tracing::error!(?e, "failed to reap orphaned squad runs"),
+        }
+
         // Spawn autopilot scheduler
         scheduler::spawn_scheduler(pool.clone());
 

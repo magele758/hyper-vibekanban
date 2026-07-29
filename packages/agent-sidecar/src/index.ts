@@ -120,6 +120,30 @@ async function loadLlmSecret(
   );
 }
 
+/**
+ * Authorize a caller for `projectId` by replaying their token against a
+ * project-scoped Remote endpoint. The copilot config holds an api_key, so these
+ * routes must not be reachable just because the port is.
+ */
+async function ensureProjectAccess(
+  projectId: string,
+  auth: string | undefined,
+): Promise<void> {
+  if (!auth) {
+    throw Object.assign(new Error("missing Authorization header"), {
+      statusCode: 401,
+    });
+  }
+  try {
+    await remoteFetch(`/v1/squads?project_id=${projectId}`, auth);
+  } catch (err) {
+    throw Object.assign(
+      new Error(`not authorized for project ${projectId}`),
+      { statusCode: 403, cause: err },
+    );
+  }
+}
+
 async function loadSession(
   sessionId: string,
   auth: string | undefined,
@@ -701,6 +725,7 @@ app.post("/models", async (req, res) => {
 // GET 只回 has_api_key，不回传 key；PUT 合并保存（空串清除）。
 app.get("/copilot/config/:projectId", async (req, res) => {
   try {
+    await ensureProjectAccess(req.params.projectId, authHeader(req));
     const cfg = await getCopilotConfig(req.params.projectId);
     res.json({
       base_url: cfg?.base_url ?? null,
@@ -708,12 +733,14 @@ app.get("/copilot/config/:projectId", async (req, res) => {
       has_api_key: !!cfg?.api_key,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
   }
 });
 
 app.put("/copilot/config/:projectId", async (req, res) => {
   try {
+    await ensureProjectAccess(req.params.projectId, authHeader(req));
     const { base_url, api_key, model } = (req.body ?? {}) as {
       base_url?: string;
       api_key?: string;
@@ -730,7 +757,8 @@ app.put("/copilot/config/:projectId", async (req, res) => {
       has_api_key: !!saved.api_key,
     });
   } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
   }
 });
 

@@ -438,19 +438,26 @@ export const boardAgentsApi = {
   /**
    * Global-copilot model config (per project, server-side, multi-device).
    * GET never returns the api_key — only has_api_key.
+   * `token` is required: the sidecar authorizes project access against Remote.
    */
-  async getCopilotConfig(projectId: string): Promise<{
+  async getCopilotConfig(
+    projectId: string,
+    token?: string
+  ): Promise<{
     base_url: string | null;
     model: string | null;
     has_api_key: boolean;
   }> {
-    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`);
+    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     return json(res);
   },
 
   async putCopilotConfig(
     projectId: string,
-    body: { base_url?: string; api_key?: string; model?: string }
+    body: { base_url?: string; api_key?: string; model?: string },
+    token?: string
   ): Promise<{
     base_url: string | null;
     model: string | null;
@@ -458,7 +465,10 @@ export const boardAgentsApi = {
   }> {
     const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(body),
     });
     return json(res);

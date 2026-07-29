@@ -36,6 +36,19 @@ use uuid::Uuid;
 /// Max characters of script stdout/stderr echoed into an issue comment.
 const PIPELINE_LOG_TAIL_CHARS: usize = 2000;
 
+/// Wall-clock cap for a pipeline `script` node.
+const DEFAULT_PIPELINE_SCRIPT_TIMEOUT_SECS: u64 = 30 * 60;
+
+/// Timeout for pipeline `script` nodes, overridable per host.
+fn pipeline_script_timeout() -> std::time::Duration {
+    let secs = std::env::var("VK_PIPELINE_SCRIPT_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_PIPELINE_SCRIPT_TIMEOUT_SECS);
+    std::time::Duration::from_secs(secs)
+}
+
 /// Keep the trailing `max_chars` characters of `s`, trimmed.
 ///
 /// Counts *characters*, not bytes: slicing by byte offset panics when the cut
@@ -632,16 +645,30 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
 
         use tokio::process::Command;
 
-        let output = Command::new("bash")
+        let child = Command::new("bash")
             .arg("-lc")
             .arg(command)
             .current_dir(worktree_path)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()
-            .await
+            // Dropping the future on timeout must not leave the script running.
+            .kill_on_drop(true)
+            .spawn()
             .map_err(|e| format!("spawn failed: {e}"))?;
+
+        let timeout = pipeline_script_timeout();
+        // A hung script would otherwise pin this watcher slot forever.
+        let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+            Ok(res) => res.map_err(|e| format!("wait failed: {e}"))?,
+            Err(_) => {
+                return Err(format!(
+                    "`$ {command}` timed out after {}s (killed); \
+                     raise VK_PIPELINE_SCRIPT_TIMEOUT_SECS if the script is legitimately slow",
+                    timeout.as_secs()
+                ));
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);

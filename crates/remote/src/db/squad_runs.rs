@@ -186,6 +186,33 @@ impl SquadRunRepository {
         Ok(run)
     }
 
+    /// Fail runs left `running`/`queued` by a previous process.
+    ///
+    /// Pipeline execution lives in an in-process `tokio::spawn`, so a restart
+    /// orphans its DB row forever (UI polls "executing" indefinitely). Called
+    /// once at boot. `waiting_approval` is intentionally preserved: that state
+    /// is durable and resumed by the approve endpoint, not by a live task.
+    pub async fn fail_orphaned_runs(pool: &PgPool) -> Result<u64, SquadRunError> {
+        let result = sqlx::query(
+            r#"
+            UPDATE squad_runs
+            SET
+                status = 'failed',
+                error_message = COALESCE(
+                    error_message,
+                    'interrupted: server restarted while this run was in progress'
+                ),
+                completed_at = NOW(),
+                updated_at = NOW()
+            WHERE status IN ('running', 'queued')
+            "#,
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
     pub async fn mark_completed(
         pool: &PgPool,
         id: Uuid,
