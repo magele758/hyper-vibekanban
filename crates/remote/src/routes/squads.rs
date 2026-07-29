@@ -176,14 +176,32 @@ async fn run_squad(
     let squad = load_and_authorize(&state, ctx.user.id, id).await?;
     let overrides = payload.map(|j| j.0).unwrap_or_default();
 
-    let result = execute_squad_pipeline(state.pool(), &squad, &overrides, Some(ctx.user.id))
+    // Validate synchronously (fast 400 on user error), then run in the
+    // background: a pipeline can await agents for ~45min per step, far longer
+    // than any browser/proxy will hold a request open. The client polls
+    // `GET /v1/issues/:id/squad-runs` using the returned `run_id`.
+    let prepared = prepare_squad_run(state.pool(), &squad, &overrides, Some(ctx.user.id))
         .await
         .map_err(|e| {
-            tracing::error!(?e, squad_id = %id, "failed to run squad pipeline");
+            tracing::warn!(?e, squad_id = %id, "rejected squad run");
             ErrorResponse::new(StatusCode::BAD_REQUEST, e.to_string())
         })?;
 
-    Ok(Json(result))
+    let response = RunSquadResponse {
+        issue_id: prepared.issue_id,
+        agent_task_ids: Vec::new(),
+        ordered_node_ids: Vec::new(),
+        target_type: squad.target_type,
+        working_directory: prepared.overrides.working_directory.clone(),
+        run_id: Some(prepared.run_id),
+        status: Some(SquadRunStatus::Running),
+        pause_node_id: None,
+        resume_node_id: None,
+    };
+
+    spawn_squad_run(state.pool().clone(), squad, prepared, Some(ctx.user.id));
+
+    Ok(Json(response))
 }
 
 #[instrument(name = "squad_runs.list_by_issue", skip(state, ctx), fields(issue_id = %issue_id, user_id = %ctx.user.id))]
@@ -276,23 +294,25 @@ async fn approve_squad_run(
                 start_from_node_id: Some(resume_node),
                 resume_run_id: Some(id),
             };
-            let resumed =
-                execute_squad_pipeline(state.pool(), &squad, &overrides, Some(ctx.user.id))
-                    .await
-                    .map_err(|e| {
-                        tracing::error!(?e, "failed to resume squad pipeline");
-                        ErrorResponse::new(StatusCode::BAD_REQUEST, e.to_string())
-                    })?;
+            // Resume in the background for the same reason as `/run`: the
+            // remainder of the pipeline can take many minutes.
+            spawn_squad_run(
+                state.pool().clone(),
+                squad,
+                PreparedSquadRun {
+                    run_id: id,
+                    issue_id: run.issue_id,
+                    overrides,
+                },
+                Some(ctx.user.id),
+            );
 
             let run = SquadRunRepository::find_by_id(state.pool(), id)
                 .await
                 .ok()
                 .flatten()
                 .unwrap_or(run);
-            Ok(Json(ApproveSquadRunResponse {
-                run,
-                resumed: Some(resumed),
-            }))
+            Ok(Json(ApproveSquadRunResponse { run, resumed: None }))
         }
         "reject" => {
             let msg = payload
@@ -423,8 +443,118 @@ async fn load_and_authorize(
     Ok(squad)
 }
 
+/// Cheap up-front validation + `squad_runs` row creation for an async run.
+///
+/// Split out of [`execute_squad_pipeline`] so `POST /run` can fail fast on user
+/// error (400) and otherwise hand the caller a `run_id` **before** any agent
+/// work starts. Without this the run row only appeared after the whole walk
+/// finished, so the UI had nothing to poll while a pipeline was in flight.
+pub struct PreparedSquadRun {
+    pub run_id: Uuid,
+    pub issue_id: Uuid,
+    pub overrides: RunSquadRequest,
+}
+
+pub async fn prepare_squad_run(
+    pool: &sqlx::PgPool,
+    squad: &Squad,
+    overrides: &RunSquadRequest,
+    actor_user_id: Option<Uuid>,
+) -> anyhow::Result<PreparedSquadRun> {
+    let working_directory = overrides
+        .working_directory
+        .clone()
+        .or_else(|| squad.working_directory.clone())
+        .filter(|s| !s.trim().is_empty());
+
+    if squad.pipeline.nodes.is_empty() {
+        anyhow::bail!("流水线没有步骤，请先添加节点");
+    }
+
+    let target_type = squad.target_type;
+    let issue_override = overrides.issue_id.or(squad.issue_id);
+    if target_type.uses_issue() && issue_override.is_none() {
+        anyhow::bail!("工作目标包含 Issue，但未选择 Issue");
+    }
+    if target_type.uses_path() && working_directory.is_none() {
+        anyhow::bail!("工作目标包含目录，但未设置 working_directory");
+    }
+
+    // Resolve (or create) the target issue synchronously so the caller can link
+    // straight to it and the background walk stays idempotent.
+    let issue_id = match target_type {
+        SquadTargetType::Issue | SquadTargetType::IssueAndPath => {
+            let id = issue_override.expect("validated above");
+            let exists: Option<(Uuid,)> =
+                sqlx::query_as("SELECT id FROM issues WHERE id = $1 AND project_id = $2")
+                    .bind(id)
+                    .bind(squad.project_id)
+                    .fetch_optional(pool)
+                    .await?;
+            if exists.is_none() {
+                anyhow::bail!("Issue 不存在或不属于本项目");
+            }
+            id
+        }
+        SquadTargetType::Path => {
+            create_path_run_issue(pool, squad, working_directory.as_deref()).await?
+        }
+    };
+
+    let run = SquadRunRepository::create(
+        pool,
+        squad.id,
+        issue_id,
+        SquadRunStatus::Running,
+        overrides.start_from_node_id.clone(),
+        working_directory.clone(),
+        actor_user_id,
+    )
+    .await?;
+
+    Ok(PreparedSquadRun {
+        run_id: run.id,
+        issue_id,
+        overrides: RunSquadRequest {
+            issue_id: Some(issue_id),
+            working_directory,
+            start_from_node_id: overrides.start_from_node_id.clone(),
+            // Reuse the row we just created instead of inserting a second one.
+            resume_run_id: Some(run.id),
+        },
+    })
+}
+
+/// Run a prepared pipeline in the background, marking the run failed if the
+/// walk returns an error (otherwise a crashed walk would look "running" forever).
+pub fn spawn_squad_run(
+    pool: sqlx::PgPool,
+    squad: Squad,
+    prepared: PreparedSquadRun,
+    actor_user_id: Option<Uuid>,
+) {
+    let PreparedSquadRun {
+        run_id, overrides, ..
+    } = prepared;
+    tokio::spawn(async move {
+        if let Err(e) = execute_squad_pipeline(&pool, &squad, &overrides, actor_user_id).await {
+            tracing::error!(?e, squad_id = %squad.id, %run_id, "squad pipeline failed");
+            let _ = SquadRunRepository::mark_status(
+                &pool,
+                run_id,
+                SquadRunStatus::Failed,
+                Some(e.to_string()),
+            )
+            .await;
+        }
+    });
+}
+
 /// Execute a squad pipeline: resolve Issue+Path target, create/use issue, then
 /// walk the pipeline (await agents, fork/join, control-flow).
+///
+/// Long-running: callers serving HTTP should go through [`prepare_squad_run`] +
+/// [`spawn_squad_run`] rather than awaiting this directly.
 ///
 /// `actor_user_id` receives Inbox notifications for `wait_approval` gates.
 pub async fn execute_squad_pipeline(
@@ -478,9 +608,12 @@ pub async fn execute_squad_pipeline(
             }
             id
         }
-        SquadTargetType::Path => {
-            create_path_run_issue(pool, squad, working_directory.as_deref()).await?
-        }
+        SquadTargetType::Path => match issue_override {
+            // Already resolved by `prepare_squad_run` (or a resumed run) — reuse it
+            // so a background walk never creates a second placeholder issue.
+            Some(id) => id,
+            None => create_path_run_issue(pool, squad, working_directory.as_deref()).await?,
+        },
     };
 
     let nodes_by_id: HashMap<&str, _> = squad
@@ -550,6 +683,9 @@ pub async fn execute_squad_pipeline(
     const MAX_SYNC_WAIT_SECS: i32 = 30;
     /// Default agent await timeout (overridable via SQUAD_AGENT_AWAIT_TIMEOUT_SECS).
     const DEFAULT_AGENT_AWAIT_SECS: u64 = 45 * 60;
+    /// Max time a branch waits at a `join` before giving up on stragglers.
+    /// Without this a failed fork branch deadlocks every sibling.
+    const JOIN_BARRIER_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
     let agent_await_timeout = std::env::var("SQUAD_AGENT_AWAIT_TIMEOUT_SECS")
         .ok()
@@ -1276,7 +1412,22 @@ pub async fn execute_squad_pipeline(
                     gate.notify.notify_waiters();
                 }
                 while gate.arrived.load(Ordering::SeqCst) < gate.expected {
-                    gate.notify.notified().await;
+                    // Bounded wait: a fork branch that errors out never arrives,
+                    // and an unbounded `notified()` would hang the run forever.
+                    if tokio::time::timeout(JOIN_BARRIER_TIMEOUT, gate.notify.notified())
+                        .await
+                        .is_err()
+                    {
+                        let arrived = gate.arrived.load(Ordering::SeqCst);
+                        if arrived >= gate.expected {
+                            break;
+                        }
+                        shared.run_log.lock().await.push(format!(
+                            "  - join `{label}` timed out after {}s ({arrived}/{expected} arrived) — continuing",
+                            JOIN_BARRIER_TIMEOUT.as_secs()
+                        ));
+                        break;
+                    }
                 }
                 // Only one branch continues past the join.
                 if gate.leader_taken.swap(true, Ordering::SeqCst) {

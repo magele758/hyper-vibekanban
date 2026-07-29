@@ -275,26 +275,27 @@ async fn create_issue_assignee(
             let issue_id = payload.issue_id;
             let actor = ctx.user.id;
             let working_directory = squad.working_directory.clone();
-            tokio::spawn(async move {
-                use api_types::RunSquadRequest;
 
-                use crate::routes::squads::execute_squad_pipeline;
-                let overrides = RunSquadRequest {
-                    issue_id: Some(issue_id),
-                    working_directory,
-                    start_from_node_id: None,
-                    resume_run_id: None,
-                };
-                if let Err(e) = execute_squad_pipeline(&pool, &squad, &overrides, Some(actor)).await
-                {
-                    tracing::error!(
-                        ?e,
-                        squad_id = %squad.id,
-                        %issue_id,
-                        "full_pipeline on_assign failed"
-                    );
-                }
-            });
+            use api_types::RunSquadRequest;
+
+            use crate::routes::squads::{prepare_squad_run, spawn_squad_run};
+            let overrides = RunSquadRequest {
+                issue_id: Some(issue_id),
+                working_directory,
+                start_from_node_id: None,
+                resume_run_id: None,
+            };
+            // Create the run row inline so the Issue panel shows "running"
+            // immediately after assign; only the walk itself is backgrounded.
+            match prepare_squad_run(&pool, &squad, &overrides, Some(actor)).await {
+                Ok(prepared) => spawn_squad_run(pool, squad, prepared, Some(actor)),
+                Err(e) => tracing::error!(
+                    ?e,
+                    squad_id = %squad.id,
+                    %issue_id,
+                    "full_pipeline on_assign rejected"
+                ),
+            }
         }
         None => {}
     }
