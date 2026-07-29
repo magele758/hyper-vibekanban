@@ -33,6 +33,28 @@ use tokio::time::interval;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+/// Max characters of script stdout/stderr echoed into an issue comment.
+const PIPELINE_LOG_TAIL_CHARS: usize = 2000;
+
+/// Keep the trailing `max_chars` characters of `s`, trimmed.
+///
+/// Counts *characters*, not bytes: slicing by byte offset panics when the cut
+/// lands inside a multi-byte character, which happens routinely with Chinese
+/// build output.
+fn tail_chars(s: &str, max_chars: usize) -> String {
+    let t = s.trim();
+    let total = t.chars().count();
+    if total <= max_chars {
+        return t.to_string();
+    }
+    let start = t
+        .char_indices()
+        .nth(total - max_chars)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    format!("…{}", &t[start..])
+}
+
 /// Polls Remote for queued agent tasks and starts local coding workspaces.
 pub struct AgentTaskWatcher<C: ContainerService> {
     db: DBService,
@@ -623,14 +645,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let tail = |s: &str| {
-            let t = s.trim();
-            if t.len() > 2000 {
-                format!("…{}", &t[t.len() - 2000..])
-            } else {
-                t.to_string()
-            }
-        };
+        let tail = |s: &str| tail_chars(s, PIPELINE_LOG_TAIL_CHARS);
         if output.status.success() {
             Ok(format!(
                 "`$ {command}` exit 0\n\nstdout:\n{}\n\nstderr:\n{}",
@@ -1045,4 +1060,30 @@ fn select_repo_for_task<'a>(
             || d.contains("vibekanban")
             || d.contains("hyper-vibekanban")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PIPELINE_LOG_TAIL_CHARS, tail_chars};
+
+    #[test]
+    fn tail_chars_keeps_short_input() {
+        assert_eq!(tail_chars("  hello  ", 100), "hello");
+    }
+
+    #[test]
+    fn tail_chars_truncates_ascii() {
+        let out = tail_chars(&"a".repeat(50), 10);
+        assert_eq!(out, format!("…{}", "a".repeat(10)));
+    }
+
+    /// Regression: byte-slicing panicked when the cut landed inside a
+    /// multi-byte char (routine with Chinese build output).
+    #[test]
+    fn tail_chars_handles_multibyte_without_panic() {
+        let input = "中".repeat(PIPELINE_LOG_TAIL_CHARS + 500);
+        let out = tail_chars(&input, PIPELINE_LOG_TAIL_CHARS);
+        assert_eq!(out.chars().count(), PIPELINE_LOG_TAIL_CHARS + 1);
+        assert!(out.starts_with('…'));
+    }
 }
