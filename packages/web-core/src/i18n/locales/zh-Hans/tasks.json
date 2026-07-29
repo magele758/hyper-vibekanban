@@ -110,7 +110,6 @@
     "logsCopied": "已复制！"
   },
   "followUp": {
-    "queuedMessage": "消息已排队 - 将在当前运行完成时执行",
     "queue": {
       "title": "队列 ({{count}})",
       "clear": "清空",

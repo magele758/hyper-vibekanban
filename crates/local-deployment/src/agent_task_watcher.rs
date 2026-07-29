@@ -1000,10 +1000,10 @@ fn select_repo_for_task<'a>(
     project_name: Option<&str>,
 ) -> Option<&'a Repo> {
     if let Some(preferred) = preferred_repo_id.map(str::trim).filter(|s| !s.is_empty()) {
-        if let Ok(id) = Uuid::parse_str(preferred) {
-            if let Some(repo) = repos.iter().find(|r| r.id == id) {
-                return Some(repo);
-            }
+        if let Ok(id) = Uuid::parse_str(preferred)
+            && let Some(repo) = repos.iter().find(|r| r.id == id)
+        {
+            return Some(repo);
         }
         // Squad working_directory is often an absolute path — match repo.path.
         let preferred_path = std::path::Path::new(preferred);

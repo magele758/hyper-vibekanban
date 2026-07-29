@@ -112,7 +112,14 @@
     "filesChanged_other": "{{count}} files changed"
   },
   "followUp": {
-    "queuedMessage": "메시지가 대기열에 추가됨 - 현재 실행이 완료되면 실행됩니다"
+    "queue": {
+      "title": "대기열 ({{count}})",
+      "clear": "모두 지우기",
+      "edit": "수정",
+      "remove": "삭제",
+      "save": "저장",
+      "reorder": "수서 바꾸기"
+    }
   },
   "git": {
     "labels": {

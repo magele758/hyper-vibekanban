@@ -110,7 +110,6 @@
     "logsCopied": "已複製！"
   },
   "followUp": {
-    "queuedMessage": "訊息已加入佇列 - 會在目前執行完成後處理",
     "queue": {
       "title": "佇列 ({{count}})",
       "clear": "清空",
