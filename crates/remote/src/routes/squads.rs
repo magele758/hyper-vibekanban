@@ -698,6 +698,8 @@ pub async fn execute_squad_pipeline(
         status: AgentTaskStatus,
         failure_reason: Option<String>,
         summary: String,
+        /// Diff produced by this step, when the node opted into `handoff_diff`.
+        diff: Option<String>,
     }
 
     struct JoinGate {
@@ -784,6 +786,37 @@ pub async fn execute_squad_pipeline(
             return (false, format!("literal false ({raw})"));
         }
 
+        // `verified:<needle>` — strict form for "is the work actually done?".
+        //
+        // Unlike the default heuristic below it never falls back to "completed
+        // therefore true": the previous step must have succeeded AND the needle
+        // must appear. Point it at a `script` node (tests / typecheck) so loop
+        // exit depends on a real exit code instead of the agent's prose.
+        if let Some(rest) = c.strip_prefix("verified:") {
+            let needle = rest.trim();
+            let Some(r) = last else {
+                return (false, "verified: no previous step result".to_string());
+            };
+            if r.status != AgentTaskStatus::Completed {
+                return (
+                    false,
+                    format!("verified: previous step {:?}, not completed", r.status),
+                );
+            }
+            if needle.is_empty() {
+                return (true, "verified: previous step completed".to_string());
+            }
+            let hay = r.summary.to_lowercase();
+            let ok = hay.contains(&needle.to_lowercase());
+            return (
+                ok,
+                format!(
+                    "verified: `{needle}` {} in step output",
+                    if ok { "found" } else { "missing" }
+                ),
+            );
+        }
+
         // status:completed / status:failed / status:cancelled
         if let Some(rest) = c.strip_prefix("status:") {
             let want = rest.trim();
@@ -832,10 +865,10 @@ pub async fn execute_squad_pipeline(
                 return (true, format!("keyword match in last result (`{needle}`)"));
             }
             // success_condition from loop_config as secondary signal
-            if let Some(sc) = success_condition.map(str::trim).filter(|s| !s.is_empty()) {
-                if hay.contains(&sc.to_lowercase()) {
-                    return (true, format!("loop success_condition match (`{sc}`)"));
-                }
+            if let Some(sc) = success_condition.map(str::trim).filter(|s| !s.is_empty())
+                && hay.contains(&sc.to_lowercase())
+            {
+                return (true, format!("loop success_condition match (`{sc}`)"));
             }
             if r.status == AgentTaskStatus::Completed
                 && !c.contains("never")
@@ -889,6 +922,7 @@ pub async fn execute_squad_pipeline(
                         status: task.status,
                         failure_reason: task.failure_reason,
                         summary,
+                        diff: None,
                     });
                 }
                 _ => {}
@@ -901,10 +935,85 @@ pub async fn execute_squad_pipeline(
                         timeout.as_secs()
                     )),
                     summary: format!("task {task_id} await timeout"),
+                    diff: None,
                 });
             }
             tokio::time::sleep(poll).await;
         }
+    }
+
+    /// Max characters of diff carried into the next step's prompt.
+    /// Large diffs blow the agent's context window, so keep the head only.
+    const HANDOFF_DIFF_MAX_CHARS: usize = 12_000;
+
+    /// Collect the working diff of a step's workspace via a `script` job, so a
+    /// downstream reviewer sees real code instead of a prose summary.
+    ///
+    /// Best-effort: a failure only means the reviewer falls back to the summary,
+    /// so it must never abort the pipeline.
+    async fn collect_handoff_diff(
+        pool: &sqlx::PgPool,
+        squad: &Squad,
+        issue_id: Uuid,
+        node_repo: &Option<String>,
+        label: &str,
+        agent_await_timeout: Duration,
+    ) -> Option<String> {
+        let local_ws = AgentTaskRepository::latest_local_workspace_for_issue(pool, issue_id)
+            .await
+            .ok()
+            .flatten();
+
+        // Staged + unstaged + untracked, against the merge-base with the default branch.
+        let command = "git --no-pager diff --stat HEAD 2>/dev/null; \
+                       echo '--- PATCH ---'; \
+                       git --no-pager diff HEAD 2>/dev/null"
+            .to_string();
+
+        let job = api_types::PipelineJobSpec {
+            kind: api_types::PipelineJobKind::Script,
+            command: Some(command),
+            op: None,
+            target_branch: None,
+            local_workspace_id: local_ws,
+            label: Some(format!("{label} · collect diff")),
+        };
+        let execution_prompt = job.encode().ok()?;
+
+        let task = AgentTaskRepository::enqueue(
+            pool,
+            None,
+            squad.leader_agent_id?,
+            issue_id,
+            AgentTaskTrigger::Manual,
+            0,
+            true,
+            Some(squad.id),
+            false,
+            node_repo.clone(),
+            Some(execution_prompt),
+        )
+        .await
+        .ok()?;
+
+        let result = await_agent_task(pool, task.data.id, agent_await_timeout)
+            .await
+            .ok()?;
+        if result.status != AgentTaskStatus::Completed {
+            return None;
+        }
+
+        let mut diff = result.summary;
+        if diff.chars().count() > HANDOFF_DIFF_MAX_CHARS {
+            let cut = diff
+                .char_indices()
+                .nth(HANDOFF_DIFF_MAX_CHARS)
+                .map(|(i, _)| i)
+                .unwrap_or(diff.len());
+            diff.truncate(cut);
+            diff.push_str("\n… (diff truncated)");
+        }
+        Some(diff)
     }
 
     async fn follow_edges(
@@ -993,6 +1102,23 @@ pub async fn execute_squad_pipeline(
 
         let outgoing = outs.get(node_id).map(|v| v.as_slice()).unwrap_or(&[]);
 
+        // Per-node repo override enables one Squad to span several repos.
+        // Downstream nodes keep inheriting the Squad-wide default, so an
+        // override is scoped to the node that declares it.
+        let node_repo: Option<String> = node
+            .working_directory
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| preferred_repo.clone());
+        if node.working_directory.is_some() && node_repo != *preferred_repo {
+            shared.run_log.lock().await.push(format!(
+                "- ↳ `{label}` targets repo `{}`",
+                node_repo.as_deref().unwrap_or("-")
+            ));
+        }
+
         match kind {
             SquadPipelineNodeType::Agent => {
                 let agent_id = node.agent_id.or(squad.leader_agent_id).ok_or_else(|| {
@@ -1027,6 +1153,13 @@ pub async fn execute_squad_pipeline(
                             .map(|r| format!("Failure: {r}"))
                             .unwrap_or_default()
                     ));
+                    if let Some(diff) = prev.diff.as_deref().filter(|d| !d.trim().is_empty()) {
+                        prompt_parts.push(format!(
+                            "## Diff from previous step\n\
+                             Review the actual changes below rather than trusting the summary.\n\
+                             ```diff\n{diff}\n```"
+                        ));
+                    }
                 }
                 let execution_prompt = if prompt_parts.is_empty() {
                     None
@@ -1044,7 +1177,7 @@ pub async fn execute_squad_pipeline(
                     true, // distinct session per pipeline step
                     Some(squad.id),
                     is_leader,
-                    preferred_repo.clone(),
+                    node_repo.clone(),
                     execution_prompt,
                 )
                 .await?;
@@ -1060,6 +1193,33 @@ pub async fn execute_squad_pipeline(
                     "  - finished {:?}: {}",
                     result.status, result.summary
                 ));
+
+                let mut result = result;
+                if ok && node.handoff_diff.unwrap_or(false) {
+                    match collect_handoff_diff(
+                        pool,
+                        squad,
+                        issue_id,
+                        &node_repo,
+                        label,
+                        agent_await_timeout,
+                    )
+                    .await
+                    {
+                        Some(diff) => {
+                            shared.run_log.lock().await.push(format!(
+                                "  - collected diff for handoff ({} chars)",
+                                diff.chars().count()
+                            ));
+                            result.diff = Some(diff);
+                        }
+                        None => {
+                            shared.run_log.lock().await.push(
+                                "  - ⚠ diff handoff unavailable — passing summary only".into(),
+                            )
+                        }
+                    }
+                }
                 *shared.last_agent_result.lock().await = Some(result.clone());
 
                 if !ok {
@@ -1221,19 +1381,21 @@ pub async fn execute_squad_pipeline(
                         break;
                     }
                     let last = shared.last_agent_result.lock().await.clone();
-                    // Early exit if loop success_condition already satisfied
-                    if let Some(sc) = loop_success.map(str::trim).filter(|s| !s.is_empty()) {
-                        if let Some(r) = last.as_ref() {
-                            let hay = r.summary.to_lowercase();
-                            if r.status == AgentTaskStatus::Completed
-                                && hay.contains(&sc.to_lowercase())
-                            {
-                                shared.run_log.lock().await.push(format!(
-                                    "  - iter {}: loop success_condition met — exit",
-                                    iter + 1
-                                ));
-                                break;
-                            }
+                    // Early exit if loop success_condition already satisfied.
+                    // Requires Completed *and* the needle, so a step that failed
+                    // while mentioning the word cannot end the loop.
+                    if let Some(sc) = loop_success.map(str::trim).filter(|s| !s.is_empty())
+                        && let Some(r) = last.as_ref()
+                    {
+                        let hay = r.summary.to_lowercase();
+                        if r.status == AgentTaskStatus::Completed
+                            && hay.contains(&sc.to_lowercase())
+                        {
+                            shared.run_log.lock().await.push(format!(
+                                "  - iter {}: loop success_condition met — exit",
+                                iter + 1
+                            ));
+                            break;
                         }
                     }
                     let (cont, reason) =
@@ -1553,7 +1715,7 @@ pub async fn execute_squad_pipeline(
                     true,
                     Some(squad.id),
                     false,
-                    preferred_repo.clone(),
+                    node_repo.clone(),
                     Some(execution_prompt),
                 )
                 .await?;

@@ -155,7 +155,21 @@ command?: string,
 /**
  * `git_op`: rebase | create_pr | merge | push (Batch 2+).
  */
-git_op?: string, };
+git_op?: string, 
+/**
+ * Per-node repo / working directory override.
+ *
+ * Lets one Squad drive several repos (multi-project features): each node
+ * dispatches into its own workspace instead of the Squad-wide directory.
+ * Accepts a repo UUID or an absolute path, same as `Squad.working_directory`.
+ * Falls back to the Squad-level value when unset.
+ */
+working_directory?: string, 
+/**
+ * Attach the current diff of the node's workspace to the next step's
+ * handoff, so a reviewer agent sees real code instead of a summary.
+ */
+handoff_diff?: boolean, };
 
 export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "wait_approval" | "fork" | "join" | "script" | "git_op";
 

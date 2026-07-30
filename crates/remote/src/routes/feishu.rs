@@ -26,7 +26,9 @@ use crate::{
         agents::AgentRepository,
         feishu::{FeishuBotBindingFull, FeishuRepository},
     },
-    feishu::{FeishuClient, decrypt_event, verify_signature},
+    feishu::{
+        FeishuClient, FeishuCommand, HELP_TEXT, decrypt_event, parse_command, verify_signature,
+    },
 };
 
 pub fn router() -> Router<AppState> {
@@ -429,8 +431,70 @@ async fn handle_message_event(
         return Ok(());
     };
 
-    let issue_id =
-        create_issue_for_feishu(pool, binding.project_id, binding.agent_id, &text).await?;
+    let client = FeishuClient::new(&binding.app_id, &binding.app_secret);
+
+    // Route on the command verb so a chat can triage information before any
+    // Issue is created. Only `/feature` (and an approved proposal) opens work.
+    let command = parse_command(&text);
+    let (project_id, work_text) = match &command {
+        FeishuCommand::Help => {
+            reply(&client, message_id, chat_id, HELP_TEXT).await;
+            return Ok(());
+        }
+        FeishuCommand::Chat { text } => {
+            // Conversation mode: hand the message to the agent for triage. The
+            // agent replies with an assessment; the human decides via /feature.
+            (
+                binding.project_id,
+                format!(
+                    "以下是用户在飞书里发来的信息。请判断它对本项目是否有价值，简要说明理由；\
+                 不要直接改代码。如果值得做，请给出建议的改动范围，并提示用户回复 \
+                 `/feature <需求>` 才会真正开工。\n\n---\n\n{text}"
+                ),
+            )
+        }
+        FeishuCommand::Approve { note } => {
+            let note = note.as_deref().unwrap_or("（无备注）");
+            (
+                binding.project_id,
+                format!("用户已同意上一条提案。请据此开始实现。用户备注：{note}"),
+            )
+        }
+        FeishuCommand::Reject { note } => {
+            let note = note.as_deref().unwrap_or("");
+            let msg = if note.is_empty() {
+                "已放弃该提案，不会创建任务。".to_string()
+            } else {
+                format!("已放弃该提案，不会创建任务。备注：{note}")
+            };
+            reply(&client, message_id, chat_id, &msg).await;
+            return Ok(());
+        }
+        FeishuCommand::Feature { project, text } => {
+            let resolved = match project {
+                Some(name) => match resolve_project_by_name(pool, binding, name).await? {
+                    Some(id) => id,
+                    None => {
+                        reply(
+                            &client,
+                            message_id,
+                            chat_id,
+                            &format!(
+                                "找不到名为 `{name}` 的项目（需与机器人同一组织）。\
+                                 用 `/feature <需求>` 可在默认项目开工。"
+                            ),
+                        )
+                        .await;
+                        return Ok(());
+                    }
+                },
+                None => binding.project_id,
+            };
+            (resolved, text.clone())
+        }
+    };
+
+    let issue_id = create_issue_for_feishu(pool, project_id, binding.agent_id, &work_text).await?;
 
     let task = AgentTaskRepository::enqueue(
         pool,
@@ -450,14 +514,52 @@ async fn handle_message_event(
     FeishuRepository::link_inbound_task(pool, inbound.id, issue_id, task.data.id).await?;
 
     // Immediate ack (best-effort)
-    let client = FeishuClient::new(&binding.app_id, &binding.app_secret);
-    let ack = format!("已收到，正在调度 Agent 处理…\nIssue: {issue_id}");
-    if let Err(e) = client.reply_text(message_id, &ack).await {
-        tracing::warn!(?e, "feishu ack reply failed; trying send_text");
-        let _ = client.send_text_to_chat(chat_id, &ack).await;
-    }
+    let ack = match &command {
+        FeishuCommand::Chat { .. } => {
+            format!("已收到，正在让 Agent 评估价值…\nIssue: {issue_id}")
+        }
+        _ => format!("已收到，正在调度 Agent 处理…\nIssue: {issue_id}"),
+    };
+    reply(&client, message_id, chat_id, &ack).await;
 
     Ok(())
+}
+
+/// Best-effort reply: thread reply first, chat message as fallback.
+async fn reply(client: &FeishuClient, message_id: &str, chat_id: &str, text: &str) {
+    if let Err(e) = client.reply_text(message_id, text).await {
+        tracing::warn!(?e, "feishu reply failed; trying send_text");
+        let _ = client.send_text_to_chat(chat_id, text).await;
+    }
+}
+
+/// Resolve a project by name within the binding's organization.
+///
+/// Scoped to the binding's org so a chat command cannot reach projects the
+/// bound bot has no relationship with.
+async fn resolve_project_by_name(
+    pool: &sqlx::PgPool,
+    binding: &FeishuBotBindingFull,
+    name: &str,
+) -> anyhow::Result<Option<Uuid>> {
+    let found: Option<(Uuid,)> = sqlx::query_as(
+        r#"
+        SELECT p.id
+        FROM projects p
+        WHERE p.organization_id = (
+                SELECT organization_id FROM projects WHERE id = $1
+              )
+          AND lower(p.name) = lower($2)
+        ORDER BY p.created_at ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(binding.project_id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(found.map(|r| r.0))
 }
 
 fn strip_feishu_mentions(text: &str) -> String {

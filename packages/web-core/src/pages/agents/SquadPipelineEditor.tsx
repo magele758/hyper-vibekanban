@@ -933,6 +933,39 @@ function NodeDetailForm({
         />
       </label>
 
+      <label className="block text-xs text-low">
+        本步仓库 working_directory（跨项目协作用；留空=沿用 Squad 设置）
+        <input
+          className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+          placeholder="/abs/path/to/other-repo 或 repo UUID"
+          value={node.working_directory ?? ''}
+          onChange={(e) =>
+            onChange({
+              working_directory: e.target.value || undefined,
+            })
+          }
+        />
+      </label>
+
+      {kind === 'agent' && (
+        <label className="flex items-start gap-2 text-xs text-low">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={node.handoff_diff ?? false}
+            onChange={(e) =>
+              onChange({ handoff_diff: e.target.checked || undefined })
+            }
+          />
+          <span>
+            把本步 diff 传给下一步
+            <span className="block text-[11px] text-low">
+              下游 reviewer 看真实代码，而不是只看总结文字。
+            </span>
+          </span>
+        </label>
+      )}
+
       {kind === 'break' && (
         <p className="text-[11px] text-low">
           运行时退出最近的 While；无 While 则忽略。

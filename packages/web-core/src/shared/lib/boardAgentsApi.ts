@@ -27,6 +27,34 @@ const SIDECAR_BASE = (
   import.meta.env.VITE_AGENT_SIDECAR_BASE || '/agent-sidecar'
 ).replace(/\/$/, '');
 
+/** Built-in pipeline templates installable per project. */
+export type WorkflowTemplateKey =
+  | 'feature-closeout'
+  | 'relentless-delivery'
+  | 'scout-digest';
+
+export const WORKFLOW_TEMPLATES: {
+  key: WorkflowTemplateKey;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: 'feature-closeout',
+    label: 'Feature Closeout',
+    hint: 'Review → 测试 → rebase → Ask Merge',
+  },
+  {
+    key: 'relentless-delivery',
+    label: '盯到完成 (Relentless)',
+    hint: '循环督办：脚本硬验证通过才算完成，最多 5 轮',
+  },
+  {
+    key: 'scout-digest',
+    label: '情报侦察 (Scout)',
+    hint: '定时采集 → 价值分析 → 等你拍板 → 才开干',
+  },
+];
+
 export type AgentLlmSettings = {
   agent_id: string;
   has_api_key: boolean;
@@ -292,17 +320,32 @@ export const boardAgentsApi = {
     );
   },
 
-  async installFeatureCloseout(projectId: string): Promise<{
+  /**
+   * Install a built-in workflow template. Idempotent: re-installing updates the
+   * squad of the same name instead of creating a duplicate.
+   */
+  async installWorkflowTemplate(
+    projectId: string,
+    template: WorkflowTemplateKey
+  ): Promise<{
     squad: Squad;
     agent_ids: string[];
     created_agent_names: string[];
   }> {
     return json(
       await makeRequest(
-        `/v1/projects/${projectId}/workflow-templates/feature-closeout`,
+        `/v1/projects/${projectId}/workflow-templates/${template}`,
         { method: 'POST', body: '{}' }
       )
     );
+  },
+
+  async installFeatureCloseout(projectId: string): Promise<{
+    squad: Squad;
+    agent_ids: string[];
+    created_agent_names: string[];
+  }> {
+    return this.installWorkflowTemplate(projectId, 'feature-closeout');
   },
 
   async deleteSquad(id: string): Promise<void> {

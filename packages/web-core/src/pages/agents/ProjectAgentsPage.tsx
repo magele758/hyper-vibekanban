@@ -19,7 +19,10 @@ import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
-import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
+import {
+  boardAgentsApi,
+  WORKFLOW_TEMPLATES,
+} from '@/shared/lib/boardAgentsApi';
 import type { FeishuBotBinding } from '@/shared/lib/boardAgentsApi';
 import { cn } from '@/shared/lib/utils';
 import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
@@ -913,35 +916,41 @@ function SquadsTab({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-low hover:bg-secondary"
-            disabled={busy}
-            onClick={() => {
-              void (async () => {
-                setBusy(true);
-                setError(null);
-                setRunMsg(null);
-                try {
-                  const r =
-                    await boardAgentsApi.installFeatureCloseout(projectId);
-                  setRunMsg(
-                    `已安装 Feature Closeout（Squad ${r.squad.name}${
-                      r.created_agent_names.length
-                        ? `，新建 Agent：${r.created_agent_names.join('、')}`
-                        : ''
-                    }）。可指派到 Issue，或「从某步运行」。`
-                  );
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : String(e));
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-          >
-            安装 Closeout 模板
-          </button>
+          {WORKFLOW_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.key}
+              type="button"
+              title={tpl.hint}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-low hover:bg-secondary"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError(null);
+                  setRunMsg(null);
+                  try {
+                    const r = await boardAgentsApi.installWorkflowTemplate(
+                      projectId,
+                      tpl.key
+                    );
+                    setRunMsg(
+                      `已安装「${tpl.label}」（Squad ${r.squad.name}${
+                        r.created_agent_names.length
+                          ? `，新建 Agent：${r.created_agent_names.join('、')}`
+                          : ''
+                      }）。可指派到 Issue，或「从某步运行」。`
+                    );
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              装「{tpl.label}」
+            </button>
+          ))}
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/15"
