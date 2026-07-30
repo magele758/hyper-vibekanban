@@ -69,9 +69,12 @@ impl RemoteClientError {
         }
     }
 
-    fn is_definitive_auth_failure(&self) -> bool {
+    /// True only when the refresh/session token is known-dead and local
+    /// credentials should be discarded. Opaque `Auth` (bare 401/403 with no
+    /// error body) is intentionally NOT definitive — proxies and brief Remote
+    /// blips must not wipe a still-valid refresh token.
+    pub fn is_definitive_auth_failure(&self) -> bool {
         match self {
-            Self::Auth => true,
             Self::Api(code) => code.is_definitive_auth_failure(),
             _ => false,
         }
@@ -79,10 +82,15 @@ impl RemoteClientError {
 
     pub fn degraded_slug(&self) -> Option<&'static str> {
         match self {
-            Self::Timeout | Self::Transport(_) | Self::Storage(_) | Self::Serde(_) => {
+            Self::Timeout | Self::Transport(_) | Self::Storage(_) | Self::Serde(_) | Self::Auth => {
                 Some(Self::generic_degraded_slug())
             }
-            Self::Http { status, .. } if (500..=599).contains(status) => {
+            Self::Http { status, .. }
+                if (500..=599).contains(status) || matches!(status, 401 | 403) =>
+            {
+                Some(Self::generic_degraded_slug())
+            }
+            Self::Api(code) if !code.is_definitive_auth_failure() => {
                 Some(Self::generic_degraded_slug())
             }
             _ => None,
@@ -235,6 +243,10 @@ impl RemoteClient {
                     updated.access_token.ok_or(RemoteClientError::Auth)
                 }
                 Err(err) if err.is_definitive_auth_failure() => {
+                    warn!(
+                        error = %err,
+                        "Discarding local credentials after definitive remote auth failure"
+                    );
                     let _ = self.auth_context.clear_credentials().await;
                     self.auth_context.clear_remote_auth_degraded_slug().await;
                     Err(err)
@@ -397,7 +409,11 @@ impl RemoteClient {
 
             match res.status() {
                 s if s.is_success() => Ok(res),
-                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => Err(RemoteClientError::Auth),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                    let status = res.status().as_u16();
+                    let body = res.text().await.unwrap_or_default();
+                    Err(classify_auth_status_error(status, body))
+                }
                 s => {
                     let status = s.as_u16();
                     let body = res.text().await.unwrap_or_default();
@@ -510,12 +526,19 @@ impl RemoteClient {
     }
 
     fn map_api_error(&self, err: RemoteClientError) -> RemoteClientError {
-        if let RemoteClientError::Http { body, .. } = &err
-            && let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(body)
-        {
-            return RemoteClientError::Api(map_error_code(Some(&api_err.error)));
+        match &err {
+            RemoteClientError::Http { status, body } if *status == 401 || *status == 403 => {
+                classify_auth_status_error(*status, body.clone())
+            }
+            RemoteClientError::Http { body, .. } => {
+                if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(body) {
+                    RemoteClientError::Api(map_error_code(Some(&api_err.error)))
+                } else {
+                    err
+                }
+            }
+            _ => err,
         }
-        err
     }
 
     /// Fetches user profile.
@@ -1103,5 +1126,82 @@ fn map_reqwest_error(e: reqwest::Error) -> RemoteClientError {
         RemoteClientError::Timeout
     } else {
         RemoteClientError::Transport(e.to_string())
+    }
+}
+
+/// Classify HTTP 401/403 from Remote.
+///
+/// When the body carries a known auth error code, return `Api(...)` so callers
+/// can decide whether the refresh token is truly dead. Opaque 401/403 (empty
+/// or non-JSON bodies from proxies / partial outages) stay as `Auth` and must
+/// NOT wipe local credentials.
+fn classify_auth_status_error(status: u16, body: String) -> RemoteClientError {
+    if let Ok(api_err) = serde_json::from_str::<ApiErrorResponse>(&body) {
+        return RemoteClientError::Api(map_error_code(Some(&api_err.error)));
+    }
+    if body.trim().is_empty() {
+        return RemoteClientError::Auth;
+    }
+    RemoteClientError::Http { status, body }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opaque_auth_is_not_definitive() {
+        assert!(!RemoteClientError::Auth.is_definitive_auth_failure());
+        assert!(!RemoteClientError::Timeout.is_definitive_auth_failure());
+        assert!(
+            !RemoteClientError::Http {
+                status: 401,
+                body: "bad gateway html".into()
+            }
+            .is_definitive_auth_failure()
+        );
+    }
+
+    #[test]
+    fn known_auth_error_codes_are_definitive() {
+        for code in [
+            "invalid_token",
+            "expired_token",
+            "session_revoked",
+            "token_reuse_detected",
+            "provider_token_revoked",
+            "identity_error",
+        ] {
+            let err = RemoteClientError::Api(map_error_code(Some(code)));
+            assert!(
+                err.is_definitive_auth_failure(),
+                "{code} should be definitive"
+            );
+        }
+        assert!(RemoteClientError::Api(HandoffErrorCode::Expired).is_definitive_auth_failure());
+        assert!(
+            RemoteClientError::Api(HandoffErrorCode::AccessDenied).is_definitive_auth_failure()
+        );
+    }
+
+    #[test]
+    fn classify_auth_parses_error_body() {
+        let err = classify_auth_status_error(
+            401,
+            r#"{"error":"session_revoked","message":"session has been revoked"}"#.into(),
+        );
+        assert!(matches!(
+            err,
+            RemoteClientError::Api(HandoffErrorCode::Other(ref c)) if c == "session_revoked"
+        ));
+        assert!(err.is_definitive_auth_failure());
+    }
+
+    #[test]
+    fn classify_auth_keeps_opaque_401_as_auth() {
+        let err = classify_auth_status_error(401, String::new());
+        assert!(matches!(err, RemoteClientError::Auth));
+        assert!(!err.is_definitive_auth_failure());
+        assert_eq!(err.degraded_slug(), Some("remote_auth_unavailable"));
     }
 }

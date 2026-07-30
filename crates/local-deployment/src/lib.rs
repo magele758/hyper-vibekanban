@@ -440,7 +440,11 @@ impl LocalDeployment {
                     profile: Some(profile),
                 }
             }
-            Err(RemoteClientError::Auth) => {
+            Err(err) if err.is_definitive_auth_failure() => {
+                tracing::warn!(
+                    error = %err,
+                    "Discarding local credentials after definitive profile auth failure"
+                );
                 let _ = self.auth_context.clear_credentials().await;
                 self.auth_context.clear_profile().await;
                 self.auth_context.clear_remote_auth_degraded_slug().await;
