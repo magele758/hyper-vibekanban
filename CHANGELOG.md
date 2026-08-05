@@ -23,6 +23,7 @@
 
 ### Issue / Workspace 管理
 
+- **Projects Overview** — 新增项目总览页（本地 `/overview`、Remote 首页复用），AppBar/侧栏入口，按 org 聚合项目并支持排序/搜索。
 - **删除 Issue 时级联删除关联工作区** — 删除 Issue（含子 Issue）时可确认一并删除关联的本地工作区及其目录，Console 模式工作区被豁免。
 - **侧边栏 diff 统计懒加载** — 将 git diff 统计从工作区 summary 接口拆出到独立的 `/workspaces/diff-stats`，侧边栏按需拉取；mark-seen 改为本地 patch 缓存而非重新请求。
 
@@ -32,6 +33,8 @@
 
 ### 编码 Agent / Executor 支持
 
+- **Grok（ACP）接入** — 新增 `GROK` coding agent：经 `grok agent stdio`（ACP）运行，含默认 profile、MCP passthrough、approval bridge、生成类型与 schema。
+- **Cursor 仅使用 `cursor-agent`** — 不再解析裸名 `agent`（Grok 安装脚本会占用该路径），同步更新 setup helper 安装/登录脚本。
 - **OpenCode 模型支持** — 完善 OpenCode executor 的模型发现与配置。
 - **Cursor 相关修复** — Cursor executor 的命令、模型发现与安装流程修复（含文档更新）。
 - **Claude 空 thinking 事件修复** — 排查并修复对话流中出现大量空 thinking 事件的问题。
