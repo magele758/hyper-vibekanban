@@ -628,9 +628,9 @@ working_dir: string | null, };
 
 export type ScriptRequestLanguage = "Bash";
 
-export enum BaseCodingAgent { CLAUDE_CODE = "CLAUDE_CODE", AMP = "AMP", GEMINI = "GEMINI", CODEX = "CODEX", OPENCODE = "OPENCODE", CURSOR_AGENT = "CURSOR_AGENT", QWEN_CODE = "QWEN_CODE", COPILOT = "COPILOT", DROID = "DROID", PI = "PI" }
+export enum BaseCodingAgent { CLAUDE_CODE = "CLAUDE_CODE", AMP = "AMP", GEMINI = "GEMINI", CODEX = "CODEX", OPENCODE = "OPENCODE", CURSOR_AGENT = "CURSOR_AGENT", QWEN_CODE = "QWEN_CODE", COPILOT = "COPILOT", DROID = "DROID", PI = "PI", GROK = "GROK" }
 
-export type CodingAgent = { "CLAUDE_CODE": ClaudeCode } | { "AMP": Amp } | { "GEMINI": Gemini } | { "CODEX": Codex } | { "OPENCODE": Opencode } | { "CURSOR_AGENT": CursorAgent } | { "QWEN_CODE": QwenCode } | { "COPILOT": Copilot } | { "DROID": Droid } | { "PI": Pi };
+export type CodingAgent = { "CLAUDE_CODE": ClaudeCode } | { "AMP": Amp } | { "GEMINI": Gemini } | { "CODEX": Codex } | { "OPENCODE": Opencode } | { "CURSOR_AGENT": CursorAgent } | { "QWEN_CODE": QwenCode } | { "COPILOT": Copilot } | { "DROID": Droid } | { "PI": Pi } | { "GROK": Grok };
 
 export type SlashCommandDescription = { 
 /**
@@ -670,7 +670,7 @@ models?: Array<string>,
  */
 reasoning_by_model?: { [key in string]?: string }, };
 
-export type ExecutorProfile = { recently_used_models?: ExecutorRecentModels | null, } & ({ [key in string]?: { "CLAUDE_CODE": ClaudeCode } | { "AMP": Amp } | { "GEMINI": Gemini } | { "CODEX": Codex } | { "OPENCODE": Opencode } | { "CURSOR_AGENT": CursorAgent } | { "QWEN_CODE": QwenCode } | { "COPILOT": Copilot } | { "DROID": Droid } | { "PI": Pi } });
+export type ExecutorProfile = { recently_used_models?: ExecutorRecentModels | null, } & ({ [key in string]?: { "CLAUDE_CODE": ClaudeCode } | { "AMP": Amp } | { "GEMINI": Gemini } | { "CODEX": Codex } | { "OPENCODE": Opencode } | { "CURSOR_AGENT": CursorAgent } | { "QWEN_CODE": QwenCode } | { "COPILOT": Copilot } | { "DROID": Droid } | { "PI": Pi } | { "GROK": Grok } });
 
 export type ExecutorConfigs = { executors: { [key in BaseCodingAgent]?: ExecutorProfile }, };
 
@@ -725,6 +725,8 @@ export type Pi = { append_prompt: AppendPrompt, model?: string | null, provider?
 approve?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type PiThinking = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+export type Grok = { append_prompt: AppendPrompt, model?: string | null, always_approve?: boolean | null, base_command_override?: string | null, additional_params?: Array<string> | null, env?: { [key in string]?: string } | null, };
 
 export type AppendPrompt = string | null;
 

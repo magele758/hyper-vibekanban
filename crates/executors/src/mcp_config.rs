@@ -400,7 +400,8 @@ impl CodingAgent {
             CodingAgent::ClaudeCode(_)
             | CodingAgent::Amp(_)
             | CodingAgent::Droid(_)
-            | CodingAgent::Pi(_) => Passthrough,
+            | CodingAgent::Pi(_)
+            | CodingAgent::Grok(_) => Passthrough,
             CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) => Gemini,
             CodingAgent::CursorAgent(_) => Cursor,
             CodingAgent::Codex(_) => Codex,

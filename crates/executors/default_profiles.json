@@ -70,6 +70,14 @@
           "approve": true
         }
       }
+    },
+    "GROK": {
+      "DEFAULT": {
+        "GROK": {
+          "model": "grok-4.5",
+          "always_approve": true
+        }
+      }
     }
   }
 }
