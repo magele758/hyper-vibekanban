@@ -40,7 +40,7 @@ Upstream is a strong “manually open a Workspace” agent workbench + kanban. T
 | **Sessions & follow-ups** | Multi-session chat, attachments, @-files |
 | **Inline diff review** | Unified / side-by-side; comments go back to the agent |
 | **App preview** | Built-in browser, DevTools, inspect, device emulation |
-| **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen |
+| **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen, Grok |
 | **Git / PRs** | Rebase, conflict UX, AI PR descriptions, GitHub / Azure merge |
 | **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
 | **Settings** | Agent profiles, MCP, editor integration, notifications, org / projects |
