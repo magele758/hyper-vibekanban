@@ -128,6 +128,7 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
       ?.name ?? null;
 
   const isWorkspacesActive = location.pathname.includes("/workspaces");
+  const isProjectsOverviewActive = location.pathname === "/";
   const activeHostId = routeHostId ?? null;
   const preferredHostId = useMemo(
     () => resolveRelayNavigationHostId(relayHosts, { routeHostId }),
@@ -162,6 +163,10 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
 
     openRelaySettings();
   }, [navigate, openRelaySettings, preferredHostId]);
+
+  const handleProjectsOverviewClick = useCallback(() => {
+    navigate({ to: "/" });
+  }, [navigate]);
 
   const handleProjectClick = useCallback(
     (projectId: string) => {
@@ -260,6 +265,9 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
             onPairHostClick={isSignedIn ? handlePairHostClick : undefined}
             activeHostId={activeHostId}
             onCreateProject={handleCreateProject}
+            onProjectsOverviewClick={
+              isSignedIn ? handleProjectsOverviewClick : undefined
+            }
             onWorkspacesClick={handleWorkspacesClick}
             onHostClick={handleHostClick}
             showWorkspacesButton={false}
@@ -268,6 +276,7 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
             onProjectsDragEnd={() => {}}
             isSavingProjectOrder={true}
             isWorkspacesActive={isWorkspacesActive}
+            isProjectsOverviewActive={isProjectsOverviewActive}
             activeProjectId={activeProjectId}
             isSignedIn={isSignedIn}
             isLoadingProjects={isLoadingProjects}
@@ -307,17 +316,22 @@ export function RemoteAppShell({ children }: RemoteAppShellProps) {
               </button>
             </div>
 
-            {/* Home link */}
+            {/* Projects overview link */}
             <button
               type="button"
               onClick={() => {
                 navigate({ to: "/" });
                 setIsDrawerOpen(false);
               }}
-              className="flex items-center gap-2 px-4 py-3 text-sm text-normal hover:bg-secondary cursor-pointer"
+              className={cn(
+                "flex items-center gap-2 px-4 py-3 text-sm hover:bg-secondary cursor-pointer",
+                isProjectsOverviewActive
+                  ? "bg-brand/10 text-high"
+                  : "text-normal",
+              )}
             >
               <HouseIcon className="h-4 w-4" />
-              Home
+              Projects
             </button>
 
             {/* Divider */}

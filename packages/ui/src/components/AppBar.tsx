@@ -20,6 +20,7 @@ import {
   RobotIcon,
   ChatCircleIcon,
   TrayIcon,
+  SquaresFourIcon,
   type Icon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
@@ -51,6 +52,7 @@ interface AppBarProps {
   activeHostId?: string | null;
   onCreateProject: () => void;
   onExportClick?: () => void;
+  onProjectsOverviewClick?: () => void;
   onWorkspacesClick: () => void;
   onHostClick?: (hostId: string, status: AppBarHostStatus) => void;
   showWorkspacesButton?: boolean;
@@ -60,6 +62,7 @@ interface AppBarProps {
   isSavingProjectOrder?: boolean;
   isWorkspacesActive: boolean;
   isExportActive?: boolean;
+  isProjectsOverviewActive?: boolean;
   activeProjectId: string | null;
   isSignedIn?: boolean;
   isLoadingProjects?: boolean;
@@ -241,6 +244,7 @@ export function AppBar({
   activeHostId = null,
   onCreateProject,
   onExportClick,
+  onProjectsOverviewClick,
   onWorkspacesClick,
   onHostClick,
   showWorkspacesButton = true,
@@ -250,6 +254,7 @@ export function AppBar({
   isSavingProjectOrder,
   isWorkspacesActive,
   isExportActive = false,
+  isProjectsOverviewActive = false,
   activeProjectId,
   isSignedIn,
   isLoadingProjects,
@@ -326,6 +331,18 @@ export function AppBar({
   }
 
   const projectSectionItems: AppBarSectionItem[] = [];
+
+  if (isSignedIn && onProjectsOverviewClick) {
+    projectSectionItems.push({
+      key: 'projects-overview',
+      kind: 'icon-button',
+      label: 'Projects overview',
+      icon: SquaresFourIcon,
+      isActive: isProjectsOverviewActive,
+      onClick: onProjectsOverviewClick,
+      wrapperClassName: 'pb-half',
+    });
+  }
 
   if (!isSignedIn) {
     projectSectionItems.push({

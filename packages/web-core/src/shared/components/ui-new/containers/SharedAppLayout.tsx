@@ -12,6 +12,7 @@ import {
   RobotIcon,
   ChatCircleIcon,
   TrayIcon,
+  SquaresFourIcon,
 } from '@phosphor-icons/react';
 import { SyncErrorProvider } from '@/shared/providers/SyncErrorProvider';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
@@ -166,7 +167,8 @@ export function SharedAppLayout() {
     setOrderedProjects(sortedProjects);
   }, [isSavingProjectOrder, sortedProjects]);
 
-  // Navigate to the first ordered project when org changes
+  // Navigate to the first ordered project when org changes, unless the user is
+  // already on the projects overview (which should just refresh in place).
   useEffect(() => {
     if (
       prevOrgIdRef.current !== null &&
@@ -174,16 +176,24 @@ export function SharedAppLayout() {
       selectedOrgId &&
       !isLoading
     ) {
-      if (sortedProjects.length > 0) {
-        appNavigation.goToProject(sortedProjects[0].id);
-      } else {
-        appNavigation.goToWorkspaces();
+      if (currentDestination?.kind !== 'projects-overview') {
+        if (sortedProjects.length > 0) {
+          appNavigation.goToProject(sortedProjects[0].id);
+        } else {
+          appNavigation.goToWorkspaces();
+        }
       }
       prevOrgIdRef.current = selectedOrgId;
     } else if (prevOrgIdRef.current === null && selectedOrgId) {
       prevOrgIdRef.current = selectedOrgId;
     }
-  }, [selectedOrgId, sortedProjects, isLoading, appNavigation]);
+  }, [
+    selectedOrgId,
+    sortedProjects,
+    isLoading,
+    appNavigation,
+    currentDestination?.kind,
+  ]);
 
   // Navigation state for AppBar active indicators
   const projectDestination = useMemo(
@@ -195,6 +205,8 @@ export function SharedAppLayout() {
   const isLocalWorkspacesActive =
     isLocalWorkspacesDestination(currentDestination);
   const isExportActive = currentDestination?.kind === 'export';
+  const isProjectsOverviewActive =
+    currentDestination?.kind === 'projects-overview';
   const isWorkspaceSidebarPreviewEnabled =
     !isMobile && isLocalWorkspacesActive && !isLeftSidebarVisible;
   const activeProjectId = projectDestination?.projectId ?? null;
@@ -283,6 +295,10 @@ export function SharedAppLayout() {
 
   const handleExportClick = useCallback(() => {
     appNavigation.goToExport();
+  }, [appNavigation]);
+
+  const handleProjectsOverviewClick = useCallback(() => {
+    appNavigation.goToProjectsOverview();
   }, [appNavigation]);
 
   const handleProjectClick = useCallback(
@@ -503,6 +519,9 @@ export function SharedAppLayout() {
               activeHostId={activeHostId}
               onCreateProject={handleCreateProject}
               onExportClick={handleExportClick}
+              onProjectsOverviewClick={
+                isSignedIn ? handleProjectsOverviewClick : undefined
+              }
               onWorkspacesClick={handleWorkspacesClick}
               onHostClick={handleHostClick}
               onPairHostClick={handlePairHostClick}
@@ -512,6 +531,7 @@ export function SharedAppLayout() {
               isSavingProjectOrder={isSavingProjectOrder}
               isWorkspacesActive={isLocalWorkspacesActive}
               isExportActive={isExportActive}
+              isProjectsOverviewActive={isProjectsOverviewActive}
               activeProjectId={activeProjectId}
               isSignedIn={isSignedIn}
               isLoadingProjects={isLoading}
@@ -635,6 +655,25 @@ export function SharedAppLayout() {
               <LayoutIcon className="h-4 w-4" />
               Local workspaces
             </button>
+
+            {isSignedIn && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleProjectsOverviewClick();
+                  setIsDrawerOpen(false);
+                }}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-3 text-sm hover:bg-secondary cursor-pointer',
+                  isProjectsOverviewActive
+                    ? 'bg-brand/10 text-high'
+                    : 'text-normal'
+                )}
+              >
+                <SquaresFourIcon className="h-4 w-4" />
+                Projects overview
+              </button>
+            )}
 
             {/* Remote hosts — mirrors desktop AppBar Remote section */}
             {(remoteCloudHosts.length > 0 || isSignedIn) && (
