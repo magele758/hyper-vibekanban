@@ -80,13 +80,13 @@ async fn get_setup_helper_action() -> Result<ExecutorAction, ApiError> {
         use shlex::try_quote;
         use utils::shell::UnixShell;
         let base_command = CursorAgent::base_command();
-        let legacy_command = CursorAgent::legacy_base_command();
 
-        // Install script with PATH setup
+        // Install script with PATH setup. Only look for `cursor-agent` — bare
+        // `agent` may point at Grok after its installer hijacks that name.
         let mut install_script = format!(
             r#"#!/bin/bash
 set -e
-if command -v {base_command} &> /dev/null || command -v {legacy_command} &> /dev/null; then
+if command -v {base_command} &> /dev/null; then
     echo "Cursor CLI already installed"
 else
     echo "Installing Cursor CLI..."
@@ -117,11 +117,7 @@ fi"#
             r#"#!/bin/bash
 set -e
 export PATH="$HOME/.local/bin:$PATH"
-if command -v {base_command} &> /dev/null; then
-    {base_command} login
-else
-    {legacy_command} login
-fi
+{base_command} login
 "#
         );
         let login_request = ScriptRequest {

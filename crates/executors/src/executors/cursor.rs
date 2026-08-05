@@ -259,19 +259,16 @@ pub(crate) fn cursor_reasoning_options(base_model: &str) -> Vec<ReasoningOption>
 }
 
 impl CursorAgent {
-    /// Cursor CLI executable names in resolution order. The Cursor install script
-    /// creates `~/.local/bin/agent` as the primary symlink and
-    /// `~/.local/bin/cursor-agent` as a legacy alias, so we prefer `agent` and
-    /// fall back to `cursor-agent`.
-    const EXECUTABLE_NAMES: [&'static str; 2] = ["agent", "cursor-agent"];
+    /// Cursor CLI executable names in resolution order.
+    ///
+    /// Prefer `cursor-agent` only. Grok's installer also creates
+    /// `~/.local/bin/agent` pointing at Grok, so trusting the bare `agent`
+    /// name can spawn the wrong binary with Cursor-specific flags.
+    const EXECUTABLE_NAMES: [&'static str; 1] = ["cursor-agent"];
 
-    /// Primary Cursor CLI executable name (`agent`).
+    /// Primary Cursor CLI executable name (`cursor-agent`).
     pub fn base_command() -> &'static str {
         Self::EXECUTABLE_NAMES[0]
-    }
-
-    pub fn legacy_base_command() -> &'static str {
-        Self::EXECUTABLE_NAMES[1]
     }
 
     pub(crate) fn executable_names() -> &'static [&'static str] {
