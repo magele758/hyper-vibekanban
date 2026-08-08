@@ -73,7 +73,24 @@ impl MsgStore {
 
         let mut inner = self.inner.write().unwrap();
         while inner.total_bytes.saturating_add(bytes) > HISTORY_BYTES {
-            if let Some(front) = inner.history.pop_front() {
+            // Never evict stream sentinels. Historic normalize_logs snapshots
+            // history via stdout/stderr streams that end on `Finished`; if
+            // large JsonPatch churn (e.g. Grok message streaming) evicts
+            // `Finished` before a late subscriber snapshots, that normalizer
+            // waits on the live broadcast forever and normalized-logs WS
+            // never emits `finished` — UI stuck loading.
+            let Some(front) = inner.history.front() else {
+                break;
+            };
+            if matches!(front.msg, LogMsg::Finished | LogMsg::Ready) {
+                if inner.history.len() < 2 {
+                    break;
+                }
+                let Some(removed) = inner.history.remove(1) else {
+                    break;
+                };
+                inner.total_bytes = inner.total_bytes.saturating_sub(removed.bytes);
+            } else if let Some(front) = inner.history.pop_front() {
                 inner.total_bytes = inner.total_bytes.saturating_sub(front.bytes);
             } else {
                 break;
@@ -144,31 +161,75 @@ impl MsgStore {
     pub fn stdout_chunked_stream(
         &self,
     ) -> futures::stream::BoxStream<'static, Result<String, std::io::Error>> {
-        self.history_plus_stream()
-            .take_while(|res| future::ready(!matches!(res, Ok(LogMsg::Finished))))
-            .filter_map(|res| async move {
-                match res {
-                    Ok(LogMsg::Stdout(s)) => Some(Ok(s)),
-                    _ => None,
-                }
-            })
-            .boxed()
+        self.stdio_chunked_stream(true)
     }
 
     pub fn stdout_lines_stream(
         &self,
     ) -> futures::stream::BoxStream<'static, std::io::Result<String>> {
+        let history = self.get_history();
+        // Historic replay: OS pipe chunks are NOT one JSON line per Stdout message.
+        // Reassemble by concatenating then splitting on newlines. Use a finite
+        // snapshot (not live broadcast) so we never hang waiting for `Finished`.
+        if history.iter().any(|m| matches!(m, LogMsg::Finished)) {
+            let mut buf = String::new();
+            for msg in history
+                .into_iter()
+                .take_while(|m| !matches!(m, LogMsg::Finished))
+            {
+                if let LogMsg::Stdout(s) = msg {
+                    buf.push_str(&s);
+                }
+            }
+            let lines: Vec<String> = buf
+                .lines()
+                .filter(|line| !line.is_empty())
+                .map(|line| line.to_string())
+                .collect();
+            return futures::stream::iter(lines.into_iter().map(Ok)).boxed();
+        }
+
         self.stdout_chunked_stream().lines()
     }
 
     pub fn stderr_chunked_stream(
         &self,
     ) -> futures::stream::BoxStream<'static, Result<String, std::io::Error>> {
+        self.stdio_chunked_stream(false)
+    }
+
+    /// Emit stdout (`stdout=true`) or stderr chunks until `Finished`.
+    ///
+    /// If `Finished` is already present in history (historic log replay), return a
+    /// **finite** stream over the history snapshot only. Attaching to the live
+    /// broadcast after a missed/`Finished`-evicted snapshot leaves normalize_logs
+    /// waiting forever — conversation history UI spins on loading.
+    fn stdio_chunked_stream(
+        &self,
+        stdout: bool,
+    ) -> futures::stream::BoxStream<'static, Result<String, std::io::Error>> {
+        let history = self.get_history();
+        let finished_in_history = history.iter().any(|m| matches!(m, LogMsg::Finished));
+
+        if finished_in_history {
+            let chunks: Vec<String> = history
+                .into_iter()
+                .take_while(|m| !matches!(m, LogMsg::Finished))
+                .filter_map(|m| match (stdout, m) {
+                    (true, LogMsg::Stdout(s)) => Some(s),
+                    (false, LogMsg::Stderr(s)) => Some(s),
+                    _ => None,
+                })
+                .collect();
+            return futures::stream::iter(chunks.into_iter().map(Ok)).boxed();
+        }
+
         self.history_plus_stream()
             .take_while(|res| future::ready(!matches!(res, Ok(LogMsg::Finished))))
-            .filter_map(|res| async move {
-                match res {
-                    Ok(LogMsg::Stderr(s)) => Some(Ok(s)),
+            .filter_map(move |res| async move {
+                match (stdout, res) {
+                    (true, Ok(LogMsg::Stdout(s))) => Some(Ok(s)),
+                    (false, Ok(LogMsg::Stderr(s))) => Some(Ok(s)),
                     _ => None,
                 }
             })
