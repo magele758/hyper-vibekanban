@@ -36,19 +36,58 @@ pub fn normalize_logs_with_suppressed_stderr_patterns(
     worktree_path: &Path,
     suppressed_stderr_patterns: &[&str],
 ) -> Vec<tokio::task::JoinHandle<()>> {
-    // stderr normalization
-    let entry_index = EntryIndexProvider::start_from(&msg_store);
-    let h1 = if suppressed_stderr_patterns.is_empty() {
-        normalize_stderr_logs(msg_store.clone(), entry_index.clone())
+    let mode = if suppressed_stderr_patterns.is_empty() {
+        StderrFilterMode::Default
     } else {
-        normalize_acp_stderr_logs(
-            msg_store.clone(),
-            entry_index.clone(),
+        StderrFilterMode::Patterns(
             suppressed_stderr_patterns
                 .iter()
                 .map(|pattern| pattern.to_string())
                 .collect(),
         )
+    };
+    normalize_logs_with_stderr_filter(msg_store, worktree_path, mode)
+}
+
+/// Like [`normalize_logs`], but drops Grok-style tracing telemetry on stderr
+/// (DEBUG/INFO/WARN/ERROR lines **and** their multi-line payload continuations).
+///
+/// Without this, historic replay collapses ~MBs of tracing into one giant
+/// `ErrorMessage` entry and the UI renders a huge red "乱码" block.
+pub fn normalize_logs_dropping_tracing_stderr(
+    msg_store: Arc<MsgStore>,
+    worktree_path: &Path,
+) -> Vec<tokio::task::JoinHandle<()>> {
+    normalize_logs_with_stderr_filter(
+        msg_store,
+        worktree_path,
+        StderrFilterMode::DropTracingTelemetry,
+    )
+}
+
+enum StderrFilterMode {
+    Default,
+    Patterns(Vec<String>),
+    DropTracingTelemetry,
+}
+
+fn normalize_logs_with_stderr_filter(
+    msg_store: Arc<MsgStore>,
+    worktree_path: &Path,
+    stderr_mode: StderrFilterMode,
+) -> Vec<tokio::task::JoinHandle<()>> {
+    // stderr normalization
+    let entry_index = EntryIndexProvider::start_from(&msg_store);
+    let h1 = match stderr_mode {
+        StderrFilterMode::Default => normalize_stderr_logs(msg_store.clone(), entry_index.clone()),
+        StderrFilterMode::Patterns(patterns) => {
+            normalize_acp_stderr_logs(msg_store.clone(), entry_index.clone(), patterns)
+        }
+        // Grok dumps multi‑MB tracing to stderr. Do not normalize it into
+        // ErrorMessage patches — historic replay would otherwise spend its
+        // budget materializing/filtering telemetry and time out before chat.
+        // Real spawn failures are emitted separately as JsonPatch/SetupRequired.
+        StderrFilterMode::DropTracingTelemetry => tokio::spawn(async move {}),
     };
 
     // stdout normalization (main loop)
@@ -679,6 +718,56 @@ pub fn normalize_logs_with_suppressed_stderr_patterns(
     vec![h1, h2]
 }
 
+/// Match Rust `tracing` / `RUST_LOG` lines, including ANSI-colored levels.
+/// Also matches truncated heads like `8-07T07:41:07.249569Z  WARN ...` when a
+/// chunk boundary split the year digits off.
+static TRACING_TELEMETRY_LINE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?x)
+        ^\s*
+        (?:
+            .*?T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\s+(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR)
+            |
+            (?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR)
+        )
+        \b
+        ",
+    )
+    .expect("valid tracing telemetry regex")
+});
+
+/// Drop tracing telemetry lines and their multi-line continuations (tool JSON,
+/// thinking fragments, HTTP dumps, etc.). Keep short non-tracing stderr such as
+/// harness "Failed to start execution: …".
+fn filter_tracing_telemetry_lines(lines: &mut Vec<String>) {
+    let mut kept = Vec::with_capacity(lines.len());
+    let mut suppressing = false;
+
+    for line in lines.drain(..) {
+        let plain = strip_ansi_escapes::strip_str(&line);
+        let trimmed = plain.trim();
+
+        if trimmed.is_empty() {
+            // Blank line ends a multi-line tracing dump.
+            suppressing = false;
+            continue;
+        }
+
+        if TRACING_TELEMETRY_LINE.is_match(&plain) {
+            suppressing = true;
+            continue;
+        }
+
+        if suppressing {
+            continue;
+        }
+
+        kept.push(line);
+    }
+
+    *lines = kept;
+}
+
 fn normalize_acp_stderr_logs(
     msg_store: Arc<MsgStore>,
     entry_index_provider: EntryIndexProvider,
@@ -782,13 +871,49 @@ impl AcpEventParser {
     fn parse_line(line: &str) -> Option<AcpEvent> {
         let trimmed = line.trim();
 
+        // Fast-reject fragments from newline-split tool payloads before calling
+        // serde (multi‑MB invalid JSON parse is what made Grok history hang).
+        if !Self::looks_like_acp_event(trimmed) {
+            return None;
+        }
+
         if let Ok(acp_event) = serde_json::from_str::<AcpEvent>(trimmed) {
             return Some(acp_event);
         }
 
-        tracing::debug!("Failed to parse ACP raw log {trimmed}");
+        let preview: String = trimmed.chars().take(120).collect();
+        tracing::debug!(
+            len = trimmed.len(),
+            preview = %preview,
+            "Failed to parse ACP raw log"
+        );
 
         None
+    }
+
+    fn looks_like_acp_event(trimmed: &str) -> bool {
+        // Our harness serializes AcpEvent as a single-key external object, e.g.
+        // `{"Message":...}`, `{"ToolCall":...}`, `{"SessionStart":...}`.
+        // Require a closing `}` so pipe-chunk fragments that merely *start* with
+        // `{"Message"` are not fed to serde (noisy + wasted CPU on historic replay).
+        if !(trimmed.starts_with('{') && trimmed.ends_with('}')) {
+            return false;
+        }
+        trimmed.starts_with("{\"Message\"")
+            || trimmed.starts_with("{\"Thought\"")
+            || trimmed.starts_with("{\"ToolCall\"")
+            || trimmed.starts_with("{\"ToolUpdate\"")
+            || trimmed.starts_with("{\"SessionStart\"")
+            || trimmed.starts_with("{\"User\"")
+            || trimmed.starts_with("{\"Done\"")
+            || trimmed.starts_with("{\"Error\"")
+            || trimmed.starts_with("{\"Plan\"")
+            || trimmed.starts_with("{\"Other\"")
+            || trimmed.starts_with("{\"RequestPermission\"")
+            || trimmed.starts_with("{\"ApprovalRequested\"")
+            || trimmed.starts_with("{\"ApprovalResponse\"")
+            || trimmed.starts_with("{\"AvailableCommands\"")
+            || trimmed.starts_with("{\"CurrentMode\"")
     }
 
     /// Parse command from tool title (for execute tools)
@@ -865,4 +990,54 @@ struct EditInput {
     old_string: Option<String>,
     #[serde(default)]
     new_string: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drops_tracing_lines_and_multiline_continuations() {
+        let mut lines = vec![
+            "2026-08-07T07:41:06.008483Z  INFO event=\"timing\" name=\"startup\"\n".to_string(),
+            "2026-08-07T07:41:06.010834Z  DEBUG loaded models from disk cache\n".to_string(),
+            "stream_id: StreamId(1) }\n".to_string(),
+            "{\"thinking\":\" research\"}\n".to_string(),
+            "\n".to_string(),
+            "Failed to start execution: grok not found\n".to_string(),
+            "8-07T07:41:07.249569Z  WARN Failed to parse agent definition\n".to_string(),
+            "path=/Users/penglei/.claude/agents/CONTRIBUTING.md\n".to_string(),
+            "\n".to_string(),
+            "2026-08-07T07:41:07.980310Z ERROR worker quit with fatal: Transport channel closed\n"
+                .to_string(),
+        ];
+
+        filter_tracing_telemetry_lines(&mut lines);
+
+        assert_eq!(
+            lines,
+            vec!["Failed to start execution: grok not found\n".to_string()]
+        );
+    }
+
+    #[test]
+    fn keeps_non_tracing_stderr() {
+        let mut lines = vec![
+            "some agent crashed unexpectedly\n".to_string(),
+            "please check installation\n".to_string(),
+        ];
+        filter_tracing_telemetry_lines(&mut lines);
+        assert_eq!(lines.len(), 2);
+    }
+
+    #[test]
+    fn matches_ansi_colored_tracing_levels() {
+        let mut lines = vec![
+            "\u{1b}[2m2026-08-07T07:41:06.008483Z\u{1b}[0m \u{1b}[32m INFO\u{1b}[0m timing\n"
+                .to_string(),
+            "continuation payload\n".to_string(),
+        ];
+        filter_tracing_telemetry_lines(&mut lines);
+        assert!(lines.is_empty());
+    }
 }

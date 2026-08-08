@@ -151,7 +151,10 @@ impl StandardCodingAgentExecutor for Grok {
         msg_store: Arc<MsgStore>,
         worktree_path: &Path,
     ) -> Vec<tokio::task::JoinHandle<()>> {
-        super::acp::normalize_logs(msg_store, worktree_path)
+        // Grok stderr is almost entirely RUST_LOG/tracing (often multi-line dumps of
+        // thinking JSON / tool payloads). Drop it so historic replay shows chat, not
+        // a single giant red ErrorMessage.
+        super::acp::normalize_logs_dropping_tracing_stderr(msg_store, worktree_path)
     }
 
     fn default_mcp_config_path(&self) -> Option<std::path::PathBuf> {
