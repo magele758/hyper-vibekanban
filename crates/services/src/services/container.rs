@@ -895,14 +895,11 @@ pub trait ContainerService {
                     }
                 };
 
-            if let Err(err) = self.ensure_container_exists(&workspace).await {
-                tracing::warn!(
-                    "Failed to recreate worktree before log normalization for workspace {}: {}",
-                    workspace.id,
-                    err
-                );
-            }
-
+            // Do NOT await ensure_container_exists here. Historic replay only needs a
+            // path for relative tool-path display; missing/mismatched worktrees already
+            // fall back to absolute paths. Recreating/copying the worktree can block
+            // this handler for 30s+ with zero WS frames, leaving the UI stuck on
+            // "loading" (especially for large Grok transcripts with many stderr lines).
             let current_dir = self.workspace_to_current_dir(&workspace);
 
             let executor_action = if let Ok(executor_action) = process.executor_action() {
@@ -975,75 +972,72 @@ pub trait ContainerService {
                 }
             };
 
-            // Await all normalizer tasks, then push Ready so the dedup
-            // stream knows when to flush its buffer and terminate.
+            // Historic replay: run normalizers to completion, then emit deduped
+            // patches from the in-memory history snapshot (finite, no live wait).
+            let normalize_timeout = std::time::Duration::from_secs(30);
+            let abort_handles: Vec<_> = handles.iter().map(|h| h.abort_handle()).collect();
+            match tokio::time::timeout(normalize_timeout, async {
+                for handle in handles {
+                    let _ = handle.await;
+                }
+            })
+            .await
             {
-                let store = temp_store.clone();
-                tokio::spawn(async move {
-                    for handle in handles {
-                        let _ = handle.await;
+                Ok(()) => {}
+                Err(_) => {
+                    for abort in abort_handles {
+                        abort.abort();
                     }
-                    store.push(LogMsg::Ready);
-                });
+                    tracing::warn!(
+                        "Historic log normalization timed out after {:?} for execution {} (aborted)",
+                        normalize_timeout,
+                        id
+                    );
+                }
             }
 
-            // Stream normalized patches, deduplicating consecutive patches
-            // that target the same path (only the final state matters for
-            // historical replay). The Ready sentinel flushes the buffer.
-            enum PatchOrDone {
-                Patch(Patch),
-                Done,
+            let mut patches: Vec<Patch> = Vec::new();
+            let mut sent_paths = HashSet::<String>::new();
+            let mut buffered: Option<Patch> = None;
+            for msg in temp_store.get_history() {
+                let LogMsg::JsonPatch(patch) = msg else {
+                    continue;
+                };
+                match buffered.take() {
+                    None => buffered = Some(patch),
+                    Some(prev) => {
+                        if patch_entry_path(&patch) == patch_entry_path(&prev)
+                            && is_add_or_replace(&patch)
+                            && is_add_or_replace(&prev)
+                        {
+                            buffered = Some(patch);
+                        } else {
+                            patches.push(fix_patch_ops(prev, &mut sent_paths));
+                            buffered = Some(patch);
+                        }
+                    }
+                }
+            }
+            if let Some(prev) = buffered {
+                patches.push(fix_patch_ops(prev, &mut sent_paths));
             }
 
-            let stream = temp_store
-                .history_plus_stream()
-                .filter_map(|msg| async move {
-                    match msg {
-                        Ok(LogMsg::JsonPatch(patch)) => Some(PatchOrDone::Patch(patch)),
-                        Ok(LogMsg::Ready) => Some(PatchOrDone::Done),
-                        _ => None,
-                    }
-                });
+            tracing::debug!(
+                "Historic normalized logs for {}: {} deduped patches",
+                id,
+                patches.len()
+            );
 
-            let deduped = futures::stream::unfold(
-                (stream.boxed(), None::<Patch>, HashSet::<String>::new()),
-                |(mut stream, buffered, mut sent_paths)| async move {
-                    match stream.next().await {
-                        Some(PatchOrDone::Patch(patch)) => {
-                            let Some(prev) = buffered else {
-                                // First patch — just buffer it
-                                return Some((None, (stream, Some(patch), sent_paths)));
-                            };
-                            if patch_entry_path(&patch) == patch_entry_path(&prev)
-                                && is_add_or_replace(&patch)
-                                && is_add_or_replace(&prev)
-                            {
-                                // Same path, both add/replace — replace buffer
-                                Some((None, (stream, Some(patch), sent_paths)))
-                            } else {
-                                // Different — emit prev, buffer new
-                                let prev = fix_patch_ops(prev, &mut sent_paths);
-                                Some((Some(prev), (stream, Some(patch), sent_paths)))
-                            }
-                        }
-                        Some(PatchOrDone::Done) | None => {
-                            // Sentinel or stream end: flush buffer and terminate
-                            if let Some(prev) = buffered {
-                                let prev = fix_patch_ops(prev, &mut sent_paths);
-                                return Some((Some(prev), (stream, None, sent_paths)));
-                            }
-                            None
-                        }
-                    }
-                },
+            let stream = futures::stream::iter(
+                patches
+                    .into_iter()
+                    .map(|p| Ok::<_, std::io::Error>(LogMsg::JsonPatch(p))),
             )
-            .filter_map(|opt| async move { opt })
-            .map(|p| Ok::<_, std::io::Error>(LogMsg::JsonPatch(p)))
             .chain(futures::stream::once(async {
                 Ok::<_, std::io::Error>(LogMsg::Finished)
             }));
 
-            Some(deduped.boxed())
+            Some(stream.boxed())
         }
     }
 
