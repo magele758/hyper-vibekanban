@@ -1,5 +1,7 @@
 import { makeRequest } from '@/shared/lib/remoteApi';
 import type {
+  ApproveSquadRunRequest,
+  ApproveSquadRunResponse,
   Autopilot,
   AutopilotRun,
   CreateAutopilotRequest,
@@ -7,6 +9,7 @@ import type {
   ListInboxResponse,
   Squad,
   SquadMember,
+  SquadRun,
   CreateSquadRequest,
   UpdateSquadRequest,
   RunSquadRequest,
@@ -14,6 +17,7 @@ import type {
   WebhookEndpoint,
   CreateWebhookEndpointRequest,
   FeishuBotBinding,
+  OrgAgentEntry,
 } from 'shared/remote-types';
 
 export type { FeishuBotBinding };
@@ -23,6 +27,34 @@ export type { FeishuBotBinding };
 const SIDECAR_BASE = (
   import.meta.env.VITE_AGENT_SIDECAR_BASE || '/agent-sidecar'
 ).replace(/\/$/, '');
+
+/** Built-in pipeline templates installable per project. */
+export type WorkflowTemplateKey =
+  | 'feature-closeout'
+  | 'relentless-delivery'
+  | 'scout-digest';
+
+export const WORKFLOW_TEMPLATES: {
+  key: WorkflowTemplateKey;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    key: 'feature-closeout',
+    label: 'Feature Closeout',
+    hint: 'Review → 测试 → rebase → Ask Merge',
+  },
+  {
+    key: 'relentless-delivery',
+    label: '盯到完成 (Relentless)',
+    hint: '循环督办：脚本硬验证通过才算完成，最多 5 轮',
+  },
+  {
+    key: 'scout-digest',
+    label: '情报侦察 (Scout)',
+    hint: '定时采集 → 价值分析 → 等你拍板 → 才开干',
+  },
+];
 
 export type AgentLlmSettings = {
   agent_id: string;
@@ -61,6 +93,18 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const boardAgentsApi = {
+  /**
+   * Organization-wide roster of configured agents, each carrying its project
+   * name. Backs the workforce menu, which is not scoped to one project.
+   */
+  async listOrgAgents(organizationId: string): Promise<OrgAgentEntry[]> {
+    const q = new URLSearchParams({ organization_id: organizationId });
+    const data = await json<{ agents: OrgAgentEntry[] }>(
+      await makeRequest(`/v1/agents/roster?${q}`)
+    );
+    return data.agents;
+  },
+
   async createAgent(body: {
     project_id: string;
     name: string;
@@ -68,6 +112,7 @@ export const boardAgentsApi = {
     default_executor?: string | null;
     max_concurrent_tasks?: number;
     chat_runtime?: 'cursor' | 'pi' | 'opencode';
+    reviewer_agent_id?: string;
     api_key?: string;
     base_url?: string;
     model_name?: string;
@@ -76,6 +121,30 @@ export const boardAgentsApi = {
     const data = await json<{ data: { id: string } & Record<string, unknown> }>(
       await makeRequest('/v1/agents', {
         method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+    return data.data;
+  },
+
+  /**
+   * Patch an existing agent. Fields left undefined are untouched; `null`
+   * explicitly clears a nullable field (e.g. removing a reviewer).
+   */
+  async updateAgent(
+    agentId: string,
+    body: {
+      name?: string;
+      instructions?: string;
+      default_executor?: string | null;
+      max_concurrent_tasks?: number;
+      chat_runtime?: 'cursor' | 'pi' | 'opencode';
+      reviewer_agent_id?: string | null;
+    }
+  ): Promise<{ id: string } & Record<string, unknown>> {
+    const data = await json<{ data: { id: string } & Record<string, unknown> }>(
+      await makeRequest(`/v1/agents/${agentId}`, {
+        method: 'PATCH',
         body: JSON.stringify(body),
       })
     );
@@ -270,6 +339,53 @@ export const boardAgentsApi = {
     );
   },
 
+  async listIssueSquadRuns(issueId: string): Promise<SquadRun[]> {
+    const data = await json<{ runs: SquadRun[] }>(
+      await makeRequest(`/v1/issues/${issueId}/squad-runs`)
+    );
+    return data.runs;
+  },
+
+  async approveSquadRun(
+    runId: string,
+    body: ApproveSquadRunRequest
+  ): Promise<ApproveSquadRunResponse> {
+    return json<ApproveSquadRunResponse>(
+      await makeRequest(`/v1/squad-runs/${runId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+
+  /**
+   * Install a built-in workflow template. Idempotent: re-installing updates the
+   * squad of the same name instead of creating a duplicate.
+   */
+  async installWorkflowTemplate(
+    projectId: string,
+    template: WorkflowTemplateKey
+  ): Promise<{
+    squad: Squad;
+    agent_ids: string[];
+    created_agent_names: string[];
+  }> {
+    return json(
+      await makeRequest(
+        `/v1/projects/${projectId}/workflow-templates/${template}`,
+        { method: 'POST', body: '{}' }
+      )
+    );
+  },
+
+  async installFeatureCloseout(projectId: string): Promise<{
+    squad: Squad;
+    agent_ids: string[];
+    created_agent_names: string[];
+  }> {
+    return this.installWorkflowTemplate(projectId, 'feature-closeout');
+  },
+
   async deleteSquad(id: string): Promise<void> {
     await json<unknown>(
       await makeRequest(`/v1/squads/${id}`, { method: 'DELETE' })
@@ -401,6 +517,45 @@ export const boardAgentsApi = {
   },
 
   /**
+   * Global-copilot model config (per project, server-side, multi-device).
+   * GET never returns the api_key — only has_api_key.
+   * `token` is required: the sidecar authorizes project access against Remote.
+   */
+  async getCopilotConfig(
+    projectId: string,
+    token?: string
+  ): Promise<{
+    base_url: string | null;
+    model: string | null;
+    has_api_key: boolean;
+  }> {
+    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    return json(res);
+  },
+
+  async putCopilotConfig(
+    projectId: string,
+    body: { base_url?: string; api_key?: string; model?: string },
+    token?: string
+  ): Promise<{
+    base_url: string | null;
+    model: string | null;
+    has_api_key: boolean;
+  }> {
+    const res = await fetch(`${SIDECAR_BASE}/copilot/config/${projectId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    return json(res);
+  },
+
+  /**
    * List models via sidecar.
    * - With base_url: OpenAI-compatible gateway listing.
    * - Without base_url: Cursor SDK `Cursor.models.list()` (not CLI --list-models).
@@ -443,10 +598,15 @@ export const boardAgentsApi = {
     agent_id?: string | null;
     message: string;
     cwd?: string | null;
+    copilot_base_url?: string | null;
+    copilot_api_key?: string | null;
+    copilot_model?: string | null;
     onDelta?: (text: string) => void;
     onEvent?: (event: unknown) => void;
     onStatus?: (status: {
       runtime?: string;
+      transport?: string;
+      history_turns?: number;
       cwd?: string;
       cwd_source?: 'request' | 'saved' | 'default';
     }) => void;
@@ -471,6 +631,9 @@ export const boardAgentsApi = {
         agent_id: params.agent_id ?? null,
         message: params.message,
         cwd: params.cwd?.trim() || undefined,
+        copilot_base_url: params.copilot_base_url?.trim() || undefined,
+        copilot_api_key: params.copilot_api_key?.trim() || undefined,
+        copilot_model: params.copilot_model?.trim() || undefined,
       }),
     });
     if (!res.ok || !res.body) {
@@ -505,6 +668,8 @@ export const boardAgentsApi = {
           tool_name?: string;
           ok?: boolean;
           runtime?: string;
+          transport?: string;
+          history_turns?: number;
           cwd?: string;
           cwd_source?: 'request' | 'saved' | 'default';
         };
@@ -516,6 +681,8 @@ export const boardAgentsApi = {
           if (payload.cwd_source) cwd_source = payload.cwd_source;
           params.onStatus?.({
             runtime: payload.runtime,
+            transport: payload.transport,
+            history_turns: payload.history_turns,
             cwd: payload.cwd,
             cwd_source: payload.cwd_source,
           });

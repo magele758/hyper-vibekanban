@@ -174,6 +174,7 @@ async fn create_agent_task(
         payload.is_leader_task.unwrap_or(false),
         payload.preferred_repo_id,
         payload.execution_prompt,
+        None,
     )
     .await
     .map_err(|error| {
@@ -217,6 +218,7 @@ async fn update_agent_task(
         payload.local_session_id,
         payload.claimed_by_host,
         payload.attempt,
+        payload.executor_note,
     )
     .await
     .map_err(|error| {
@@ -234,9 +236,99 @@ async fn update_agent_task(
     {
         notify_agent_task_terminal(state.pool(), &response.data).await;
         super::feishu::maybe_reply_feishu_on_terminal(state.pool(), &response.data).await;
+        maybe_enqueue_review_task(state.pool(), &response.data).await;
     }
 
     Ok(Json(response))
+}
+
+/// Enqueue a follow-up review task when the finishing agent has a configured
+/// reviewer.
+///
+/// Only successful completions are reviewed: a failed run has no work product
+/// worth reviewing. Review tasks themselves never trigger further reviews,
+/// which is what keeps a reviewer pair from looping forever.
+async fn maybe_enqueue_review_task(pool: &sqlx::PgPool, task: &api_types::AgentTask) {
+    if task.status != api_types::AgentTaskStatus::Completed {
+        return;
+    }
+    // Break the chain: a review of a review would recurse.
+    if task.trigger == api_types::AgentTaskTrigger::Review {
+        return;
+    }
+
+    let agent = match AgentRepository::find_by_id(pool, task.agent_id).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => return,
+        Err(error) => {
+            tracing::warn!(?error, agent_id = %task.agent_id, "failed to load agent for review");
+            return;
+        }
+    };
+
+    let Some(reviewer_agent_id) = agent.reviewer_agent_id else {
+        return;
+    };
+    // Defensive: the DB constraint forbids this, but never self-review.
+    if reviewer_agent_id == task.agent_id {
+        return;
+    }
+
+    let prompt = build_review_prompt(&agent.name, task);
+
+    match AgentTaskRepository::enqueue(
+        pool,
+        None,
+        reviewer_agent_id,
+        task.issue_id,
+        api_types::AgentTaskTrigger::Review,
+        // Slightly ahead of normal work: reviews unblock humans.
+        1,
+        // A reviewer must start clean rather than inherit the author's session.
+        true,
+        None,
+        false,
+        task.preferred_repo_id.clone(),
+        Some(prompt),
+        Some(task.id),
+    )
+    .await
+    {
+        Ok(review) => tracing::info!(
+            reviewed_task_id = %task.id,
+            review_task_id = %review.data.id,
+            %reviewer_agent_id,
+            "enqueued review task"
+        ),
+        Err(error) => tracing::warn!(
+            ?error,
+            reviewed_task_id = %task.id,
+            %reviewer_agent_id,
+            "failed to enqueue review task"
+        ),
+    }
+}
+
+/// Prompt for a review task. Points the reviewer at the *evidence* (the
+/// author's execution logs) rather than asking it to trust a summary.
+fn build_review_prompt(author_name: &str, task: &api_types::AgentTask) -> String {
+    let mut prompt = format!(
+        "You are reviewing work completed by agent \"{author_name}\" on this issue.\n\n\
+         Review the actual changes, not a self-report:\n\
+         1. Inspect the diff in the workspace.\n\
+         2. Use the `get_execution_logs` MCP tool to see what the author actually did \
+         (tool calls, errors, and its final message).\n\
+         3. Verify the change builds and its tests pass.\n\n\
+         Report concrete problems with file and line references. If the work is correct, \
+         say so plainly rather than inventing issues."
+    );
+    if let Some(session_id) = task.local_session_id {
+        prompt.push_str(&format!("\n\nThe author worked in session `{session_id}`."));
+    }
+    if let Some(note) = task.executor_note.as_deref() {
+        prompt.push_str(&format!("\n\nExecutor note for the reviewed run: {note}"));
+    }
+    prompt
 }
 
 #[instrument(

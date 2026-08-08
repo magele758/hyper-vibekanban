@@ -33,6 +33,7 @@ pub mod projects;
 pub mod pull_request_issues;
 pub mod pull_requests;
 pub mod reviews;
+pub mod squad_runs;
 pub mod squads;
 pub mod tags;
 pub mod types;

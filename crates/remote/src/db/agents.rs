@@ -28,6 +28,7 @@ impl AgentRepository {
                 max_concurrent_tasks    AS "max_concurrent_tasks!",
                 status                  AS "status!: AgentStatus",
                 chat_runtime            AS "chat_runtime!: AgentChatRuntime",
+                reviewer_agent_id,
                 created_by_user_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
@@ -58,6 +59,7 @@ impl AgentRepository {
                 max_concurrent_tasks    AS "max_concurrent_tasks!",
                 status                  AS "status!: AgentStatus",
                 chat_runtime            AS "chat_runtime!: AgentChatRuntime",
+                reviewer_agent_id,
                 created_by_user_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
@@ -73,6 +75,64 @@ impl AgentRepository {
         Ok(records)
     }
 
+    /// Roster across every project in an organization.
+    ///
+    /// Agents are project-scoped, but the workforce view is org-wide, so this
+    /// joins the project name to avoid a per-row lookup in the UI.
+    pub async fn list_by_organization(
+        pool: &PgPool,
+        organization_id: Uuid,
+    ) -> Result<Vec<(Agent, String)>, AgentError> {
+        let records = sqlx::query!(
+            r#"
+            SELECT
+                a.id                      AS "id!: Uuid",
+                a.project_id              AS "project_id!: Uuid",
+                a.name                    AS "name!",
+                a.instructions            AS "instructions!",
+                a.default_executor,
+                a.max_concurrent_tasks    AS "max_concurrent_tasks!",
+                a.status                  AS "status!: AgentStatus",
+                a.chat_runtime            AS "chat_runtime!: AgentChatRuntime",
+                a.reviewer_agent_id,
+                a.created_by_user_id,
+                a.created_at              AS "created_at!: DateTime<Utc>",
+                a.updated_at              AS "updated_at!: DateTime<Utc>",
+                p.name                    AS "project_name!"
+            FROM agents a
+            JOIN projects p ON p.id = a.project_id
+            WHERE p.organization_id = $1
+            ORDER BY p.name ASC, a.name ASC
+            "#,
+            organization_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        Ok(records
+            .into_iter()
+            .map(|record| {
+                (
+                    Agent {
+                        id: record.id,
+                        project_id: record.project_id,
+                        name: record.name,
+                        instructions: record.instructions,
+                        default_executor: record.default_executor,
+                        max_concurrent_tasks: record.max_concurrent_tasks,
+                        status: record.status,
+                        chat_runtime: record.chat_runtime,
+                        reviewer_agent_id: record.reviewer_agent_id,
+                        created_by_user_id: record.created_by_user_id,
+                        created_at: record.created_at,
+                        updated_at: record.updated_at,
+                    },
+                    record.project_name,
+                )
+            })
+            .collect())
+    }
+
     pub async fn create(
         pool: &PgPool,
         id: Option<Uuid>,
@@ -82,6 +142,7 @@ impl AgentRepository {
         default_executor: Option<String>,
         max_concurrent_tasks: i32,
         chat_runtime: AgentChatRuntime,
+        reviewer_agent_id: Option<Uuid>,
         created_by_user_id: Option<Uuid>,
     ) -> Result<MutationResponse<Agent>, AgentError> {
         let id = id.unwrap_or_else(Uuid::new_v4);
@@ -91,9 +152,9 @@ impl AgentRepository {
             r#"
             INSERT INTO agents (
                 id, project_id, name, instructions, default_executor,
-                max_concurrent_tasks, chat_runtime, created_by_user_id
+                max_concurrent_tasks, chat_runtime, reviewer_agent_id, created_by_user_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING
                 id                      AS "id!: Uuid",
                 project_id              AS "project_id!: Uuid",
@@ -103,6 +164,7 @@ impl AgentRepository {
                 max_concurrent_tasks    AS "max_concurrent_tasks!",
                 status                  AS "status!: AgentStatus",
                 chat_runtime            AS "chat_runtime!: AgentChatRuntime",
+                reviewer_agent_id,
                 created_by_user_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
@@ -114,6 +176,7 @@ impl AgentRepository {
             default_executor,
             max_concurrent_tasks,
             chat_runtime as AgentChatRuntime,
+            reviewer_agent_id,
             created_by_user_id
         )
         .fetch_one(&mut *tx)
@@ -133,12 +196,16 @@ impl AgentRepository {
         max_concurrent_tasks: Option<i32>,
         status: Option<AgentStatus>,
         chat_runtime: Option<AgentChatRuntime>,
+        reviewer_agent_id: Option<Option<Uuid>>,
     ) -> Result<MutationResponse<Agent>, AgentError> {
         let mut tx = super::begin_tx(pool).await?;
 
         // Resolve Option<Option<T>> for nullable default_executor
         let clear_executor = matches!(default_executor, Some(None));
         let set_executor = default_executor.clone().flatten();
+        // Same pattern for the nullable reviewer relationship.
+        let clear_reviewer = matches!(reviewer_agent_id, Some(None));
+        let set_reviewer = reviewer_agent_id.flatten();
 
         let data = sqlx::query_as!(
             Agent,
@@ -155,8 +222,13 @@ impl AgentRepository {
                 max_concurrent_tasks = COALESCE($5, max_concurrent_tasks),
                 status = COALESCE($6, status),
                 chat_runtime = COALESCE($7, chat_runtime),
+                reviewer_agent_id = CASE
+                    WHEN $8 THEN NULL
+                    WHEN $9::uuid IS NOT NULL THEN $9
+                    ELSE reviewer_agent_id
+                END,
                 updated_at = NOW()
-            WHERE id = $8
+            WHERE id = $10
             RETURNING
                 id                      AS "id!: Uuid",
                 project_id              AS "project_id!: Uuid",
@@ -166,6 +238,7 @@ impl AgentRepository {
                 max_concurrent_tasks    AS "max_concurrent_tasks!",
                 status                  AS "status!: AgentStatus",
                 chat_runtime            AS "chat_runtime!: AgentChatRuntime",
+                reviewer_agent_id,
                 created_by_user_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
@@ -177,6 +250,8 @@ impl AgentRepository {
             max_concurrent_tasks,
             status as Option<AgentStatus>,
             chat_runtime as Option<AgentChatRuntime>,
+            clear_reviewer,
+            set_reviewer,
             id
         )
         .fetch_one(&mut *tx)

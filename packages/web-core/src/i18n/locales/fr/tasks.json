@@ -107,7 +107,14 @@
     "logsCopied": "Copié !"
   },
   "followUp": {
-    "queuedMessage": "Message en file d'attente - s'exécutera lorsque l'exécution actuelle sera terminée"
+    "queue": {
+      "title": "File d'attente ({{count}})",
+      "clear": "Vider",
+      "edit": "Modifier",
+      "remove": "Supprimer",
+      "save": "Enregistrer",
+      "reorder": "Réorganiser"
+    }
   },
   "todoPopup": {
     "title": "Tâches",

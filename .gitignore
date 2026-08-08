@@ -51,6 +51,9 @@ pids
 *.seed
 *.pid.lock
 
+# Agent session transcripts (local only)
+.pi/sessions/
+
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov

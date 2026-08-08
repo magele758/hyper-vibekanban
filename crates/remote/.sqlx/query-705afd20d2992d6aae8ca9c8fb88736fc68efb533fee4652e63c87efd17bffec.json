@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT\n                    id                      AS \"id!: Uuid\",\n                    agent_id                AS \"agent_id!: Uuid\",\n                    issue_id                AS \"issue_id!: Uuid\",\n                    status                  AS \"status!: AgentTaskStatus\",\n                    trigger                 AS \"trigger!: AgentTaskTrigger\",\n                    priority                AS \"priority!\",\n                    attempt                 AS \"attempt!\",\n                    max_attempts            AS \"max_attempts!\",\n                    failure_reason,\n                    local_workspace_id,\n                    local_session_id,\n                    claimed_by_host,\n                    claimed_at,\n                    started_at,\n                    completed_at,\n                    force_fresh_session     AS \"force_fresh_session!\",\n                    resume_session_id,\n                    squad_id,\n                    is_leader_task          AS \"is_leader_task!\",\n                    preferred_repo_id,\n                    execution_prompt,\n                    created_at              AS \"created_at!: DateTime<Utc>\",\n                    updated_at              AS \"updated_at!: DateTime<Utc>\"\n                FROM agent_tasks\n                WHERE agent_id = $1\n                  AND issue_id = $2\n                  AND status IN ('queued', 'dispatched', 'running')\n                  AND squad_id IS NULL\n                LIMIT 1\n                ",
+  "query": "\n            UPDATE agent_tasks\n            SET\n                status = 'dispatched',\n                claimed_by_host = $2,\n                claimed_at = NOW(),\n                attempt = attempt + 1,\n                resume_session_id = CASE\n                    WHEN NOT force_fresh_session THEN (\n                        SELECT prev.local_session_id\n                        FROM agent_tasks prev\n                        WHERE prev.agent_id = agent_tasks.agent_id\n                          AND prev.issue_id = agent_tasks.issue_id\n                          AND prev.status = 'completed'\n                          AND prev.local_session_id IS NOT NULL\n                        ORDER BY prev.completed_at DESC\n                        LIMIT 1\n                    )\n                    ELSE NULL\n                END,\n                updated_at = NOW()\n            WHERE id = $1\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                agent_id                AS \"agent_id!: Uuid\",\n                issue_id                AS \"issue_id!: Uuid\",\n                status                  AS \"status!: AgentTaskStatus\",\n                trigger                 AS \"trigger!: AgentTaskTrigger\",\n                priority                AS \"priority!\",\n                attempt                 AS \"attempt!\",\n                max_attempts            AS \"max_attempts!\",\n                failure_reason,\n                local_workspace_id,\n                local_session_id,\n                claimed_by_host,\n                claimed_at,\n                started_at,\n                completed_at,\n                force_fresh_session     AS \"force_fresh_session!\",\n                resume_session_id,\n                squad_id,\n                is_leader_task          AS \"is_leader_task!\",\n                preferred_repo_id,\n                execution_prompt,\n                executor_note,\n                reviews_task_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
@@ -50,7 +50,8 @@
                 "manual",
                 "copilot",
                 "autopilot",
-                "feishu"
+                "feishu",
+                "review"
               ]
             }
           }
@@ -138,11 +139,21 @@
       },
       {
         "ordinal": 21,
+        "name": "executor_note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "reviews_task_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 23,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 22,
+        "ordinal": 24,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -150,7 +161,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Text"
       ]
     },
     "nullable": [
@@ -175,9 +186,11 @@
       false,
       true,
       true,
+      true,
+      true,
       false,
       false
     ]
   },
-  "hash": "301c015ab1c737b1c1474fbb3077fede035106e1c281d0861e09b9a07fe8a19a"
+  "hash": "705afd20d2992d6aae8ca9c8fb88736fc68efb533fee4652e63c87efd17bffec"
 }

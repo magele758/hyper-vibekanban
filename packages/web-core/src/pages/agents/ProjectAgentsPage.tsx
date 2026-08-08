@@ -19,9 +19,14 @@ import { useOrganizationStore } from '@/shared/stores/useOrganizationStore';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
-import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
+import {
+  boardAgentsApi,
+  WORKFLOW_TEMPLATES,
+} from '@/shared/lib/boardAgentsApi';
 import type { FeishuBotBinding } from '@/shared/lib/boardAgentsApi';
 import { cn } from '@/shared/lib/utils';
+import { configApi } from '@/shared/lib/api';
+import type { AvailableCodingAgent } from 'shared/types';
 import { getRemoteApiUrl } from '@/shared/lib/remoteApi';
 import type {
   Autopilot,
@@ -55,6 +60,14 @@ function AgentsTab({ projectId }: { projectId: string }) {
   const [chatRuntime, setChatRuntime] = useState<'cursor' | 'pi' | 'opencode'>(
     'cursor'
   );
+  // The coding agent ("hand") this board agent uses to actually change code.
+  // Empty string = unset, i.e. let the host pick its default.
+  const [defaultExecutor, setDefaultExecutor] = useState('');
+  const [availableExecutors, setAvailableExecutors] = useState<
+    AvailableCodingAgent[]
+  >([]);
+  const [executorsLoading, setExecutorsLoading] = useState(true);
+  const [reviewerAgentId, setReviewerAgentId] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [modelName, setModelName] = useState('composer-2.5');
@@ -74,6 +87,17 @@ function AgentsTab({ projectId }: { projectId: string }) {
       .finally(() => setCwdLoading(false));
   }, []);
 
+  // Which coding agents this machine can actually run. Availability comes from
+  // the local host, not from remote, so it reflects real installs.
+  useEffect(() => {
+    setExecutorsLoading(true);
+    void configApi
+      .listAvailableAgents()
+      .then((res) => setAvailableExecutors(res.agents))
+      .catch(() => setAvailableExecutors([]))
+      .finally(() => setExecutorsLoading(false));
+  }, []);
+
   const sorted = useMemo(
     () => [...agents].sort((a, b) => a.name.localeCompare(b.name)),
     [agents]
@@ -88,9 +112,10 @@ function AgentsTab({ projectId }: { projectId: string }) {
         project_id: projectId,
         name: name.trim(),
         instructions: instructions.trim(),
-        default_executor: null,
+        default_executor: defaultExecutor || null,
         max_concurrent_tasks: 1,
         chat_runtime: chatRuntime,
+        reviewer_agent_id: reviewerAgentId || undefined,
         api_key: apiKey.trim() || undefined,
         base_url: baseUrl.trim() || undefined,
         model_name: modelName.trim() || undefined,
@@ -100,6 +125,8 @@ function AgentsTab({ projectId }: { projectId: string }) {
       setName('');
       setInstructions('');
       setChatRuntime('cursor');
+      setDefaultExecutor('');
+      setReviewerAgentId('');
       setApiKey('');
       setBaseUrl('');
       setModelName('composer-2.5');
@@ -189,6 +216,46 @@ function AgentsTab({ projectId }: { projectId: string }) {
               <option value="pi">Pi（规划中）</option>
               <option value="opencode">OpenCode（规划中）</option>
             </select>
+          </label>
+          <label className="block text-xs text-low">
+            干活用的 Coding Agent
+            <select
+              className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+              value={defaultExecutor}
+              onChange={(e) => setDefaultExecutor(e.target.value)}
+            >
+              <option value="">
+                {executorsLoading ? '正在读取本机可用 Agent…' : '使用本机默认'}
+              </option>
+              {availableExecutors.map((item) => (
+                <option key={item.executor} value={item.executor}>
+                  {item.executor}
+                  {item.available ? '' : '（本机未检测到）'}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-low">
+              这是 Agent 在 workspace 里真正改代码用的工具，与上面的「对话
+              Runtime」是两件事。留空则由本机决定。
+            </p>
+          </label>
+          <label className="block text-xs text-low">
+            审查者（可选）
+            <select
+              className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+              value={reviewerAgentId}
+              onChange={(e) => setReviewerAgentId(e.target.value)}
+            >
+              <option value="">不自动审查</option>
+              {sorted.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-low">
+              该 Agent 任务成功完成后，自动派一个审查任务给这里选的 Agent。
+            </p>
           </label>
           <div className="grid gap-2 sm:grid-cols-1">
             <label className="text-xs text-low">
@@ -325,7 +392,8 @@ function AgentsTab({ projectId }: { projectId: string }) {
                 </p>
                 <span className="inline-flex items-center gap-1 text-xs text-low">
                   <ChatCircleIcon className="size-3.5" />
-                  {agent.status} · {agent.chat_runtime ?? 'cursor'} · 点击进入
+                  {agent.status} · {agent.chat_runtime ?? 'cursor'} ·{' '}
+                  {agent.default_executor ?? '本机默认 executor'} · 点击进入
                 </span>
               </button>
               <button
@@ -721,6 +789,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
   const [newMemberAgentId, setNewMemberAgentId] = useState('');
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
+  const [startFromNodeId, setStartFromNodeId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
 
@@ -740,6 +809,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
       issue_id: null,
       working_directory: null,
       pipeline: { nodes: [], edges: [] },
+      on_assign: 'leader_only',
     });
     setError(null);
     setRunMsg(null);
@@ -756,6 +826,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
       issue_id: null,
       working_directory: null,
       pipeline: { nodes: [], edges: [] },
+      on_assign: 'leader_only',
     });
     setError(null);
     setRunMsg(null);
@@ -793,6 +864,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id ?? undefined,
           working_directory: draft.working_directory ?? undefined,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         });
       } else if (editingId) {
         await boardAgentsApi.updateSquad(editingId, {
@@ -802,6 +874,7 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id,
           working_directory: draft.working_directory,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
       }
       closeEditor();
@@ -817,7 +890,12 @@ function SquadsTab({ projectId }: { projectId: string }) {
     setError(null);
     setRunMsg(null);
     try {
-      // Persist draft first if editing this squad
+      const squad =
+        editingId === squadId && draft
+          ? null
+          : squads.find((s) => s.id === squadId);
+      const startFrom = startFromNodeId.trim() || undefined;
+
       if (editingId === squadId && draft) {
         await boardAgentsApi.updateSquad(squadId, {
           name: draft.name.trim(),
@@ -826,13 +904,25 @@ function SquadsTab({ projectId }: { projectId: string }) {
           issue_id: draft.issue_id,
           working_directory: draft.working_directory,
           pipeline: draft.pipeline,
+          on_assign: draft.on_assign,
         } as Parameters<typeof boardAgentsApi.updateSquad>[1]);
       }
-      const result = await boardAgentsApi.runSquad(squadId);
+      const result = await boardAgentsApi.runSquad(squadId, {
+        issue_id:
+          editingId === squadId && draft
+            ? (draft.issue_id ?? undefined)
+            : (squad?.issue_id ?? undefined),
+        working_directory:
+          editingId === squadId && draft
+            ? (draft.working_directory ?? undefined)
+            : (squad?.working_directory ?? undefined),
+        start_from_node_id: startFrom,
+      });
+      // `/run` now returns as soon as the run row exists; the walk continues
+      // in the background. Point the user at where progress actually shows up.
       setRunMsg(
-        `已入队 ${result.agent_task_ids.length} 个任务（Issue ${result.issue_id.slice(0, 8)}…，目标 ${result.target_type}${
-          result.working_directory ? ` @ ${result.working_directory}` : ''
-        }）`
+        `已启动（run ${result.run_id?.slice(0, 8) ?? '?'}…）。进展与待确认在 Issue ${result.issue_id.slice(0, 8)}… 的「流水线」区 / Inbox 里实时更新。` +
+          (startFrom ? `（从 ${startFrom} 开始）` : '')
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -891,6 +981,41 @@ function SquadsTab({ projectId }: { projectId: string }) {
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {WORKFLOW_TEMPLATES.map((tpl) => (
+            <button
+              key={tpl.key}
+              type="button"
+              title={tpl.hint}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-low hover:bg-secondary"
+              disabled={busy}
+              onClick={() => {
+                void (async () => {
+                  setBusy(true);
+                  setError(null);
+                  setRunMsg(null);
+                  try {
+                    const r = await boardAgentsApi.installWorkflowTemplate(
+                      projectId,
+                      tpl.key
+                    );
+                    setRunMsg(
+                      `已安装「${tpl.label}」（Squad ${r.squad.name}${
+                        r.created_agent_names.length
+                          ? `，新建 Agent：${r.created_agent_names.join('、')}`
+                          : ''
+                      }）。可指派到 Issue，或「从某步运行」。`
+                    );
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            >
+              装「{tpl.label}」
+            </button>
+          ))}
           <button
             type="button"
             className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 bg-brand/10 px-3 py-1.5 text-sm text-brand hover:bg-brand/15"
@@ -943,6 +1068,8 @@ function SquadsTab({ projectId }: { projectId: string }) {
             onChange={setDraft}
             onSave={() => void handleSave()}
             onRun={editingId ? () => void handleRun(editingId) : undefined}
+            startFromNodeId={startFromNodeId}
+            onStartFromChange={setStartFromNodeId}
             onCancel={closeEditor}
             busy={busy}
             running={running}

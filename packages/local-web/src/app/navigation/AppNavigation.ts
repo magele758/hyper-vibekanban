@@ -41,6 +41,10 @@ function resolveLocalDestinationFromPath(path: string): AppDestination | null {
       return { kind: 'onboarding' };
     case '/onboarding_/sign-in':
       return { kind: 'onboarding-sign-in' };
+    case '/_app/agents':
+      return { kind: 'agents' };
+    case '/_app/workforce':
+      return { kind: 'workforce' };
     case '/_app/workspaces':
       return { kind: 'workspaces' };
     case '/_app/export':
@@ -271,6 +275,10 @@ function destinationToLocalTarget(
         to: '/workspaces/$workspaceId/vscode',
         params: { workspaceId: destination.workspaceId },
       } as const;
+    case 'agents':
+      return { to: '/agents' } as const;
+    case 'workforce':
+      return { to: '/workforce' } as const;
     case 'export':
       return { to: '/export' } as const;
     case 'projects-overview':
@@ -414,6 +422,9 @@ export function createLocalAppNavigation(): AppNavigation {
       navigateTo({ kind: 'workspace', workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
       navigateTo({ kind: 'workspace-vscode', workspaceId }, transition),
+    goToAgents: (transition) => navigateTo({ kind: 'agents' }, transition),
+    goToWorkforce: (transition) =>
+      navigateTo({ kind: 'workforce' }, transition),
     goToExport: (transition) => navigateTo({ kind: 'export' }, transition),
     goToProjectsOverview: (transition) =>
       navigateTo({ kind: 'projects-overview' }, transition),

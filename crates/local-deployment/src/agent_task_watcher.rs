@@ -1,8 +1,8 @@
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use api_types::{
-    AgentTask, AgentTaskStatus, ClaimAgentTaskRequest, CreateIssueCommentRequest,
-    UpdateAgentTaskRequest,
+    AgentTask, AgentTaskStatus, ClaimAgentTaskRequest, CreateIssueCommentRequest, PipelineJobKind,
+    PipelineJobSpec, UpdateAgentTaskRequest,
 };
 use db::{
     DBService,
@@ -23,6 +23,7 @@ use executors::{
     executors::BaseCodingAgent,
     profile::ExecutorConfig,
 };
+use git::GitServiceError;
 use services::services::{
     container::ContainerService,
     remote_client::{RemoteClient, RemoteClientError},
@@ -31,6 +32,41 @@ use services::services::{
 use tokio::time::interval;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+/// Max characters of script stdout/stderr echoed into an issue comment.
+const PIPELINE_LOG_TAIL_CHARS: usize = 2000;
+
+/// Wall-clock cap for a pipeline `script` node.
+const DEFAULT_PIPELINE_SCRIPT_TIMEOUT_SECS: u64 = 30 * 60;
+
+/// Timeout for pipeline `script` nodes, overridable per host.
+fn pipeline_script_timeout() -> std::time::Duration {
+    let secs = std::env::var("VK_PIPELINE_SCRIPT_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(DEFAULT_PIPELINE_SCRIPT_TIMEOUT_SECS);
+    std::time::Duration::from_secs(secs)
+}
+
+/// Keep the trailing `max_chars` characters of `s`, trimmed.
+///
+/// Counts *characters*, not bytes: slicing by byte offset panics when the cut
+/// lands inside a multi-byte character, which happens routinely with Chinese
+/// build output.
+fn tail_chars(s: &str, max_chars: usize) -> String {
+    let t = s.trim();
+    let total = t.chars().count();
+    if total <= max_chars {
+        return t.to_string();
+    }
+    let start = t
+        .char_indices()
+        .nth(total - max_chars)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    format!("…{}", &t[start..])
+}
 
 /// Polls Remote for queued agent tasks and starts local coding workspaces.
 pub struct AgentTaskWatcher<C: ContainerService> {
@@ -93,6 +129,16 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             issue_id = %task.issue_id,
             "Claimed agent task"
         );
+
+        // Squad pipeline script / git_op jobs (not coding agents).
+        if let Some(job) = task
+            .execution_prompt
+            .as_deref()
+            .and_then(api_types::PipelineJobSpec::parse)
+        {
+            self.run_pipeline_job(&task, job).await;
+            return Ok(());
+        }
 
         let agent = match self.remote_client.get_agent(task.agent_id).await {
             Ok(agent) => agent,
@@ -190,12 +236,29 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
             "Selected repo for agent task"
         );
 
-        let executor = agent
-            .default_executor
-            .as_deref()
-            .and_then(|name| name.parse::<BaseCodingAgent>().ok())
-            .unwrap_or(BaseCodingAgent::ClaudeCode);
+        let resolved_executor = resolve_executor(agent.default_executor.as_deref(), &agent.name);
+        let executor = resolved_executor.executor;
         let executor_config = ExecutorConfig::new(executor);
+
+        // Record fallbacks on the task so the board shows which coding agent
+        // actually ran, instead of silently substituting one.
+        if let Some(note) = resolved_executor.note.clone() {
+            let _ = self
+                .remote_client
+                .update_agent_task(
+                    task.id,
+                    &UpdateAgentTaskRequest {
+                        status: None,
+                        failure_reason: None,
+                        local_workspace_id: None,
+                        local_session_id: None,
+                        claimed_by_host: None,
+                        attempt: None,
+                        executor_note: Some(Some(note)),
+                    },
+                )
+                .await;
+        }
 
         let mut prompt = format!(
             "You are agent \"{}\".\n\n{}\n\nWork on issue {} — {}.\n\n{}",
@@ -290,6 +353,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                             local_session_id: Some(Some(session.id)),
                             claimed_by_host: None,
                             attempt: None,
+                            executor_note: None,
                         },
                     )
                     .await;
@@ -407,6 +471,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                     local_session_id: None,
                     claimed_by_host: None,
                     attempt: None,
+                    executor_note: None,
                 },
             )
             .await;
@@ -429,6 +494,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                             local_session_id: Some(Some(session_id)),
                             claimed_by_host: None,
                             attempt: None,
+                            executor_note: None,
                         },
                     )
                     .await;
@@ -456,6 +522,278 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
         }
 
         Ok(())
+    }
+
+    async fn run_pipeline_job(&self, task: &AgentTask, job: PipelineJobSpec) {
+        let label = job.label.as_deref().unwrap_or("pipeline-job");
+        info!(task_id = %task.id, ?job.kind, %label, "Running pipeline job");
+
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Running),
+                    failure_reason: None,
+                    local_workspace_id: job.local_workspace_id.map(Some),
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                    executor_note: None,
+                },
+            )
+            .await;
+
+        let workspace_id = match job.local_workspace_id {
+            Some(id) => id,
+            None => {
+                self.fail_pipeline_job(
+                    task,
+                    format!(
+                        "{label}: no local_workspace_id — run a coding step first so the issue has a workspace"
+                    ),
+                )
+                .await;
+                return;
+            }
+        };
+
+        let workspace = match Workspace::find_by_id(&self.db.pool, workspace_id).await {
+            Ok(Some(ws)) => ws,
+            Ok(None) => {
+                self.fail_pipeline_job(
+                    task,
+                    format!("{label}: workspace {workspace_id} not found on this host"),
+                )
+                .await;
+                return;
+            }
+            Err(e) => {
+                self.fail_pipeline_job(task, format!("{label}: load workspace: {e}"))
+                    .await;
+                return;
+            }
+        };
+
+        if let Err(e) = self.container.ensure_container_exists(&workspace).await {
+            self.fail_pipeline_job(task, format!("{label}: ensure container: {e}"))
+                .await;
+            return;
+        }
+
+        let repos = match WorkspaceRepo::find_repos_for_workspace(&self.db.pool, workspace.id).await
+        {
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => {
+                self.fail_pipeline_job(task, format!("{label}: workspace has no repos"))
+                    .await;
+                return;
+            }
+            Err(e) => {
+                self.fail_pipeline_job(task, format!("{label}: list repos: {e}"))
+                    .await;
+                return;
+            }
+        };
+        let repo = &repos[0];
+        let workspace_root = match workspace.container_ref.as_ref() {
+            Some(r) => std::path::PathBuf::from(r),
+            None => {
+                self.fail_pipeline_job(task, format!("{label}: missing container_ref"))
+                    .await;
+                return;
+            }
+        };
+        let worktree_path = workspace
+            .kind
+            .repo_working_path(&workspace_root, &repo.name);
+
+        let result = match job.kind {
+            PipelineJobKind::Script => {
+                let command = job.command.as_deref().unwrap_or("").trim();
+                if command.is_empty() {
+                    Err("script job missing command".into())
+                } else {
+                    self.run_script_job(&worktree_path, command).await
+                }
+            }
+            PipelineJobKind::GitOp => {
+                let op = job.op.as_deref().unwrap_or("rebase");
+                let target = job
+                    .target_branch
+                    .as_deref()
+                    .unwrap_or(repo.default_target_branch.as_deref().unwrap_or("main"));
+                self.run_git_op_job(&workspace, repo, &worktree_path, op, target)
+                    .await
+            }
+        };
+
+        match result {
+            Ok(summary) => {
+                let _ = self
+                    .remote_client
+                    .update_agent_task(
+                        task.id,
+                        &UpdateAgentTaskRequest {
+                            status: Some(AgentTaskStatus::Completed),
+                            failure_reason: None,
+                            local_workspace_id: Some(Some(workspace.id)),
+                            local_session_id: None,
+                            claimed_by_host: None,
+                            attempt: None,
+                            executor_note: None,
+                        },
+                    )
+                    .await;
+                let _ = self
+                    .remote_client
+                    .create_issue_comment(&CreateIssueCommentRequest {
+                        id: None,
+                        issue_id: task.issue_id,
+                        parent_id: None,
+                        message: format!("Pipeline **{label}** completed.\n\n{summary}"),
+                    })
+                    .await;
+            }
+            Err(reason) => {
+                self.fail_pipeline_job(task, format!("{label}: {reason}"))
+                    .await;
+            }
+        }
+    }
+
+    async fn run_script_job(&self, worktree_path: &Path, command: &str) -> Result<String, String> {
+        use std::process::Stdio;
+
+        use tokio::process::Command;
+
+        let child = Command::new("bash")
+            .arg("-lc")
+            .arg(command)
+            .current_dir(worktree_path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            // Dropping the future on timeout must not leave the script running.
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| format!("spawn failed: {e}"))?;
+
+        let timeout = pipeline_script_timeout();
+        // A hung script would otherwise pin this watcher slot forever.
+        let output = match tokio::time::timeout(timeout, child.wait_with_output()).await {
+            Ok(res) => res.map_err(|e| format!("wait failed: {e}"))?,
+            Err(_) => {
+                return Err(format!(
+                    "`$ {command}` timed out after {}s (killed); \
+                     raise VK_PIPELINE_SCRIPT_TIMEOUT_SECS if the script is legitimately slow",
+                    timeout.as_secs()
+                ));
+            }
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let tail = |s: &str| tail_chars(s, PIPELINE_LOG_TAIL_CHARS);
+        if output.status.success() {
+            Ok(format!(
+                "`$ {command}` exit 0\n\nstdout:\n{}\n\nstderr:\n{}",
+                tail(&stdout),
+                tail(&stderr)
+            ))
+        } else {
+            Err(format!(
+                "`$ {command}` failed ({})\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                tail(&stdout),
+                tail(&stderr)
+            ))
+        }
+    }
+
+    async fn run_git_op_job(
+        &self,
+        workspace: &Workspace,
+        repo: &Repo,
+        worktree_path: &Path,
+        op: &str,
+        target_branch: &str,
+    ) -> Result<String, String> {
+        let git = self.container.git();
+        match op {
+            "rebase" => {
+                git.rebase_branch(
+                    &repo.path,
+                    worktree_path,
+                    target_branch,
+                    target_branch,
+                    &workspace.branch,
+                )
+                .map_err(|e| match e {
+                    GitServiceError::MergeConflicts {
+                        message,
+                        conflicted_files,
+                    } => format!("rebase conflict: {message}; files={conflicted_files:?}"),
+                    other => format!("rebase failed: {other}"),
+                })?;
+                Ok(format!(
+                    "rebased `{}` onto `{target_branch}`",
+                    workspace.branch
+                ))
+            }
+            "merge" => {
+                git.merge_changes(
+                    &repo.path,
+                    worktree_path,
+                    &workspace.branch,
+                    target_branch,
+                    &format!("Merge branch '{}'", workspace.branch),
+                )
+                .map_err(|e| format!("merge failed: {e}"))?;
+                Ok(format!(
+                    "merged `{}` into `{target_branch}`",
+                    workspace.branch
+                ))
+            }
+            "push" => {
+                git.push_to_remote(worktree_path, &workspace.branch, false)
+                    .map_err(|e| format!("push failed: {e}"))?;
+                Ok(format!("pushed `{}`", workspace.branch))
+            }
+            "create_pr" => Err(
+                "create_pr via pipeline job is not implemented yet; use Ask Merge + manual PR"
+                    .into(),
+            ),
+            other => Err(format!("unknown git_op `{other}`")),
+        }
+    }
+
+    async fn fail_pipeline_job(&self, task: &AgentTask, reason: String) {
+        warn!(task_id = %task.id, %reason, "pipeline job failed");
+        let _ = self
+            .remote_client
+            .update_agent_task(
+                task.id,
+                &UpdateAgentTaskRequest {
+                    status: Some(AgentTaskStatus::Failed),
+                    failure_reason: Some(Some(reason.clone())),
+                    local_workspace_id: None,
+                    local_session_id: None,
+                    claimed_by_host: None,
+                    attempt: None,
+                    executor_note: None,
+                },
+            )
+            .await;
+        let _ = self
+            .remote_client
+            .create_issue_comment(&CreateIssueCommentRequest {
+                id: None,
+                issue_id: task.issue_id,
+                parent_id: None,
+                message: format!("Pipeline job failed: {reason}"),
+            })
+            .await;
     }
 
     async fn fail_or_requeue(
@@ -488,6 +826,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                         local_session_id: Some(None),
                         claimed_by_host: Some(None),
                         attempt: None,
+                        executor_note: None,
                     },
                 )
                 .await;
@@ -521,6 +860,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                     local_session_id: None,
                     claimed_by_host: None,
                     attempt: None,
+                    executor_note: None,
                 },
             )
             .await;
@@ -584,6 +924,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                                         local_session_id: Some(None),
                                         claimed_by_host: Some(None),
                                         attempt: None,
+                                        executor_note: None,
                                     },
                                 )
                                 .await;
@@ -620,6 +961,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                                 local_session_id: None,
                                 claimed_by_host: None,
                                 attempt: None,
+                                executor_note: None,
                             },
                         )
                         .await;
@@ -666,6 +1008,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                         local_session_id: Some(None),
                         claimed_by_host: Some(None),
                         attempt: None,
+                        executor_note: None,
                     },
                 )
                 .await;
@@ -692,6 +1035,7 @@ impl<C: ContainerService + Clone + Send + Sync + 'static> AgentTaskWatcher<C> {
                     local_session_id: None,
                     claimed_by_host: None,
                     attempt: None,
+                    executor_note: None,
                 },
             )
             .await;
@@ -712,10 +1056,10 @@ fn select_repo_for_task<'a>(
     project_name: Option<&str>,
 ) -> Option<&'a Repo> {
     if let Some(preferred) = preferred_repo_id.map(str::trim).filter(|s| !s.is_empty()) {
-        if let Ok(id) = Uuid::parse_str(preferred) {
-            if let Some(repo) = repos.iter().find(|r| r.id == id) {
-                return Some(repo);
-            }
+        if let Ok(id) = Uuid::parse_str(preferred)
+            && let Some(repo) = repos.iter().find(|r| r.id == id)
+        {
+            return Some(repo);
         }
         // Squad working_directory is often an absolute path — match repo.path.
         let preferred_path = std::path::Path::new(preferred);
@@ -772,4 +1116,123 @@ fn select_repo_for_task<'a>(
             || d.contains("vibekanban")
             || d.contains("hyper-vibekanban")
     })
+}
+
+/// Outcome of picking a coding agent ("hand") for a board agent.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ResolvedExecutor {
+    pub executor: BaseCodingAgent,
+    /// Set when the requested executor was not used, explaining why. Recorded on
+    /// the task so the substitution is visible rather than silent.
+    pub note: Option<String>,
+}
+
+/// Host default when an agent has no executor pinned.
+const FALLBACK_EXECUTOR: BaseCodingAgent = BaseCodingAgent::ClaudeCode;
+
+/// Resolve which coding agent should run this task.
+///
+/// Three outcomes:
+/// - nothing configured: use the host default, no note (this is expected)
+/// - configured and valid: use it
+/// - configured but unparseable: use the default and explain the substitution
+fn resolve_executor(configured: Option<&str>, agent_name: &str) -> ResolvedExecutor {
+    let Some(raw) = configured.map(str::trim).filter(|value| !value.is_empty()) else {
+        return ResolvedExecutor {
+            executor: FALLBACK_EXECUTOR,
+            note: None,
+        };
+    };
+
+    match raw.parse::<BaseCodingAgent>() {
+        Ok(executor) => ResolvedExecutor {
+            executor,
+            note: None,
+        },
+        Err(_) => {
+            tracing::warn!(
+                agent_name,
+                requested = raw,
+                actual = %FALLBACK_EXECUTOR,
+                "agent default_executor is not a known coding agent; falling back"
+            );
+            ResolvedExecutor {
+                executor: FALLBACK_EXECUTOR,
+                note: Some(format!(
+                    "Requested executor '{raw}' is not recognized on this host; ran {FALLBACK_EXECUTOR} instead."
+                )),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BaseCodingAgent, FALLBACK_EXECUTOR, PIPELINE_LOG_TAIL_CHARS, resolve_executor, tail_chars,
+    };
+
+    #[test]
+    fn tail_chars_keeps_short_input() {
+        assert_eq!(tail_chars("  hello  ", 100), "hello");
+    }
+
+    /// No executor configured is a normal state, not a downgrade: no note.
+    #[test]
+    fn unset_executor_uses_host_default_without_a_note() {
+        for value in [None, Some(""), Some("   ")] {
+            let resolved = resolve_executor(value, "reviewer");
+            assert_eq!(resolved.executor, FALLBACK_EXECUTOR);
+            assert_eq!(resolved.note, None, "unset executor should not be flagged");
+        }
+    }
+
+    #[test]
+    fn configured_executor_is_honoured() {
+        let resolved = resolve_executor(Some("CODEX"), "builder");
+        assert_eq!(resolved.executor, BaseCodingAgent::Codex);
+        assert_eq!(resolved.note, None);
+    }
+
+    /// `CURSOR` is the historic spelling of `CURSOR_AGENT`; it must not be
+    /// treated as an unknown value and silently downgraded.
+    #[test]
+    fn legacy_cursor_alias_still_resolves() {
+        let resolved = resolve_executor(Some("CURSOR"), "builder");
+        assert_eq!(resolved.executor, BaseCodingAgent::CursorAgent);
+        assert_eq!(resolved.note, None);
+    }
+
+    /// The bug this replaces: an unknown value used to fall back to Claude Code
+    /// with no trace, so users believed their configured agent had run.
+    #[test]
+    fn unknown_executor_falls_back_but_records_a_note() {
+        let resolved = resolve_executor(Some("GPT_9000"), "builder");
+        assert_eq!(resolved.executor, FALLBACK_EXECUTOR);
+        let note = resolved.note.expect("fallback must be recorded");
+        assert!(
+            note.contains("GPT_9000"),
+            "note should name the request: {note}"
+        );
+        assert!(
+            note.contains(&FALLBACK_EXECUTOR.to_string()),
+            "note should name what actually ran: {note}"
+        );
+    }
+
+    #[test]
+    fn tail_chars_truncates_ascii() {
+        let out = tail_chars(&"a".repeat(50), 10);
+        assert_eq!(out, format!("…{}", "a".repeat(10)));
+    }
+
+    /// Regression: byte-slicing panicked when the cut landed inside a
+    /// multi-byte char (routine with Chinese build output).
+    #[test]
+    fn tail_chars_handles_multibyte_without_panic() {
+        let input = "中".repeat(PIPELINE_LOG_TAIL_CHARS + 500);
+        let out = tail_chars(&input, PIPELINE_LOG_TAIL_CHARS);
+        assert_eq!(out.chars().count(), PIPELINE_LOG_TAIL_CHARS + 1);
+        assert!(out.starts_with('…'));
+    }
 }

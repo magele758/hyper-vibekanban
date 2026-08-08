@@ -41,6 +41,8 @@ impl AgentTaskRepository {
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
                 execution_prompt,
+                executor_note,
+                reviews_task_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks
@@ -83,6 +85,8 @@ impl AgentTaskRepository {
                 t.is_leader_task          AS "is_leader_task!",
                 t.preferred_repo_id,
                 t.execution_prompt,
+                t.executor_note,
+                t.reviews_task_id,
                 t.created_at              AS "created_at!: DateTime<Utc>",
                 t.updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks t
@@ -127,6 +131,8 @@ impl AgentTaskRepository {
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
                 execution_prompt,
+                executor_note,
+                reviews_task_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks
@@ -153,6 +159,7 @@ impl AgentTaskRepository {
         is_leader_task: bool,
         preferred_repo_id: Option<String>,
         execution_prompt: Option<String>,
+        reviews_task_id: Option<Uuid>,
     ) -> Result<MutationResponse<AgentTask>, AgentTaskError> {
         let id = id.unwrap_or_else(Uuid::new_v4);
         let mut tx = super::begin_tx(pool).await?;
@@ -185,6 +192,8 @@ impl AgentTaskRepository {
                     is_leader_task          AS "is_leader_task!",
                     preferred_repo_id,
                     execution_prompt,
+                    executor_note,
+                    reviews_task_id,
                     created_at              AS "created_at!: DateTime<Utc>",
                     updated_at              AS "updated_at!: DateTime<Utc>"
                 FROM agent_tasks
@@ -215,9 +224,9 @@ impl AgentTaskRepository {
             INSERT INTO agent_tasks (
                 id, agent_id, issue_id, trigger, priority,
                 force_fresh_session, squad_id, is_leader_task, preferred_repo_id,
-                execution_prompt
+                execution_prompt, reviews_task_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING
                 id                      AS "id!: Uuid",
                 agent_id                AS "agent_id!: Uuid",
@@ -240,6 +249,8 @@ impl AgentTaskRepository {
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
                 execution_prompt,
+                executor_note,
+                reviews_task_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,
@@ -252,7 +263,8 @@ impl AgentTaskRepository {
             squad_id,
             is_leader_task,
             preferred_repo_id,
-            execution_prompt
+            execution_prompt,
+            reviews_task_id
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -296,6 +308,8 @@ impl AgentTaskRepository {
                 t.is_leader_task          AS "is_leader_task!",
                 t.preferred_repo_id,
                 t.execution_prompt,
+                t.executor_note,
+                t.reviews_task_id,
                 t.created_at              AS "created_at!: DateTime<Utc>",
                 t.updated_at              AS "updated_at!: DateTime<Utc>"
             FROM agent_tasks t
@@ -365,6 +379,8 @@ impl AgentTaskRepository {
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
                 execution_prompt,
+                executor_note,
+                reviews_task_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,
@@ -387,6 +403,7 @@ impl AgentTaskRepository {
         local_session_id: Option<Option<Uuid>>,
         claimed_by_host: Option<Option<String>>,
         attempt: Option<i32>,
+        executor_note: Option<Option<String>>,
     ) -> Result<MutationResponse<AgentTask>, AgentTaskError> {
         let mut tx = super::begin_tx(pool).await?;
 
@@ -398,6 +415,8 @@ impl AgentTaskRepository {
         let set_session = local_session_id.flatten();
         let clear_host = matches!(claimed_by_host, Some(None));
         let set_host = claimed_by_host.flatten();
+        let clear_note = matches!(executor_note, Some(None));
+        let set_note = executor_note.flatten();
 
         let terminal = matches!(
             status,
@@ -432,6 +451,11 @@ impl AgentTaskRepository {
                     ELSE claimed_by_host
                 END,
                 attempt = COALESCE($11, attempt),
+                executor_note = CASE
+                    WHEN $14 THEN NULL
+                    WHEN $15::text IS NOT NULL THEN $15
+                    ELSE executor_note
+                END,
                 started_at = CASE WHEN $12 THEN COALESCE(started_at, NOW()) ELSE started_at END,
                 completed_at = CASE WHEN $13 THEN NOW() ELSE completed_at END,
                 updated_at = NOW()
@@ -458,6 +482,8 @@ impl AgentTaskRepository {
                 is_leader_task          AS "is_leader_task!",
                 preferred_repo_id,
                 execution_prompt,
+                executor_note,
+                reviews_task_id,
                 created_at              AS "created_at!: DateTime<Utc>",
                 updated_at              AS "updated_at!: DateTime<Utc>"
             "#,
@@ -473,7 +499,9 @@ impl AgentTaskRepository {
             set_host,
             attempt,
             starting,
-            terminal
+            terminal,
+            clear_note,
+            set_note
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -491,5 +519,46 @@ impl AgentTaskRepository {
         let txid = get_txid(&mut *tx).await?;
         tx.commit().await?;
         Ok(DeleteResponse { txid })
+    }
+
+    /// Most recent local workspace id for an issue.
+    /// Prefers agent_tasks (coding/pipeline steps), then falls back to linked
+    /// `workspaces` rows (manual Workspace / linked_issue start).
+    pub async fn latest_local_workspace_for_issue(
+        pool: &PgPool,
+        issue_id: Uuid,
+    ) -> Result<Option<Uuid>, AgentTaskError> {
+        let from_task: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT local_workspace_id
+            FROM agent_tasks
+            WHERE issue_id = $1 AND local_workspace_id IS NOT NULL
+            ORDER BY updated_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?;
+        if let Some((id,)) = from_task {
+            return Ok(Some(id));
+        }
+        // Prefer the earliest linked workspace (usually the implement worktree);
+        // later auto-spawned agent workspaces should not steal script/git_op.
+        let from_ws: Option<(Uuid,)> = sqlx::query_as(
+            r#"
+            SELECT local_workspace_id
+            FROM workspaces
+            WHERE issue_id = $1
+              AND local_workspace_id IS NOT NULL
+              AND archived = false
+            ORDER BY created_at ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(issue_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(from_ws.map(|r| r.0))
     }
 }

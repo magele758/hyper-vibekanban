@@ -110,6 +110,7 @@ impl McpServer {
             issue_id,
             user_id: Some(user_id),
             agent_id: None,
+            squad_id: None,
         };
 
         let url = self.url("/api/remote/issue-assignees");

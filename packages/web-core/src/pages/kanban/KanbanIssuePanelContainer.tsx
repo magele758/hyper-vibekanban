@@ -20,6 +20,7 @@ import { IssueSubIssuesSectionContainer } from './IssueSubIssuesSectionContainer
 import { IssueRelationshipsSectionContainer } from './IssueRelationshipsSectionContainer';
 import { IssueWorkspacesSectionContainer } from './IssueWorkspacesSectionContainer';
 import { IssueAgentTasksSectionContainer } from './IssueAgentTasksSectionContainer';
+import { IssueSquadRunSectionContainer } from './IssueSquadRunSectionContainer';
 import {
   KanbanIssuePanel,
   type IssueFormData,
@@ -1218,7 +1219,10 @@ export function KanbanIssuePanelContainer({
         <IssueWorkspacesSectionContainer issueId={issueId} />
       )}
       renderAgentTasksSection={(issueId) => (
-        <IssueAgentTasksSectionContainer issueId={issueId} />
+        <>
+          <IssueSquadRunSectionContainer issueId={issueId} />
+          <IssueAgentTasksSectionContainer issueId={issueId} />
+        </>
       )}
       renderRelationshipsSection={(issueId) => (
         <IssueRelationshipsSectionContainer issueId={issueId} />

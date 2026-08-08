@@ -1,6 +1,7 @@
 use api_types::{
     Agent, CreateAgentRequest, DeleteResponse, ListAgentsQuery, ListAgentsResponse,
-    MutationResponse, UpdateAgentRequest,
+    ListOrgAgentsQuery, ListOrgAgentsResponse, MutationResponse, OrgAgentEntry, UpdateAgentRequest,
+    agent::normalize_default_executor,
 };
 use axum::{
     Json,
@@ -12,7 +13,7 @@ use uuid::Uuid;
 
 use super::{
     error::{ErrorResponse, db_error},
-    organization_members::ensure_project_access,
+    organization_members::{ensure_member_access, ensure_project_access},
 };
 use crate::{
     AppState,
@@ -31,7 +32,89 @@ pub fn mutation() -> MutationBuilder<Agent, CreateAgentRequest, UpdateAgentReque
 }
 
 pub fn router() -> axum::Router<AppState> {
-    mutation().router()
+    mutation()
+        .router()
+        .route("/agents/roster", axum::routing::get(list_org_agents))
+}
+
+/// Organization-wide roster of configured agents ("the workforce").
+///
+/// Distinct from `list_agents`, which is project-scoped: the workforce menu
+/// spans every project the caller can see in one organization.
+#[instrument(name = "agents.list_org_agents", skip(state, ctx))]
+async fn list_org_agents(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ListOrgAgentsQuery>,
+) -> Result<Json<ListOrgAgentsResponse>, ErrorResponse> {
+    ensure_member_access(state.pool(), query.organization_id, ctx.user.id).await?;
+
+    let rows = AgentRepository::list_by_organization(state.pool(), query.organization_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(
+                ?error,
+                organization_id = %query.organization_id,
+                "failed to list organization agents"
+            );
+            ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, "failed to list agents")
+        })?;
+
+    Ok(Json(ListOrgAgentsResponse {
+        agents: rows
+            .into_iter()
+            .map(|(agent, project_name)| OrgAgentEntry {
+                agent,
+                project_name,
+            })
+            .collect(),
+    }))
+}
+
+/// Reject unknown executor names at the write boundary.
+///
+/// `default_executor` is stored as TEXT because remote cannot know what a given
+/// local host has installed, but that is no reason to accept arbitrary strings:
+/// an invalid value would otherwise surface much later as a silent fallback to
+/// the host default.
+fn validate_executor(value: Option<&str>) -> Result<Option<String>, ErrorResponse> {
+    normalize_default_executor(value)
+        .map_err(|message| ErrorResponse::new(StatusCode::BAD_REQUEST, message))
+}
+
+/// A reviewer must exist, live in the same project, and never be the agent itself.
+async fn validate_reviewer(
+    state: &AppState,
+    agent_id: Option<Uuid>,
+    project_id: Uuid,
+    reviewer_agent_id: Uuid,
+) -> Result<(), ErrorResponse> {
+    if Some(reviewer_agent_id) == agent_id {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "an agent cannot review its own work",
+        ));
+    }
+
+    let reviewer = AgentRepository::find_by_id(state.pool(), reviewer_agent_id)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, %reviewer_agent_id, "failed to load reviewer agent");
+            ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to load reviewer agent",
+            )
+        })?
+        .ok_or_else(|| ErrorResponse::new(StatusCode::BAD_REQUEST, "reviewer agent not found"))?;
+
+    if reviewer.project_id != project_id {
+        return Err(ErrorResponse::new(
+            StatusCode::BAD_REQUEST,
+            "reviewer agent must belong to the same project",
+        ));
+    }
+
+    Ok(())
 }
 
 #[instrument(
@@ -93,6 +176,11 @@ async fn create_agent(
 
     let max_concurrent = payload.max_concurrent_tasks.unwrap_or(1).max(1);
     let chat_runtime = payload.chat_runtime.unwrap_or_default();
+    let default_executor = validate_executor(payload.default_executor.as_deref())?;
+
+    if let Some(reviewer_agent_id) = payload.reviewer_agent_id {
+        validate_reviewer(&state, payload.id, payload.project_id, reviewer_agent_id).await?;
+    }
 
     let response = AgentRepository::create(
         state.pool(),
@@ -100,9 +188,10 @@ async fn create_agent(
         payload.project_id,
         payload.name,
         payload.instructions,
-        payload.default_executor,
+        default_executor,
         max_concurrent,
         chat_runtime,
+        payload.reviewer_agent_id,
         Some(ctx.user.id),
     )
     .await
@@ -166,15 +255,32 @@ async fn update_agent(
 
     ensure_project_access(state.pool(), ctx.user.id, existing.project_id).await?;
 
+    // `Option<Option<T>>`: outer None = field absent, inner None = explicit clear.
+    let default_executor = match payload.default_executor {
+        Some(value) => Some(validate_executor(value.as_deref())?),
+        None => None,
+    };
+
+    if let Some(Some(reviewer_agent_id)) = payload.reviewer_agent_id {
+        validate_reviewer(
+            &state,
+            Some(agent_id),
+            existing.project_id,
+            reviewer_agent_id,
+        )
+        .await?;
+    }
+
     let response = AgentRepository::update(
         state.pool(),
         agent_id,
         payload.name,
         payload.instructions,
-        payload.default_executor,
+        default_executor,
         payload.max_concurrent_tasks,
         payload.status,
         payload.chat_runtime,
+        payload.reviewer_agent_id,
     )
     .await
     .map_err(|error| {
@@ -213,4 +319,16 @@ async fn delete_agent(
         })?;
 
     Ok(Json(response))
+}
+
+#[cfg(test)]
+mod tests {
+    /// `/agents/roster` is registered next to `/agents/{id}`. Axum panics on
+    /// ambiguous routes when the router is built, so constructing it is the
+    /// assertion: a literal segment must be allowed to coexist with the
+    /// parameterised one.
+    #[test]
+    fn router_builds_with_roster_route_alongside_id_route() {
+        let _router = super::router();
+    }
 }

@@ -112,7 +112,14 @@
     "filesChanged_other": "{{count}} files changed"
   },
   "followUp": {
-    "queuedMessage": "メッセージがキューに追加されました - 現在の実行が完了すると実行されます"
+    "queue": {
+      "title": "キュー ({{count}})",
+      "clear": "クリア",
+      "edit": "編集",
+      "remove": "削除",
+      "save": "保存",
+      "reorder": "並び順を変更"
+    }
   },
   "git": {
     "branch": {

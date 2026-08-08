@@ -30,6 +30,10 @@ export function resolveRemoteDestinationFromPath(
   switch (foundRoute.id as RemoteRouteId) {
     case "/":
       return { kind: "projects-overview" };
+    case "/agents":
+      return { kind: "agents" };
+    case "/workforce":
+      return { kind: "workforce" };
     case "/export":
       return { kind: "export" };
     case "/hosts/$hostId/workspaces": {
@@ -57,6 +61,25 @@ export function resolveRemoteDestinationFromPath(
     case "/projects/$projectId": {
       const projectId = getPathParam(routeParams, "projectId");
       return projectId ? { kind: "project", projectId } : null;
+    }
+    case "/projects/$projectId_/agents": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-agents", projectId } : null;
+    }
+    case "/projects/$projectId_/agents_/$agentId": {
+      const projectId = getPathParam(routeParams, "projectId");
+      const agentId = getPathParam(routeParams, "agentId");
+      return projectId && agentId
+        ? { kind: "project-agent", projectId, agentId }
+        : null;
+    }
+    case "/projects/$projectId_/copilot": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-copilot", projectId } : null;
+    }
+    case "/projects/$projectId_/inbox": {
+      const projectId = getPathParam(routeParams, "projectId");
+      return projectId ? { kind: "project-inbox", projectId } : null;
     }
     case "/projects/$projectId_/issues/$issueId": {
       const projectId = getPathParam(routeParams, "projectId");
@@ -168,6 +191,10 @@ function destinationToRemoteTarget(
         } as const;
       }
       return { to: "/" } as const;
+    case "agents":
+      return { to: "/agents" } as const;
+    case "workforce":
+      return { to: "/workforce" } as const;
     case "export":
       return { to: "/export" } as const;
     case "project":
@@ -176,12 +203,26 @@ function destinationToRemoteTarget(
         params: { projectId: destination.projectId },
       } as const;
     case "project-agents":
-    case "project-agent":
-    case "project-copilot":
-    case "project-inbox":
-      // Remote-web does not host Agents/Copilot/Inbox pages yet; fall back to board.
       return {
-        to: "/projects/$projectId",
+        to: "/projects/$projectId/agents",
+        params: { projectId: destination.projectId },
+      } as const;
+    case "project-agent":
+      return {
+        to: "/projects/$projectId/agents/$agentId",
+        params: {
+          projectId: destination.projectId,
+          agentId: destination.agentId,
+        },
+      } as const;
+    case "project-copilot":
+      return {
+        to: "/projects/$projectId/copilot",
+        params: { projectId: destination.projectId },
+      } as const;
+    case "project-inbox":
+      return {
+        to: "/projects/$projectId/inbox",
         params: { projectId: destination.projectId },
       } as const;
     case "project-issue":
@@ -263,6 +304,9 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
       navigateTo({ kind: "workspace", hostId, workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
       navigateTo({ kind: "workspace-vscode", hostId, workspaceId }, transition),
+    goToAgents: (transition) => navigateTo({ kind: "agents" }, transition),
+    goToWorkforce: (transition) =>
+      navigateTo({ kind: "workforce" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProjectsOverview: (transition) =>
       navigateTo({ kind: "projects-overview" }, transition),
@@ -346,6 +390,9 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
       navigateTo({ kind: "workspace", workspaceId }, transition),
     goToWorkspaceVsCode: (workspaceId, transition) =>
       navigateTo({ kind: "workspace-vscode", workspaceId }, transition),
+    goToAgents: (transition) => navigateTo({ kind: "agents" }, transition),
+    goToWorkforce: (transition) =>
+      navigateTo({ kind: "workforce" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
     goToProjectsOverview: (transition) =>
       navigateTo({ kind: "projects-overview" }, transition),

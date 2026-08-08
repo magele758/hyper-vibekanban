@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO agents (\n                id, project_id, name, instructions, default_executor,\n                max_concurrent_tasks, chat_runtime, created_by_user_id\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            SELECT\n                a.id                      AS \"id!: Uuid\",\n                a.project_id              AS \"project_id!: Uuid\",\n                a.name                    AS \"name!\",\n                a.instructions            AS \"instructions!\",\n                a.default_executor,\n                a.max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                a.status                  AS \"status!: AgentStatus\",\n                a.chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                a.reviewer_agent_id,\n                a.created_by_user_id,\n                a.created_at              AS \"created_at!: DateTime<Utc>\",\n                a.updated_at              AS \"updated_at!: DateTime<Utc>\",\n                p.name                    AS \"project_name!\"\n            FROM agents a\n            JOIN projects p ON p.id = a.project_id\n            WHERE p.organization_id = $1\n            ORDER BY p.name ASC, a.name ASC\n            ",
   "describe": {
     "columns": [
       {
@@ -68,40 +68,32 @@
       },
       {
         "ordinal": 8,
-        "name": "created_by_user_id",
+        "name": "reviewer_agent_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 9,
+        "name": "created_by_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "project_name!",
+        "type_info": "Text"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
-        "Uuid",
-        "Text",
-        "Text",
-        "Text",
-        "Int4",
-        {
-          "Custom": {
-            "name": "agent_chat_runtime",
-            "kind": {
-              "Enum": [
-                "cursor",
-                "pi",
-                "opencode"
-              ]
-            }
-          }
-        },
         "Uuid"
       ]
     },
@@ -115,9 +107,11 @@
       false,
       false,
       true,
+      true,
+      false,
       false,
       false
     ]
   },
-  "hash": "2eca425515fedf54d3ae68bff7f324921d06127f1121cc98eefca2ca57f48d7a"
+  "hash": "bbf046b70077ba06ca75a0d451ed1a1ab0a5e2028c25b54e13f92fd026cdd4b2"
 }

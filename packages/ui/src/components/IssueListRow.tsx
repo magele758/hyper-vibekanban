@@ -113,9 +113,7 @@ export function IssueListRow({
             'group/row flex items-center justify-between gap-double px-double py-half',
             'transition-colors',
             'hover:bg-secondary',
-            hasConsoleWorkspace &&
-              !(isSelected || isChecked) &&
-              'bg-brand/5',
+            hasConsoleWorkspace && !(isSelected || isChecked) && 'bg-brand/5',
             (isSelected || isChecked) && 'bg-secondary',
             snapshot.isDragging && 'bg-secondary shadow-lg cursor-grabbing',
             className

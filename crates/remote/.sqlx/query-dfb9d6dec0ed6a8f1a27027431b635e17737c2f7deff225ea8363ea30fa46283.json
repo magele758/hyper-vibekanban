@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agents\n            WHERE id = $1\n            ",
+  "query": "\n            SELECT\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                reviewer_agent_id,\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            FROM agents\n            WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -68,16 +68,21 @@
       },
       {
         "ordinal": 8,
-        "name": "created_by_user_id",
+        "name": "reviewer_agent_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 9,
+        "name": "created_by_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
@@ -97,9 +102,10 @@
       false,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "42e062f18ddc0b34eef44357a992a1ade3d268940c6c787c8351f5cfb98c81fa"
+  "hash": "dfb9d6dec0ed6a8f1a27027431b635e17737c2f7deff225ea8363ea30fa46283"
 }

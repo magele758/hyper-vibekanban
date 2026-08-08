@@ -52,6 +52,7 @@ pub fn router() -> Router<DeploymentImpl> {
             get(check_editor_availability),
         )
         .route("/agents/check-availability", get(check_agent_availability))
+        .route("/agents/available", get(list_available_agents))
         .route("/agents/preset-options", get(get_agent_preset_options))
         .route(
             "/agents/discovered-options/ws",
@@ -546,6 +547,99 @@ async fn check_editor_availability(
 #[derive(Debug, Serialize, Deserialize, TS)]
 pub struct CheckAgentAvailabilityQuery {
     executor: BaseCodingAgent,
+}
+
+/// One coding agent ("hand") this machine can offer to a board agent.
+#[derive(Debug, Serialize, Deserialize, TS)]
+pub struct AvailableCodingAgent {
+    pub executor: BaseCodingAgent,
+    /// True when an installation or login was detected locally.
+    pub available: bool,
+    pub availability: AvailabilityInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize, TS)]
+pub struct ListAvailableAgentsResponse {
+    pub agents: Vec<AvailableCodingAgent>,
+}
+
+#[cfg(test)]
+mod executor_list_tests {
+    use api_types::agent::{KNOWN_CODING_AGENTS, normalize_default_executor};
+    use executors::executors::CodingAgent;
+    use strum::VariantNames;
+
+    /// `api_types` duplicates the coding agent list so that `remote` can validate
+    /// `default_executor` writes without depending on the `executors` crate.
+    /// This test is what keeps the copy honest: add an executor and it fails here.
+    #[test]
+    fn api_types_known_agents_match_executor_variants() {
+        let mut actual = CodingAgent::VARIANTS
+            .iter()
+            .copied()
+            // Only present under the `qa-mode` feature; never a real user choice.
+            .filter(|name| *name != "QA_MOCK")
+            .collect::<Vec<_>>();
+        actual.sort_unstable();
+
+        let mut expected = KNOWN_CODING_AGENTS.to_vec();
+        expected.sort_unstable();
+
+        assert_eq!(
+            actual, expected,
+            "api_types::KNOWN_CODING_AGENTS drifted from CodingAgent variants"
+        );
+    }
+
+    /// Every name api_types accepts must actually parse into a real executor.
+    #[test]
+    fn every_known_agent_normalizes_and_is_a_real_variant() {
+        for name in KNOWN_CODING_AGENTS {
+            let normalized = normalize_default_executor(Some(name))
+                .unwrap_or_else(|e| panic!("{name} rejected by its own list: {e}"))
+                .unwrap_or_else(|| panic!("{name} normalized to None"));
+            assert!(
+                CodingAgent::VARIANTS.contains(&normalized.as_str()),
+                "{normalized} is not a CodingAgent variant"
+            );
+        }
+    }
+}
+
+/// List every coding agent known to this host along with local availability.
+///
+/// Board agents store `default_executor` as free text (remote Postgres cannot
+/// know what a given machine has installed), so the UI needs this to offer a
+/// validated choice instead of making the user guess.
+async fn list_available_agents(
+    State(_deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<ListAvailableAgentsResponse>> {
+    let profiles = ExecutorConfigs::get_cached();
+
+    let mut agents = profiles
+        .executors
+        .keys()
+        .map(|executor| {
+            let availability = match profiles.get_coding_agent(&ExecutorProfileId::new(*executor)) {
+                Some(agent) => agent.get_availability_info(),
+                None => AvailabilityInfo::NotFound,
+            };
+            AvailableCodingAgent {
+                executor: *executor,
+                available: availability.is_available(),
+                availability,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    // Stable ordering: available first, then by name, so the UI does not shuffle.
+    agents.sort_by(|a, b| {
+        b.available
+            .cmp(&a.available)
+            .then_with(|| a.executor.to_string().cmp(&b.executor.to_string()))
+    });
+
+    ResponseJson(ApiResponse::success(ListAvailableAgentsResponse { agents }))
 }
 
 async fn check_agent_availability(

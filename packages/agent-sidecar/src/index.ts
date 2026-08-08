@@ -24,6 +24,10 @@ import {
   resolveCursorSdkModelId,
   type ChatMessage,
 } from "./runtimes.js";
+import {
+  getConfig as getCopilotConfig,
+  upsertConfig as upsertCopilotConfig,
+} from "./copilotConfigStore.js";
 
 const PORT = Number(process.env.PORT ?? 13110);
 const LOCAL_API = process.env.VK_LOCAL_API_BASE ?? "http://127.0.0.1:13002";
@@ -36,6 +40,10 @@ const ChatBody = z.object({
   agent_id: z.string().uuid().optional().nullable(),
   message: z.string().min(1),
   cwd: z.string().optional(),
+  // 全局指挥台（无 agent）在浏览器里配的模型服务，随请求透传。
+  copilot_base_url: z.string().optional(),
+  copilot_api_key: z.string().optional(),
+  copilot_model: z.string().optional(),
 });
 
 type LlmSecret = {
@@ -110,6 +118,30 @@ async function loadLlmSecret(
     `/v1/agents/${agentId}/llm_settings/secret`,
     auth,
   );
+}
+
+/**
+ * Authorize a caller for `projectId` by replaying their token against a
+ * project-scoped Remote endpoint. The copilot config holds an api_key, so these
+ * routes must not be reachable just because the port is.
+ */
+async function ensureProjectAccess(
+  projectId: string,
+  auth: string | undefined,
+): Promise<void> {
+  if (!auth) {
+    throw Object.assign(new Error("missing Authorization header"), {
+      statusCode: 401,
+    });
+  }
+  try {
+    await remoteFetch(`/v1/squads?project_id=${projectId}`, auth);
+  } catch (err) {
+    throw Object.assign(
+      new Error(`not authorized for project ${projectId}`),
+      { statusCode: 403, cause: err },
+    );
+  }
 }
 
 async function loadSession(
@@ -310,7 +342,16 @@ app.post("/copilot/chat", async (req, res) => {
     return;
   }
 
-  const { project_id, session_id, agent_id, message, cwd } = parsed.data;
+  const {
+    project_id,
+    session_id,
+    agent_id,
+    message,
+    cwd,
+    copilot_base_url,
+    copilot_api_key,
+    copilot_model,
+  } = parsed.data;
   console.log(
     `[agent-sidecar] chat session=${session_id} agent=${agent_id ?? "-"} msg_len=${message.length}`,
   );
@@ -350,6 +391,22 @@ app.post("/copilot/chat", async (req, res) => {
       if (llm.model_name) modelId = llm.model_name;
       if (llm.base_url) baseUrl = llm.base_url;
       if (llm.working_directory) savedWorkingDirectory = llm.working_directory;
+    } else {
+      // 全局指挥台（agent_id: null）：优先请求体 → 服务端存储（多端共享）→ 环境变量。
+      const saved = await getCopilotConfig(project_id);
+      const base =
+        copilot_base_url?.trim() ||
+        saved?.base_url ||
+        process.env.VK_COPILOT_BASE_URL;
+      const key =
+        copilot_api_key?.trim() ||
+        saved?.api_key ||
+        process.env.VK_COPILOT_API_KEY;
+      const model =
+        copilot_model?.trim() || saved?.model || process.env.VK_COPILOT_MODEL;
+      if (key) apiKey = key;
+      if (base) baseUrl = base;
+      if (model) modelId = model;
     }
 
     const requestCwd = cwd?.trim() || "";
@@ -369,6 +426,11 @@ app.post("/copilot/chat", async (req, res) => {
       );
     }
 
+    // Cursor + custom base_url is treated as OpenAI-compatible (same as /models).
+    // Official Cursor User API Key path only when base_url is empty.
+    const useOpenAiCompatible =
+      runtime === "pi" || runtime === "opencode" || !!baseUrl?.trim();
+
     if ((runtime === "pi" || runtime === "opencode") && !baseUrl) {
       throw new Error(
         `Runtime "${runtime}" requires agent LLM base_url (OpenAI-compatible endpoint).`,
@@ -382,23 +444,41 @@ app.post("/copilot/chat", async (req, res) => {
       runtime,
       cwd: effectiveCwd,
       cwd_source: cwdSource,
+      transport: useOpenAiCompatible ? "openai-compatible" : "cursor-sdk",
     });
 
     const systemPrompt = buildSystemPrompt(boardAgent);
     let finalReply = "";
     let externalAgentId = session.external_agent_id;
 
-    if (runtime === "pi" || runtime === "opencode") {
+    if (useOpenAiCompatible) {
+      if (!baseUrl?.trim()) {
+        throw new Error(
+          "OpenAI-compatible chat requires agent LLM base_url.",
+        );
+      }
       const history = await loadRecentMessages(session_id, auth);
+      const historyTurns = history
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-20);
+      console.log(
+        `[agent-sidecar] multi-turn openai-compatible session=${session_id} history=${historyTurns.length} model=${modelId}`,
+      );
+      send({
+        type: "status",
+        message: "running",
+        runtime,
+        transport: "openai-compatible",
+        history_turns: historyTurns.length,
+        cwd: effectiveCwd,
+        cwd_source: cwdSource,
+      });
       const messages: ChatMessage[] = [
         { role: "system", content: systemPrompt },
-        ...history
-          .filter((m) => m.role === "user" || m.role === "assistant")
-          .slice(-20)
-          .map((m) => ({
-            role: m.role as "user" | "assistant",
-            content: m.content,
-          })),
+        ...historyTurns.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
       ];
       // history already includes the just-persisted user message
 
@@ -564,6 +644,8 @@ app.post("/copilot/chat", async (req, res) => {
       }
     }
 
+    // Persist before `done` so the next turn's history load always includes
+    // this assistant reply (UI unblocks only after done).
     await persistMessage(session_id, "assistant", finalReply, auth);
     send({
       type: "done",
@@ -636,6 +718,47 @@ app.post("/models", async (req, res) => {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[agent-sidecar] /models error:", message);
     res.status(500).json({ error: message });
+  }
+});
+
+// 全局指挥台模型配置（按 project_id，服务端存储，多端共享）。
+// GET 只回 has_api_key，不回传 key；PUT 合并保存（空串清除）。
+app.get("/copilot/config/:projectId", async (req, res) => {
+  try {
+    await ensureProjectAccess(req.params.projectId, authHeader(req));
+    const cfg = await getCopilotConfig(req.params.projectId);
+    res.json({
+      base_url: cfg?.base_url ?? null,
+      model: cfg?.model ?? null,
+      has_api_key: !!cfg?.api_key,
+    });
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
+  }
+});
+
+app.put("/copilot/config/:projectId", async (req, res) => {
+  try {
+    await ensureProjectAccess(req.params.projectId, authHeader(req));
+    const { base_url, api_key, model } = (req.body ?? {}) as {
+      base_url?: string;
+      api_key?: string;
+      model?: string;
+    };
+    const saved = await upsertCopilotConfig(req.params.projectId, {
+      base_url,
+      api_key,
+      model,
+    });
+    res.json({
+      base_url: saved.base_url ?? null,
+      model: saved.model ?? null,
+      has_api_key: !!saved.api_key,
+    });
+  } catch (err) {
+    const status = (err as { statusCode?: number }).statusCode ?? 500;
+    res.status(status).json({ error: (err as Error).message });
   }
 });
 

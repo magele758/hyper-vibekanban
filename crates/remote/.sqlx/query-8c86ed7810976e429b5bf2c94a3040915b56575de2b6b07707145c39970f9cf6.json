@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE agents\n            SET\n                name = COALESCE($1, name),\n                instructions = COALESCE($2, instructions),\n                default_executor = CASE\n                    WHEN $3 THEN NULL\n                    WHEN $4::text IS NOT NULL THEN $4\n                    ELSE default_executor\n                END,\n                max_concurrent_tasks = COALESCE($5, max_concurrent_tasks),\n                status = COALESCE($6, status),\n                chat_runtime = COALESCE($7, chat_runtime),\n                updated_at = NOW()\n            WHERE id = $8\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
+  "query": "\n            INSERT INTO agents (\n                id, project_id, name, instructions, default_executor,\n                max_concurrent_tasks, chat_runtime, reviewer_agent_id, created_by_user_id\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            RETURNING\n                id                      AS \"id!: Uuid\",\n                project_id              AS \"project_id!: Uuid\",\n                name                    AS \"name!\",\n                instructions            AS \"instructions!\",\n                default_executor,\n                max_concurrent_tasks    AS \"max_concurrent_tasks!\",\n                status                  AS \"status!: AgentStatus\",\n                chat_runtime            AS \"chat_runtime!: AgentChatRuntime\",\n                reviewer_agent_id,\n                created_by_user_id,\n                created_at              AS \"created_at!: DateTime<Utc>\",\n                updated_at              AS \"updated_at!: DateTime<Utc>\"\n            ",
   "describe": {
     "columns": [
       {
@@ -68,40 +68,33 @@
       },
       {
         "ordinal": 8,
-        "name": "created_by_user_id",
+        "name": "reviewer_agent_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 9,
+        "name": "created_by_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
         "name": "created_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "updated_at!: DateTime<Utc>",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
+        "Uuid",
         "Text",
         "Text",
-        "Bool",
         "Text",
         "Int4",
-        {
-          "Custom": {
-            "name": "agent_status",
-            "kind": {
-              "Enum": [
-                "idle",
-                "working",
-                "offline",
-                "error"
-              ]
-            }
-          }
-        },
         {
           "Custom": {
             "name": "agent_chat_runtime",
@@ -114,6 +107,7 @@
             }
           }
         },
+        "Uuid",
         "Uuid"
       ]
     },
@@ -127,9 +121,10 @@
       false,
       false,
       true,
+      true,
       false,
       false
     ]
   },
-  "hash": "66cf36eb848b5a4292c36049416ee4b389a01fb90979be4d48c167900753aac3"
+  "hash": "8c86ed7810976e429b5bf2c94a3040915b56575de2b6b07707145c39970f9cf6"
 }

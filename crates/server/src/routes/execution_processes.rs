@@ -7,12 +7,16 @@ use axum::{
     routing::{get, post},
 };
 use db::models::{
+    coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessStatus},
     execution_process_repo_state::ExecutionProcessRepoState,
 };
 use deployment::Deployment;
+use executors::logs::{
+    NormalizedEntry, NormalizedEntryType, utils::patch::extract_normalized_entry_from_patch,
+};
 use futures_util::{StreamExt, TryStreamExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use services::services::container::ContainerService;
 use utils::{log_msg::LogMsg, response::ApiResponse};
 use uuid::Uuid;
@@ -39,6 +43,111 @@ async fn get_execution_process_by_id(
     State(_deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<ExecutionProcess>>, ApiError> {
     Ok(ResponseJson(ApiResponse::success(execution_process)))
+}
+
+/// Max normalized entries returned by a single `/normalized-logs` call.
+const NORMALIZED_LOGS_MAX_LIMIT: usize = 500;
+
+#[derive(Debug, Deserialize)]
+struct NormalizedLogsQuery {
+    /// Skip this many entries from the start (for paging through long runs).
+    #[serde(default)]
+    offset: Option<usize>,
+    /// Max entries to return (capped at `NORMALIZED_LOGS_MAX_LIMIT`).
+    #[serde(default)]
+    limit: Option<usize>,
+    /// When true, drop `thinking`/`loading` noise. Defaults to true.
+    #[serde(default)]
+    skip_noise: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct NormalizedLogsResponse {
+    execution_id: Uuid,
+    /// Total entries available after filtering, before offset/limit.
+    total_count: usize,
+    /// Offset applied to this page.
+    offset: usize,
+    /// True when more entries remain after this page.
+    has_more: bool,
+    /// Final assistant message persisted for this turn, when available.
+    final_message: Option<String>,
+    entries: Vec<NormalizedEntry>,
+}
+
+fn is_noise_entry(entry: &NormalizedEntry) -> bool {
+    matches!(
+        entry.entry_type,
+        NormalizedEntryType::Thinking | NormalizedEntryType::Loading
+    )
+}
+
+/// Collect normalized log entries for a finished (or running) execution over plain
+/// HTTP. The WS variant is for live UI streaming; this is for programmatic
+/// post-hoc review (e.g. an orchestrator agent inspecting another agent's run).
+async fn get_normalized_logs(
+    Extension(execution_process): Extension<ExecutionProcess>,
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<NormalizedLogsQuery>,
+) -> Result<ResponseJson<ApiResponse<NormalizedLogsResponse>>, ApiError> {
+    let exec_id = execution_process.id;
+    let skip_noise = query.skip_noise.unwrap_or(true);
+    let offset = query.offset.unwrap_or(0);
+    let limit = query
+        .limit
+        .unwrap_or(NORMALIZED_LOGS_MAX_LIMIT)
+        .min(NORMALIZED_LOGS_MAX_LIMIT);
+
+    // Entries are keyed by index in the patch stream; later patches for the same
+    // index replace earlier ones (e.g. a tool_use transitioning to success).
+    let mut by_index: std::collections::BTreeMap<usize, NormalizedEntry> = Default::default();
+    if let Some(stream) = deployment
+        .container()
+        .stream_normalized_logs(&exec_id)
+        .await
+    {
+        let mut stream = std::pin::pin!(stream);
+        while let Some(Ok(msg)) = stream.next().await {
+            match msg {
+                LogMsg::Finished => break,
+                LogMsg::JsonPatch(patch) => {
+                    if let Some((index, entry)) = extract_normalized_entry_from_patch(&patch) {
+                        by_index.insert(index, entry);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let filtered = by_index
+        .into_values()
+        .filter(|entry| !(skip_noise && is_noise_entry(entry)))
+        .collect::<Vec<_>>();
+
+    let total_count = filtered.len();
+    let entries = filtered
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect::<Vec<_>>();
+    let has_more = offset.saturating_add(entries.len()) < total_count;
+
+    let final_message =
+        CodingAgentTurn::find_by_execution_process_id(&deployment.db().pool, exec_id)
+            .await
+            .ok()
+            .flatten()
+            .and_then(|turn| turn.summary);
+
+    Ok(ResponseJson(ApiResponse::success(NormalizedLogsResponse {
+        execution_id: exec_id,
+        total_count,
+        offset,
+        has_more,
+        final_message,
+        entries,
+    })))
 }
 
 async fn stream_raw_logs_ws(
@@ -289,6 +398,7 @@ pub(super) fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/stop", post(stop_execution_process))
         .route("/repo-states", get(get_execution_process_repo_states))
         .route("/raw-logs/ws", get(stream_raw_logs_ws))
+        .route("/normalized-logs", get(get_normalized_logs))
         .route("/normalized-logs/ws", get(stream_normalized_logs_ws))
         .layer(from_fn_with_state(
             deployment.clone(),
@@ -303,4 +413,47 @@ pub(super) fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .nest("/{id}", workspace_id_router);
 
     Router::new().nest("/execution-processes", workspaces_router)
+}
+
+#[cfg(test)]
+mod tests {
+    use executors::logs::{
+        ActionType, NormalizedEntry, NormalizedEntryError, NormalizedEntryType, ToolStatus,
+    };
+
+    use super::is_noise_entry;
+
+    fn entry(entry_type: NormalizedEntryType) -> NormalizedEntry {
+        NormalizedEntry {
+            timestamp: None,
+            entry_type,
+            content: "x".to_string(),
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn noise_filter_drops_thinking_and_loading() {
+        assert!(is_noise_entry(&entry(NormalizedEntryType::Thinking)));
+        assert!(is_noise_entry(&entry(NormalizedEntryType::Loading)));
+    }
+
+    #[test]
+    fn noise_filter_keeps_entries_a_reviewer_needs() {
+        // A reviewing agent must still see the outcome, the tool calls, and errors.
+        assert!(!is_noise_entry(&entry(
+            NormalizedEntryType::AssistantMessage
+        )));
+        assert!(!is_noise_entry(&entry(NormalizedEntryType::ErrorMessage {
+            error_type: NormalizedEntryError::Other,
+        })));
+        assert!(!is_noise_entry(&entry(NormalizedEntryType::ToolUse {
+            tool_name: "edit".to_string(),
+            action_type: ActionType::FileEdit {
+                path: "src/main.rs".to_string(),
+                changes: vec![],
+            },
+            status: ToolStatus::Success,
+        })));
+    }
 }

@@ -28,6 +28,8 @@ pub enum AgentTaskTrigger {
     Copilot,
     Autopilot,
     Feishu,
+    /// Automatic follow-up review of another agent's completed task.
+    Review,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -59,6 +61,11 @@ pub struct AgentTask {
     pub preferred_repo_id: Option<String>,
     /// Optional per-step prompt (squad pipeline role/prompt/handoff).
     pub execution_prompt: Option<String>,
+    /// Human-readable note about which coding agent actually ran, recorded when
+    /// the requested executor was unavailable and the host fell back.
+    pub executor_note: Option<String>,
+    /// For review tasks: the agent_task whose work is being reviewed.
+    pub reviews_task_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -125,6 +132,14 @@ pub struct UpdateAgentTaskRequest {
         skip_serializing_if = "Option::is_none"
     )]
     pub attempt: Option<i32>,
+    /// Set by the executing host when the requested coding agent was
+    /// unavailable and it fell back to a different one.
+    #[serde(
+        default,
+        deserialize_with = "some_if_present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub executor_note: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

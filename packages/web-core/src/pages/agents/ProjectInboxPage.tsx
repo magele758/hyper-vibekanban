@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useParams } from '@tanstack/react-router';
-import { TrayIcon, CheckIcon, ArchiveIcon } from '@phosphor-icons/react';
+import {
+  TrayIcon,
+  CheckIcon,
+  ArchiveIcon,
+  CheckCircle,
+  XCircle,
+  Warning,
+  Info,
+} from '@phosphor-icons/react';
 import { OrgProvider } from '@/shared/providers/remote/OrgProvider';
 import { ProjectProvider } from '@/shared/providers/remote/ProjectProvider';
 import { UserProvider } from '@/shared/providers/remote/UserProvider';
@@ -10,6 +18,48 @@ import { useUserContext } from '@/shared/hooks/useUserContext';
 import { LoginRequiredPrompt } from '@/shared/dialogs/shared/LoginRequiredPrompt';
 import { boardAgentsApi } from '@/shared/lib/boardAgentsApi';
 import { cn } from '@/shared/lib/utils';
+import type { InboxItem } from 'shared/remote-types';
+
+type SeverityLevel = 'normal' | 'success' | 'needs-approval' | 'error';
+
+function classifySeverity(item: InboxItem): SeverityLevel {
+  if (item.type === 'workflow_approval') {
+    return 'needs-approval';
+  }
+  if (item.type === 'agent_task') {
+    const payload = item.payload as { status?: string } | null;
+    const status = payload?.status;
+    if (status === 'completed') return 'success';
+    if (status === 'failed') return 'error';
+  }
+  return 'normal';
+}
+
+const severityConfig: Record<
+  SeverityLevel,
+  { border: string; Icon: typeof Info; iconColor: string }
+> = {
+  normal: {
+    border: 'border-l-4 border-l-border',
+    Icon: Info,
+    iconColor: 'text-low',
+  },
+  success: {
+    border: 'border-l-4 border-l-green-500',
+    Icon: CheckCircle,
+    iconColor: 'text-green-600',
+  },
+  'needs-approval': {
+    border: 'border-l-4 border-l-yellow-500',
+    Icon: Warning,
+    iconColor: 'text-yellow-600',
+  },
+  error: {
+    border: 'border-l-4 border-l-red-500',
+    Icon: XCircle,
+    iconColor: 'text-red-600',
+  },
+};
 
 function InboxInner({ projectId }: { projectId: string }) {
   const { inboxItems, isLoading, error: syncError, retry } = useUserContext();
@@ -130,15 +180,19 @@ function InboxInner({ projectId }: { projectId: string }) {
               const isUnread = !item.read_at;
               const isArchived = Boolean(item.archived_at);
               const busy = pending.has(item.id);
+              const severity = classifySeverity(item);
+              const { border, Icon, iconColor } = severityConfig[severity];
               return (
                 <li
                   key={item.id}
                   className={cn(
                     'group flex items-start gap-3 rounded-lg border border-border p-3',
+                    border,
                     isUnread ? 'bg-brand/5' : 'bg-secondary/40',
                     isArchived && 'opacity-60'
                   )}
                 >
+                  <Icon className={cn('mt-0.5 size-4 shrink-0', iconColor)} />
                   <div className="min-w-0 flex-1">
                     <p
                       className={cn(
@@ -153,6 +207,80 @@ function InboxInner({ projectId }: { projectId: string }) {
                         {item.body}
                       </p>
                     )}
+                    {item.type === 'workflow_approval' &&
+                      (() => {
+                        const payload = item.payload as {
+                          squad_run_id?: string;
+                        } | null;
+                        const runId = payload?.squad_run_id;
+                        if (!runId) return null;
+                        return (
+                          <div className="mt-2 flex gap-2">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className="rounded-md border border-brand bg-brand/10 px-2 py-1 text-xs text-brand disabled:opacity-50"
+                              onClick={() => {
+                                void (async () => {
+                                  setPending((prev) =>
+                                    new Set(prev).add(item.id)
+                                  );
+                                  try {
+                                    await boardAgentsApi.approveSquadRun(
+                                      runId,
+                                      { decision: 'approve' }
+                                    );
+                                    await boardAgentsApi.markInboxRead(item.id);
+                                  } catch (e) {
+                                    setError(
+                                      e instanceof Error ? e.message : String(e)
+                                    );
+                                  } finally {
+                                    setPending((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(item.id);
+                                      return next;
+                                    });
+                                  }
+                                })();
+                              }}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              className="rounded-md border border-border px-2 py-1 text-xs text-low disabled:opacity-50"
+                              onClick={() => {
+                                void (async () => {
+                                  setPending((prev) =>
+                                    new Set(prev).add(item.id)
+                                  );
+                                  try {
+                                    await boardAgentsApi.approveSquadRun(
+                                      runId,
+                                      { decision: 'reject' }
+                                    );
+                                    await boardAgentsApi.markInboxRead(item.id);
+                                  } catch (e) {
+                                    setError(
+                                      e instanceof Error ? e.message : String(e)
+                                    );
+                                  } finally {
+                                    setPending((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(item.id);
+                                      return next;
+                                    });
+                                  }
+                                })();
+                              }}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        );
+                      })()}
                     <p className="mt-1 text-[11px] text-low">
                       {new Date(item.created_at).toLocaleString()}
                     </p>

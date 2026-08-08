@@ -61,6 +61,7 @@ export type SquadEditorDraft = {
   issue_id: string | null;
   working_directory: string | null;
   pipeline: SquadPipeline;
+  on_assign: import('shared/remote-types').SquadOnAssign;
 };
 
 export function squadToDraft(squad: Squad): SquadEditorDraft {
@@ -71,6 +72,7 @@ export function squadToDraft(squad: Squad): SquadEditorDraft {
     issue_id: squad.issue_id,
     working_directory: squad.working_directory,
     pipeline: squad.pipeline ?? emptyPipeline(),
+    on_assign: squad.on_assign ?? 'leader_only',
   };
 }
 
@@ -81,6 +83,9 @@ type Props = {
   onChange: (draft: SquadEditorDraft) => void;
   onSave: () => void;
   onRun?: () => void;
+  /// Selected pipeline entry node ('' = topological roots).
+  startFromNodeId?: string;
+  onStartFromChange?: (nodeId: string) => void;
   onCancel: () => void;
   busy?: boolean;
   running?: boolean;
@@ -96,6 +101,8 @@ export function SquadPipelineEditor({
   onChange,
   onSave,
   onRun,
+  startFromNodeId,
+  onStartFromChange,
   onCancel,
   busy,
   running,
@@ -292,6 +299,23 @@ export function SquadPipelineEditor({
         <p className="text-xs text-low">
           {TARGET_OPTIONS.find((o) => o.value === draft.target_type)?.hint}
         </p>
+
+        <label className="block text-xs text-low">
+          指派时行为（on_assign）
+          <select
+            className="mt-1 w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
+            value={draft.on_assign}
+            onChange={(e) =>
+              onChange({
+                ...draft,
+                on_assign: e.target.value as SquadEditorDraft['on_assign'],
+              })
+            }
+          >
+            <option value="leader_only">仅 Leader（默认，兼容纯 Issue）</option>
+            <option value="full_pipeline">跑全 Pipeline</option>
+          </select>
+        </label>
 
         {usesIssue && (
           <label className="block text-xs text-low">
@@ -604,19 +628,40 @@ export function SquadPipelineEditor({
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <PrimaryButton disabled={busy || !draft.name.trim()} onClick={onSave}>
           {busy ? '保存中…' : saveLabel}
         </PrimaryButton>
         {onRun && (
-          <button
-            type="button"
-            disabled={running || busy}
-            className="rounded-md border border-brand px-3 py-1.5 text-sm text-brand hover:bg-brand/10 disabled:opacity-50"
-            onClick={onRun}
-          >
-            {running ? '运行中…' : '运行一次'}
-          </button>
+          <>
+            <label className="flex items-center gap-1.5 text-xs text-low">
+              起点
+              <select
+                aria-label="流水线起点"
+                className="rounded-md border border-border bg-secondary px-2 py-1 text-xs text-normal"
+                value={startFromNodeId ?? ''}
+                disabled={running || busy}
+                onChange={(e) => onStartFromChange?.(e.target.value)}
+              >
+                <option value="">从头（拓扑根）</option>
+                {draft.pipeline.nodes.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.entry_label?.trim() ||
+                      n.label?.trim() ||
+                      `${n.type ?? 'agent'}:${n.id.slice(0, 8)}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={running || busy}
+              className="rounded-md border border-brand px-3 py-1.5 text-sm text-brand hover:bg-brand/10 disabled:opacity-50"
+              onClick={onRun}
+            >
+              {running ? '启动中…' : '运行一次'}
+            </button>
+          </>
         )}
         <button
           type="button"
@@ -816,6 +861,109 @@ function NodeDetailForm({
             />
           </label>
         </>
+      )}
+
+      {kind === 'wait_approval' && (
+        <>
+          <label className="block text-xs text-low">
+            门禁种类 approval_kind
+            <input
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              placeholder="merge / scheme / design…"
+              value={node.approval_kind ?? ''}
+              onChange={(e) =>
+                onChange({
+                  approval_kind: e.target.value || undefined,
+                })
+              }
+            />
+          </label>
+          <label className="block text-xs text-low">
+            询问文案
+            <textarea
+              className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+              rows={3}
+              placeholder="Ask Merge：是否合并到 main？"
+              value={node.prompt_template ?? node.prompt ?? ''}
+              onChange={(e) =>
+                onChange({
+                  prompt_template: e.target.value || undefined,
+                })
+              }
+            />
+          </label>
+        </>
+      )}
+
+      {(kind === 'script' || kind === 'git_op') && (
+        <label className="block text-xs text-low">
+          {kind === 'script' ? '命令 command' : '操作 git_op'}
+          <input
+            className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+            placeholder={
+              kind === 'script'
+                ? 'pnpm run check'
+                : 'rebase | create_pr | merge'
+            }
+            value={
+              kind === 'script' ? (node.command ?? '') : (node.git_op ?? '')
+            }
+            onChange={(e) =>
+              onChange(
+                kind === 'script'
+                  ? { command: e.target.value || undefined }
+                  : { git_op: e.target.value || undefined }
+              )
+            }
+          />
+        </label>
+      )}
+
+      <label className="block text-xs text-low">
+        快捷入口名 entry_label（Issue「从…开始」）
+        <input
+          className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+          placeholder="例如：测试验证 / Ask Merge"
+          value={node.entry_label ?? ''}
+          onChange={(e) =>
+            onChange({
+              entry_label: e.target.value || undefined,
+            })
+          }
+        />
+      </label>
+
+      <label className="block text-xs text-low">
+        本步仓库 working_directory（跨项目协作用；留空=沿用 Squad 设置）
+        <input
+          className="mt-1 w-full rounded-md border border-border bg-secondary px-2 py-1.5 text-sm"
+          placeholder="/abs/path/to/other-repo 或 repo UUID"
+          value={node.working_directory ?? ''}
+          onChange={(e) =>
+            onChange({
+              working_directory: e.target.value || undefined,
+            })
+          }
+        />
+      </label>
+
+      {kind === 'agent' && (
+        <label className="flex items-start gap-2 text-xs text-low">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={node.handoff_diff ?? false}
+            onChange={(e) =>
+              onChange({ handoff_diff: e.target.checked || undefined })
+            }
+          />
+          <span>
+            把本步 diff 传给下一步
+            <span className="block text-[11px] text-low">
+              下游 reviewer 看真实代码，而不是只看总结文字。
+            </span>
+          </span>
+        </label>
       )}
 
       {kind === 'break' && (

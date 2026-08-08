@@ -129,6 +129,83 @@ struct GetExecutionRequest {
     execution_id: Uuid,
 }
 
+/// Upper bound for `wait_for_execution` so a stuck run cannot hang the caller
+/// indefinitely.
+const WAIT_MAX_TIMEOUT_SECS: u64 = 1800;
+const WAIT_DEFAULT_TIMEOUT_SECS: u64 = 300;
+const WAIT_POLL_INTERVAL_SECS: u64 = 3;
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct WaitForExecutionRequest {
+    #[schemars(description = "Execution ID to wait for")]
+    execution_id: Uuid,
+    #[schemars(
+        description = "Max seconds to wait before giving up (default 300, max 1800). On timeout the execution keeps running."
+    )]
+    timeout_secs: Option<u64>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct WaitForExecutionResponse {
+    execution_id: String,
+    session_id: String,
+    status: String,
+    #[schemars(
+        description = "True when the execution reached a terminal state before the timeout"
+    )]
+    is_finished: bool,
+    #[schemars(description = "True when the wait returned because the timeout elapsed")]
+    timed_out: bool,
+    #[schemars(description = "Seconds spent waiting")]
+    waited_secs: u64,
+    #[schemars(description = "Process exit code when finished")]
+    exit_code: Option<i64>,
+    #[schemars(description = "Final assistant message/summary when execution has finished")]
+    final_message: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct GetExecutionLogsRequest {
+    #[schemars(description = "Execution ID to read normalized logs for")]
+    execution_id: Uuid,
+    #[schemars(description = "Skip this many entries from the start (default 0)")]
+    offset: Option<usize>,
+    #[schemars(description = "Max entries to return (default 200, capped at 500)")]
+    limit: Option<usize>,
+    #[schemars(
+        description = "Drop thinking/loading noise entries. Defaults to true; set false for a verbatim trace."
+    )]
+    skip_noise: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NormalizedLogsApiResponse {
+    total_count: usize,
+    offset: usize,
+    has_more: bool,
+    final_message: Option<String>,
+    entries: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct GetExecutionLogsResponse {
+    execution_id: String,
+    session_id: String,
+    status: String,
+    is_finished: bool,
+    #[schemars(description = "Total entries available after filtering, before offset/limit")]
+    total_count: usize,
+    offset: usize,
+    #[schemars(description = "True when more entries remain after this page")]
+    has_more: bool,
+    #[schemars(description = "Final assistant message/summary when execution has finished")]
+    final_message: Option<String>,
+    #[schemars(
+        description = "Normalized log entries: assistant messages, tool calls with status, and errors"
+    )]
+    entries: Vec<serde_json::Value>,
+}
+
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 struct GetExecutionResponse {
     execution_id: String,
@@ -345,18 +422,146 @@ impl McpServer {
             Err(error_result) => return Ok(Self::tool_error(error_result)),
         };
 
+        // Only meaningful once the turn finished; skip the extra call while running.
+        let final_message = if is_finished {
+            self.fetch_final_message(execution_process.id).await
+        } else {
+            None
+        };
+
         Self::success(&GetExecutionResponse {
             execution_id: execution_process.id.to_string(),
             session_id: execution_process.session_id.to_string(),
             status: Self::execution_process_status_label(&execution_process.status).to_string(),
             is_finished,
             execution: execution_process_value,
-            final_message: None,
+            final_message,
+        })
+    }
+
+    #[tool(
+        description = "Block until an execution reaches a terminal state, then return its status and final message. Prefer this over polling get_execution."
+    )]
+    async fn wait_for_execution(
+        &self,
+        Parameters(WaitForExecutionRequest {
+            execution_id,
+            timeout_secs,
+        }): Parameters<WaitForExecutionRequest>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let timeout = timeout_secs
+            .unwrap_or(WAIT_DEFAULT_TIMEOUT_SECS)
+            .min(WAIT_MAX_TIMEOUT_SECS);
+        let started = std::time::Instant::now();
+
+        loop {
+            let execution_process = match self.fetch_scoped_execution(execution_id).await {
+                Ok(value) => value,
+                Err(error_result) => return Ok(Self::tool_error(error_result)),
+            };
+
+            let is_finished = execution_process.status != ExecutionProcessStatus::Running;
+            let waited_secs = started.elapsed().as_secs();
+
+            if is_finished || waited_secs >= timeout {
+                let final_message = if is_finished {
+                    self.fetch_final_message(execution_id).await
+                } else {
+                    None
+                };
+
+                return Self::success(&WaitForExecutionResponse {
+                    execution_id: execution_id.to_string(),
+                    session_id: execution_process.session_id.to_string(),
+                    status: Self::execution_process_status_label(&execution_process.status)
+                        .to_string(),
+                    is_finished,
+                    timed_out: !is_finished,
+                    waited_secs,
+                    exit_code: execution_process.exit_code,
+                    final_message,
+                });
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(WAIT_POLL_INTERVAL_SECS)).await;
+        }
+    }
+
+    #[tool(
+        description = "Read normalized log entries for an execution: assistant messages, tool calls with status, and errors. Use to review what another agent actually did."
+    )]
+    async fn get_execution_logs(
+        &self,
+        Parameters(GetExecutionLogsRequest {
+            execution_id,
+            offset,
+            limit,
+            skip_noise,
+        }): Parameters<GetExecutionLogsRequest>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let execution_process = match self.fetch_scoped_execution(execution_id).await {
+            Ok(value) => value,
+            Err(error_result) => return Ok(Self::tool_error(error_result)),
+        };
+
+        let mut params = vec![
+            format!("offset={}", offset.unwrap_or(0)),
+            format!("limit={}", limit.unwrap_or(200)),
+        ];
+        if let Some(skip_noise) = skip_noise {
+            params.push(format!("skip_noise={skip_noise}"));
+        }
+        let url = self.url(&format!(
+            "/api/execution-processes/{execution_id}/normalized-logs?{}",
+            params.join("&")
+        ));
+        let logs: NormalizedLogsApiResponse = match self.send_json(self.client.get(&url)).await {
+            Ok(value) => value,
+            Err(error_result) => return Ok(Self::tool_error(error_result)),
+        };
+
+        Self::success(&GetExecutionLogsResponse {
+            execution_id: execution_id.to_string(),
+            session_id: execution_process.session_id.to_string(),
+            status: Self::execution_process_status_label(&execution_process.status).to_string(),
+            is_finished: execution_process.status != ExecutionProcessStatus::Running,
+            total_count: logs.total_count,
+            offset: logs.offset,
+            has_more: logs.has_more,
+            final_message: logs.final_message,
+            entries: logs.entries,
         })
     }
 }
 
 impl McpServer {
+    /// Fetch an execution process and verify it belongs to a workspace this MCP
+    /// server is allowed to see.
+    async fn fetch_scoped_execution(
+        &self,
+        execution_id: Uuid,
+    ) -> Result<ExecutionProcess, super::ToolError> {
+        let process_url = self.url(&format!("/api/execution-processes/{execution_id}"));
+        let execution_process: ExecutionProcess =
+            self.send_json(self.client.get(&process_url)).await?;
+
+        let session_url = self.url(&format!("/api/sessions/{}", execution_process.session_id));
+        let session: Session = self.send_json(self.client.get(&session_url)).await?;
+        self.scope_allows_workspace(session.workspace_id)?;
+
+        Ok(execution_process)
+    }
+
+    /// Read the persisted final assistant message for a finished execution.
+    /// Returns `None` when unavailable rather than failing the tool call.
+    async fn fetch_final_message(&self, execution_id: Uuid) -> Option<String> {
+        let url = self.url(&format!(
+            "/api/execution-processes/{execution_id}/normalized-logs?limit=1"
+        ));
+        let logs: NormalizedLogsApiResponse = self.send_json(self.client.get(&url)).await.ok()?;
+        logs.final_message
+    }
+
     fn executor_config_payload_for_session(
         session: &Session,
     ) -> Result<ExecutorConfigPayload, super::ToolError> {

@@ -26,6 +26,7 @@ import { getLatestConfigFromProcesses } from '@/shared/lib/executor';
 import { useExecutorConfig } from '@/shared/hooks/useExecutorConfig';
 import { useSessionMessageEditor } from '../model/hooks/useSessionMessageEditor';
 import { useSessionQueueInteraction } from '../model/hooks/useSessionQueueInteraction';
+import { SessionQueuePanel } from './SessionQueuePanel';
 import { useSessionSend } from '../model/hooks/useSessionSend';
 import { useSessionAttachments } from '../model/hooks/useSessionAttachments';
 import { useMessageEditRetry } from '../model/hooks/useMessageEditRetry';
@@ -73,7 +74,6 @@ function computeExecutionStatus(params: {
   isStopping: boolean;
   isQueueLoading: boolean;
   isSendingFollowUp: boolean;
-  isQueued: boolean;
   isAttemptRunning: boolean;
 }): ExecutionStatus {
   if (params.isInFeedbackMode) return 'feedback';
@@ -81,7 +81,6 @@ function computeExecutionStatus(params: {
   if (params.isStopping) return 'stopping';
   if (params.isQueueLoading) return 'queue-loading';
   if (params.isSendingFollowUp) return 'sending';
-  if (params.isQueued) return 'queued';
   if (params.isAttemptRunning) return 'running';
   return 'idle';
 }
@@ -475,12 +474,14 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
 
   // Queue interaction
   const {
+    messages: queuedMessages,
     isQueued,
-    queuedMessage,
-    queuedConfig,
     isQueueLoading,
     queueMessage,
-    cancelQueue,
+    clearQueue,
+    removeMessage,
+    updateMessage,
+    reorderMessages,
     refreshQueueStatus,
   } = useSessionQueueInteraction({ sessionId });
 
@@ -583,7 +584,6 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
   // Editor change handler
   const handleEditorChange = useCallback(
     (value: string) => {
-      if (isQueued) cancelQueue();
       if (executorConfig) {
         handleMessageChange(value, executorConfig);
       } else {
@@ -592,8 +592,6 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
       if (sendError) clearError();
     },
     [
-      isQueued,
-      cancelQueue,
       handleMessageChange,
       executorConfig,
       sendError,
@@ -626,22 +624,10 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
     feedbackContext?.exitFeedbackMode();
   }, [feedbackContext]);
 
-  // Handle cancel queue - restore message to editor
+  // Clear entire follow-up queue
   const handleCancelQueue = useCallback(async () => {
-    if (queuedMessage) {
-      setLocalMessage(queuedMessage);
-    }
-    if (queuedConfig) {
-      setExecutorOverrides(queuedConfig);
-    }
-    await cancelQueue();
-  }, [
-    queuedMessage,
-    queuedConfig,
-    setLocalMessage,
-    setExecutorOverrides,
-    cancelQueue,
-  ]);
+    await clearQueue();
+  }, [clearQueue]);
 
   // Message edit retry mutation
   const editRetryMutation = useMessageEditRetry(sessionId ?? '', () => {
@@ -653,7 +639,6 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
 
   const areAttachmentInputsDisabled =
     mode === 'placeholder' ||
-    isQueued ||
     isSending ||
     isStopping ||
     !!feedbackContext?.isSubmitting ||
@@ -883,23 +868,14 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
     isStopping,
     isQueueLoading,
     isSendingFollowUp: isSending,
-    isQueued,
     isAttemptRunning,
   });
 
   // During loading, render with empty editor to preserve container UI
-  // In approval mode, don't show queued message - it's for follow-up, not approval response
   const editorValue = useMemo(() => {
     if (isScratchLoading || !hasInitialValue) return '';
-    if (pendingApproval) return localMessage;
-    return queuedMessage ?? localMessage;
-  }, [
-    isScratchLoading,
-    hasInitialValue,
-    pendingApproval,
-    queuedMessage,
-    localMessage,
-  ]);
+    return localMessage;
+  }, [isScratchLoading, hasInitialValue, localMessage]);
 
   const renderEditor = useCallback(
     ({
@@ -1125,6 +1101,18 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
       localAttachments={localAttachments}
       dropzone={{ getRootProps, getInputProps, isDragActive }}
       modelSelector={modelSelectorNode}
+      queuePanel={
+        isQueued ? (
+          <SessionQueuePanel
+            messages={queuedMessages}
+            onRemove={removeMessage}
+            onUpdate={updateMessage}
+            onReorder={reorderMessages}
+            onClear={clearQueue}
+            disabled={isQueueLoading || isSending || isStopping}
+          />
+        ) : undefined
+      }
     />
   );
 }

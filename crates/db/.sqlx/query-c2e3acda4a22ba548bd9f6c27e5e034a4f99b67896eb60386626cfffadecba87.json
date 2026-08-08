@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE session_queued_messages\n               SET message = $1, executor_config = $2\n               WHERE id = $3\n               RETURNING id AS \"id!: Uuid\",\n                         session_id AS \"session_id!: Uuid\",\n                         position AS \"position!: i64\",\n                         message,\n                         executor_config,\n                         queued_at AS \"queued_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "position!: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "message",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "executor_config",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "queued_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c2e3acda4a22ba548bd9f6c27e5e034a4f99b67896eb60386626cfffadecba87"
+}

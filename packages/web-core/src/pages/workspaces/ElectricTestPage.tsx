@@ -625,8 +625,15 @@ function AssigneesList({ projectId }: { projectId: string }) {
           },
           {
             key: 'user_id',
-            label: 'User ID',
-            render: (a) => truncateId(a.user_id),
+            label: 'Assignee',
+            render: (a) =>
+              a.user_id
+                ? `user:${truncateId(a.user_id)}`
+                : a.agent_id
+                  ? `agent:${truncateId(a.agent_id)}`
+                  : a.squad_id
+                    ? `squad:${truncateId(a.squad_id)}`
+                    : '—',
           },
           {
             key: 'assigned_at',

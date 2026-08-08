@@ -102,6 +102,8 @@ fn generate_types_content() -> String {
         server::routes::config::CheckEditorAvailabilityQuery::decl(),
         server::routes::config::CheckEditorAvailabilityResponse::decl(),
         server::routes::config::CheckAgentAvailabilityQuery::decl(),
+        server::routes::config::AvailableCodingAgent::decl(),
+        server::routes::config::ListAvailableAgentsResponse::decl(),
         server::routes::config::AgentPresetOptionsQuery::decl(),
         server::routes::oauth::CurrentUserResponse::decl(),
         relay_types::StartSpake2EnrollmentRequest::decl(),

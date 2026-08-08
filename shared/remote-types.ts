@@ -20,7 +20,12 @@ export type ProjectStatus = { id: string, project_id: string, name: string, colo
 
 export type Tag = { id: string, project_id: string, name: string, color: string, };
 
-export type Agent = { id: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks: number, status: AgentStatus, chat_runtime: AgentChatRuntime, created_by_user_id: string | null, created_at: string, updated_at: string, };
+export type Agent = { id: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks: number, status: AgentStatus, chat_runtime: AgentChatRuntime, 
+/**
+ * When set, a review task is enqueued for this agent after each of this
+ * agent's tasks completes successfully. Must not be self.
+ */
+reviewer_agent_id: string | null, created_by_user_id: string | null, created_at: string, updated_at: string, };
 
 export type AgentStatus = "idle" | "working" | "offline" | "error";
 
@@ -47,15 +52,33 @@ preferred_repo_id: string | null,
 /**
  * Optional per-step prompt (squad pipeline role/prompt/handoff).
  */
-execution_prompt: string | null, created_at: string, updated_at: string, };
+execution_prompt: string | null, 
+/**
+ * Human-readable note about which coding agent actually ran, recorded when
+ * the requested executor was unavailable and the host fell back.
+ */
+executor_note: string | null, 
+/**
+ * For review tasks: the agent_task whose work is being reviewed.
+ */
+reviews_task_id: string | null, created_at: string, updated_at: string, };
 
 export type AgentTaskStatus = "queued" | "dispatched" | "running" | "completed" | "failed" | "cancelled";
 
-export type AgentTaskTrigger = "assign" | "mention" | "manual" | "copilot" | "autopilot" | "feishu";
+export type AgentTaskTrigger = "assign" | "mention" | "manual" | "copilot" | "autopilot" | "feishu" | "review";
 
 export type ClaimAgentTaskResponse = { agent_task: AgentTask | null, };
 
 export type ListAgentsResponse = { agents: Array<Agent>, };
+
+export type ListOrgAgentsResponse = { agents: Array<OrgAgentEntry>, };
+
+export type OrgAgentEntry = { project_name: string, id: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks: number, status: AgentStatus, chat_runtime: AgentChatRuntime, 
+/**
+ * When set, a review task is enqueued for this agent after each of this
+ * agent's tasks completes successfully. Must not be self.
+ */
+reviewer_agent_id: string | null, created_by_user_id: string | null, created_at: string, updated_at: string, };
 
 export type ListAgentTasksResponse = { agent_tasks: Array<AgentTask>, };
 
@@ -89,11 +112,17 @@ issue_id: string | null,
 /**
  * When target includes Path — local codebase/workdir for agents.
  */
-working_directory: string | null, created_at: string, updated_at: string, };
+working_directory: string | null, 
+/**
+ * Assign behaviour: leader only (default) or start full pipeline.
+ */
+on_assign: SquadOnAssign, created_at: string, updated_at: string, };
 
 export type SquadMember = { id: string, squad_id: string, agent_id: string | null, user_id: string | null, created_at: string, };
 
 export type SquadTargetType = "issue" | "path" | "issue_and_path";
+
+export type SquadOnAssign = "leader_only" | "full_pipeline";
 
 export type SquadPipeline = { nodes: Array<SquadPipelineNode>, edges: Array<SquadPipelineEdge>, loop_config?: SquadLoopConfig, };
 
@@ -125,9 +154,47 @@ wait_for?: string,
 /**
  * For `join`: require N of M inbound branches (default = all inbound edges).
  */
-join_count?: number, };
+join_count?: number, 
+/**
+ * Short label for "run from this step" UI (e.g. 测试验证).
+ */
+entry_label?: string, 
+/**
+ * Optional Stage Protocol id this node advances to / represents.
+ */
+stage?: string, 
+/**
+ * `wait_approval` kind: scheme | design | merge | release | custom.
+ */
+approval_kind?: string, 
+/**
+ * Prompt shown in Inbox / Issue when waiting for approval.
+ */
+prompt_template?: string, 
+/**
+ * `script` command or script_key (Batch 2+).
+ */
+command?: string, 
+/**
+ * `git_op`: rebase | create_pr | merge | push (Batch 2+).
+ */
+git_op?: string, 
+/**
+ * Per-node repo / working directory override.
+ *
+ * Lets one Squad drive several repos (multi-project features): each node
+ * dispatches into its own workspace instead of the Squad-wide directory.
+ * Accepts a repo UUID or an absolute path, same as `Squad.working_directory`.
+ * Falls back to the Squad-level value when unset.
+ */
+working_directory?: string, 
+/**
+ * Attach the current diff of the node's workspace to the next step's
+ * handoff, so a reviewer agent sees real code instead of a summary.
+ */
+handoff_diff?: boolean, };
 
-export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "fork" | "join";
+export type SquadPipelineNodeType = "agent" | "if" | "while" | "break" | "wait" | "wait_approval" | "fork" | "join" | "script" | "git_op";
 
 export type SquadPipelineEdge = { id: string, source: string, target: string, 
 /**
@@ -145,9 +212,31 @@ export type ListSquadsResponse = { squads: Array<Squad>, };
 
 export type ListSquadMembersResponse = { members: Array<SquadMember>, };
 
-export type RunSquadResponse = { issue_id: string, agent_task_ids: Array<string>, ordered_node_ids: Array<string>, target_type: SquadTargetType, working_directory: string | null, };
+export type RunSquadResponse = { issue_id: string, agent_task_ids: Array<string>, ordered_node_ids: Array<string>, target_type: SquadTargetType, working_directory: string | null, run_id?: string, status?: SquadRunStatus, pause_node_id?: string, resume_node_id?: string, };
 
-export type RunSquadRequest = { issue_id?: string, working_directory?: string, };
+export type RunSquadRequest = { issue_id?: string, working_directory?: string, 
+/**
+ * Start walk at this node; upstream nodes are skipped.
+ */
+start_from_node_id?: string, 
+/**
+ * Resume an existing run after approval (optional).
+ */
+resume_run_id?: string, };
+
+export type SquadRun = { id: string, squad_id: string, issue_id: string, status: string, start_from_node_id: string | null, pause_node_id: string | null, resume_node_id: string | null, approval_kind: string | null, approval_prompt: string | null, working_directory: string | null, error_message: string | null, created_by_user_id: string | null, started_at: string, completed_at: string | null, created_at: string, updated_at: string, };
+
+export type SquadRunStatus = "queued" | "running" | "waiting_approval" | "completed" | "failed" | "cancelled";
+
+export type ApproveSquadRunRequest = { 
+/**
+ * approve | reject | comment
+ */
+decision: string, comment?: string, };
+
+export type ApproveSquadRunResponse = { run: SquadRun, resumed?: RunSquadResponse, };
+
+export type ListSquadRunsResponse = { runs: Array<SquadRun>, };
 
 export type InboxItem = { id: string, recipient_user_id: string, project_id: string | null, issue_id: string | null, type: string, title: string, body: string, payload: JsonValue, read_at: string | null, archived_at: string | null, created_at: string, };
 
@@ -280,6 +369,10 @@ export type UpdateTagRequest = { name: string | null, color: string | null, };
 
 export type CreateAgentRequest = { id?: string, project_id: string, name: string, instructions: string, default_executor: string | null, max_concurrent_tasks?: number, chat_runtime?: AgentChatRuntime, 
 /**
+ * Optional reviewer agent; reviews this agent's completed work.
+ */
+reviewer_agent_id?: string, 
+/**
  * Optional Cursor SDK credentials set at create time.
  */
 api_key?: string, base_url?: string, model_name?: string, 
@@ -288,19 +381,24 @@ api_key?: string, base_url?: string, model_name?: string,
  */
 working_directory?: string, };
 
-export type UpdateAgentRequest = { name: string | null, instructions: string | null, default_executor: string | null | null, max_concurrent_tasks: number | null, status: AgentStatus | null, chat_runtime: AgentChatRuntime | null, };
+export type UpdateAgentRequest = { name: string | null, instructions: string | null, default_executor: string | null | null, max_concurrent_tasks: number | null, status: AgentStatus | null, chat_runtime: AgentChatRuntime | null, reviewer_agent_id: string | null | null, };
 
 export type CreateAgentTaskRequest = { id?: string, agent_id: string, issue_id: string, trigger?: AgentTaskTrigger, priority?: number, force_fresh_session?: boolean, squad_id?: string, is_leader_task?: boolean, preferred_repo_id?: string, execution_prompt?: string, };
 
-export type UpdateAgentTaskRequest = { status?: AgentTaskStatus | null, failure_reason?: string | null | null, local_workspace_id?: string | null | null, local_session_id?: string | null | null, claimed_by_host?: string | null | null, attempt?: number | null, };
+export type UpdateAgentTaskRequest = { status?: AgentTaskStatus | null, failure_reason?: string | null | null, local_workspace_id?: string | null | null, local_session_id?: string | null | null, claimed_by_host?: string | null | null, attempt?: number | null, 
+/**
+ * Set by the executing host when the requested coding agent was
+ * unavailable and it fell back to a different one.
+ */
+executor_note?: string | null | null, };
 
 export type CreateAutopilotRequest = { id?: string, project_id: string, name: string, agent_id?: string, squad_id?: string, enabled?: boolean, execution_mode?: AutopilotExecutionMode, cron_expression?: string, timezone?: string, concurrency_policy?: AutopilotConcurrencyPolicy, issue_title_template?: string, issue_description_template?: string, };
 
 export type UpdateAutopilotRequest = { name: string | null, agent_id: string | null | null, squad_id: string | null | null, enabled: boolean | null, execution_mode: AutopilotExecutionMode | null, cron_expression: string | null, timezone: string | null, concurrency_policy: AutopilotConcurrencyPolicy | null, issue_title_template: string | null, issue_description_template: string | null, };
 
-export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string, pipeline?: SquadPipeline, target_type?: SquadTargetType, issue_id?: string, working_directory?: string, };
+export type CreateSquadRequest = { id?: string, project_id: string, name: string, leader_agent_id?: string, pipeline?: SquadPipeline, target_type?: SquadTargetType, issue_id?: string, working_directory?: string, on_assign?: SquadOnAssign, };
 
-export type UpdateSquadRequest = { name: string | null, leader_agent_id: string | null | null, pipeline: SquadPipeline | null, target_type: SquadTargetType | null, issue_id: string | null | null, working_directory: string | null | null, };
+export type UpdateSquadRequest = { name: string | null, leader_agent_id: string | null | null, pipeline: SquadPipeline | null, target_type: SquadTargetType | null, issue_id: string | null | null, working_directory: string | null | null, on_assign: SquadOnAssign | null, };
 
 export type CreateWebhookEndpointRequest = { id?: string, project_id: string, name: string, autopilot_id?: string, signing_secret?: string, };
 
