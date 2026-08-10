@@ -340,8 +340,11 @@ enum PiEvent {
         message: PiMessage,
     },
     MessageUpdate {
-        message: PiMessage,
+        // JSON mode strips `message` and emits only `assistantMessageEvent` (see pi
+        // toJsonEvent). Keep message optional so streaming text_delta still parses.
         #[serde(default)]
+        message: Option<PiMessage>,
+        #[serde(default, rename = "assistantMessageEvent")]
         assistant_message_event: Option<PiAssistantEvent>,
     },
     MessageEnd {
@@ -482,12 +485,14 @@ async fn normalize_pi_stdout(
                 message,
                 assistant_message_event,
             } => {
-                report_model_once(
-                    &msg_store,
-                    &entry_index_provider,
-                    &message,
-                    &mut model_reported,
-                );
+                if let Some(message) = message.as_ref() {
+                    report_model_once(
+                        &msg_store,
+                        &entry_index_provider,
+                        message,
+                        &mut model_reported,
+                    );
+                }
 
                 if let Some(ev) = assistant_message_event.as_ref() {
                     match ev.event_type.as_str() {
@@ -986,6 +991,43 @@ mod tests {
                 assert_eq!(args["command"], "echo hi");
             }
             _ => panic!("expected tool_execution_start"),
+        }
+    }
+
+    #[test]
+    fn parse_message_update_json_mode_text_delta() {
+        // Matches pi json-mode toJsonEvent output (no `message` field).
+        let raw = r#"{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"完全不同 "}}"#;
+        let event: PiEvent = serde_json::from_str(raw).unwrap();
+        match event {
+            PiEvent::MessageUpdate {
+                message,
+                assistant_message_event,
+            } => {
+                assert!(message.is_none());
+                let ev = assistant_message_event.expect("assistantMessageEvent");
+                assert_eq!(ev.event_type, "text_delta");
+                assert_eq!(ev.delta.as_deref(), Some("完全不同 "));
+            }
+            _ => panic!("expected message_update"),
+        }
+    }
+
+    #[test]
+    fn parse_message_update_with_message_and_camel_case_event() {
+        let raw = r#"{"type":"message_update","message":{"role":"assistant","model":"claude","provider":"anthropic"},"assistantMessageEvent":{"type":"thinking_delta","delta":"..."}}"#;
+        let event: PiEvent = serde_json::from_str(raw).unwrap();
+        match event {
+            PiEvent::MessageUpdate {
+                message,
+                assistant_message_event,
+            } => {
+                let msg = message.expect("message");
+                assert_eq!(msg.model.as_deref(), Some("claude"));
+                let ev = assistant_message_event.expect("assistantMessageEvent");
+                assert_eq!(ev.event_type, "thinking_delta");
+            }
+            _ => panic!("expected message_update"),
         }
     }
 
