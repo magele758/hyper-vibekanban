@@ -162,9 +162,10 @@ impl StandardCodingAgentExecutor for Pi {
         prompt: &str,
         env: &ExecutionEnv,
     ) -> Result<SpawnedChild, ExecutorError> {
-        let mut extra = Self::session_dir_args(current_dir);
-        // Let Pi create a stable project session id we can resume later.
-        extra.extend(["--session-id".to_string(), uuid::Uuid::new_v4().to_string()]);
+        // Do not pass --session-id on first spawn: Pi warns when the id is missing and
+        // creates a new session anyway. Let Pi allocate the id; we capture it from the
+        // stdout `session` event via normalize_logs for later --session resume.
+        let extra = Self::session_dir_args(current_dir);
         let command_parts = self.build_command_builder()?.build_follow_up(&extra)?;
         self.spawn_with_parts(current_dir, prompt, command_parts, env)
             .await
