@@ -10,7 +10,29 @@ type ProfilesMap = Record<string, ExecutorProfile> | null;
 const MAX_RECENT_MODELS = 20;
 
 export function getModelKey(model: ModelInfo): string {
-  return model.provider_id ? `${model.provider_id}/${model.id}` : model.id;
+  if (!model.provider_id) return model.id;
+  // Legacy discovery sometimes stored the full selector as ModelInfo.id.
+  if (
+    model.id.startsWith(`${model.provider_id}/`) ||
+    model.id.toLowerCase().startsWith(`${model.provider_id.toLowerCase()}/`)
+  ) {
+    return model.id;
+  }
+  return `${model.provider_id}/${model.id}`;
+}
+
+/** Collapse accidental `provider/provider/model` keys from legacy discovery. */
+function normalizeRecentModelEntry(entry: string): string {
+  const parts = entry.split('/');
+  if (
+    parts.length >= 3 &&
+    parts[0] &&
+    parts[1] &&
+    parts[0].toLowerCase() === parts[1].toLowerCase()
+  ) {
+    return [parts[0], ...parts.slice(2)].join('/');
+  }
+  return entry;
 }
 
 export function getRecentModelEntries(
@@ -19,7 +41,9 @@ export function getRecentModelEntries(
 ): string[] {
   if (!profiles || !executor) return [];
   const entries = profiles[executor]?.recently_used_models?.models ?? [];
-  return entries.map((e) => e.trim()).filter(Boolean);
+  return entries
+    .map((e) => normalizeRecentModelEntry(e.trim()))
+    .filter(Boolean);
 }
 
 export function getRecentReasoningByModel(

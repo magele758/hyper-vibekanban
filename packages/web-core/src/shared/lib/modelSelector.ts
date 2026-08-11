@@ -116,7 +116,14 @@ export function resolveDefaultModelId(
     defaultId &&
     (!providerId || !defaultProvider || providerId === defaultProvider)
   ) {
-    const match = scoped.find((model) => model.id === defaultId);
+    // Match bare id (current) or full selector (legacy discovery / default_model).
+    const match = scoped.find(
+      (model) =>
+        model.id === defaultId ||
+        model.id === defaultModel ||
+        (defaultProvider != null &&
+          model.id === `${defaultProvider}/${defaultId}`)
+    );
     if (match) return match.id;
   }
 

@@ -146,9 +146,17 @@ export function ModelSelectorContainer({
   const resolvedPresetProviderId = resolveProviderId(presetProviderId);
 
   const hasDefaultModel = Boolean(config?.default_model);
+  const { providerId: defaultProviderFromConfig } = useMemo(
+    () => parseModelId(config?.default_model, hasProviders),
+    [config?.default_model, hasProviders]
+  );
+  const resolvedDefaultProviderId = resolveProviderId(
+    defaultProviderFromConfig
+  );
   const selectedProviderId =
     resolvedConfigProviderId ??
     resolvedPresetProviderId ??
+    resolvedDefaultProviderId ??
     (hasDefaultModel ? fallbackProviderId : null);
 
   const defaultModelId = config
@@ -292,8 +300,16 @@ export function ModelSelectorContainer({
   const handleModelSelect = (modelId: string | null, providerId?: string) => {
     const modelOverride = (() => {
       if (!modelId) return null;
-      if (providerId) return `${providerId}/${modelId}`;
-      return modelId;
+      if (!providerId) return modelId;
+      // Guard against already-qualified ids (legacy pi/omp discovery stored
+      // selector as ModelInfo.id, which produced provider/provider/model).
+      if (
+        modelId.startsWith(`${providerId}/`) ||
+        modelId.toLowerCase().startsWith(`${providerId.toLowerCase()}/`)
+      ) {
+        return modelId;
+      }
+      return `${providerId}/${modelId}`;
     })();
     onOverrideChange({ model_id: modelOverride });
 
