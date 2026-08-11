@@ -164,12 +164,33 @@ impl OhMyPi {
     }
 
     /// Keep sessions inside the worktree so each workspace is self-contained.
+    fn session_dir(current_dir: &Path) -> std::path::PathBuf {
+        current_dir.join(".omp").join("sessions")
+    }
+
     fn session_dir_args(current_dir: &Path) -> Vec<String> {
-        let session_dir = current_dir.join(".omp").join("sessions");
+        let session_dir = Self::session_dir(current_dir);
         vec![
             "--session-dir".to_string(),
             session_dir.to_string_lossy().to_string(),
         ]
+    }
+
+    /// omp emits a `session` event on stdout before the jsonl file is on disk.
+    /// If the process is killed in that window, VK still stores the id and the
+    /// next `-r` fails with "Session not found". Detect a missing file so we
+    /// can fall back to a fresh spawn.
+    fn session_file_exists(current_dir: &Path, session_id: &str) -> bool {
+        let session_dir = Self::session_dir(current_dir);
+        let Ok(entries) = std::fs::read_dir(&session_dir) else {
+            return false;
+        };
+        let needle = format!("_{session_id}");
+        entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.contains(&needle) || name == session_id || name == format!("{session_id}.jsonl")
+        })
     }
 
     async fn spawn_with_parts(
@@ -238,6 +259,15 @@ impl StandardCodingAgentExecutor for OhMyPi {
         _reset_to_message_id: Option<&str>,
         env: &ExecutionEnv,
     ) -> Result<SpawnedChild, ExecutorError> {
+        if !Self::session_file_exists(current_dir, session_id) {
+            tracing::warn!(
+                session_id,
+                "omp session file missing under {:?}; starting a fresh session instead of -r",
+                Self::session_dir(current_dir)
+            );
+            return self.spawn(current_dir, prompt, env).await;
+        }
+
         let mut extra = Self::session_dir_args(current_dir);
         // omp exposes no `--fork`; `-r` resumes by id prefix, path, or picker.
         // Message-level truncation is not available on the CLI, so a reset
@@ -528,6 +558,27 @@ mod tests {
         let args = OhMyPi::session_dir_args(Path::new("/tmp/wt"));
         assert_eq!(args[0], "--session-dir");
         assert!(args[1].ends_with("/.omp/sessions"));
+    }
+
+    #[test]
+    fn session_file_exists_matches_omp_filename_shape() {
+        let dir =
+            std::env::temp_dir().join(format!("omp-session-exists-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sessions = dir.join(".omp").join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let sid = "019fef66-3d69-7000-88c5-7289057a4885";
+        std::fs::write(
+            sessions.join(format!("2026-08-11T05-58-02-857Z_{sid}.jsonl")),
+            "{}",
+        )
+        .unwrap();
+        assert!(OhMyPi::session_file_exists(&dir, sid));
+        assert!(!OhMyPi::session_file_exists(
+            &dir,
+            "019fef77-4e6c-7000-9107-e067488dd4f3"
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
