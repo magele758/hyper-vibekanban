@@ -146,21 +146,24 @@ pub fn parse_oh_my_pi_models_json(output: &str) -> Option<Vec<ModelInfo>> {
         if provider.is_empty() || model_id.is_empty() {
             continue;
         }
-        // `selector` is what omp accepts for --model; prefer it when present.
-        let id = entry
-            .get("selector")
+        // Keep `id` bare (provider-relative). The UI composes
+        // `{provider_id}/{id}` for ExecutorConfig.model_id / `--model`.
+        // Using the omp `selector` here previously caused a double prefix
+        // (`xunmeng/xunmeng/claude-opus-5`) and broke default-model matching.
+        let name = entry
+            .get("name")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("{provider}/{model_id}"));
+            .unwrap_or(model_id)
+            .to_string();
         let supports_thinking = entry
             .get("reasoning")
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
             || entry.get("thinking").is_some_and(|v| !v.is_null());
         models.push(ModelInfo {
-            id: id.clone(),
-            name: id,
+            id: model_id.to_string(),
+            name,
             provider_id: Some(provider.to_string()),
             reasoning_options: if supports_thinking {
                 pi_thinking_options()
@@ -256,10 +259,9 @@ pub fn parse_oh_my_pi_models_yaml(raw: &str) -> Option<Vec<ModelInfo>> {
             continue;
         }
 
-        let id = format!("{provider_id}/{model_id}");
         models.push(ModelInfo {
-            id: id.clone(),
-            name: id,
+            id: model_id.to_string(),
+            name: model_id.to_string(),
             provider_id: Some(provider_id.to_string()),
             // models.yml carries no reasoning flag; omp accepts --thinking on
             // any model, so expose the full set rather than hiding the control.
@@ -538,10 +540,10 @@ pub fn parse_pi_list_models(output: &str) -> Option<Vec<ModelInfo>> {
         let thinking = slice_col(line, thinking_start, thinking_end).to_ascii_lowercase();
         let supports_thinking = matches!(thinking.as_str(), "yes" | "true" | "y");
 
-        let id = format!("{provider}/{model}");
+        // Bare provider-relative id; UI prefixes with provider_id for --model.
         models.push(ModelInfo {
-            id: id.clone(),
-            name: id,
+            id: model.clone(),
+            name: model,
             provider_id: Some(provider),
             reasoning_options: if supports_thinking {
                 pi_thinking_options()
@@ -564,7 +566,11 @@ fn sort_pi_like_models(models: &mut [ModelInfo]) {
         match (a_hf, b_hf) {
             (false, true) => std::cmp::Ordering::Less,
             (true, false) => std::cmp::Ordering::Greater,
-            _ => a.id.cmp(&b.id),
+            // Group by provider, then bare model id (ids are provider-relative).
+            _ => a
+                .provider_id
+                .cmp(&b.provider_id)
+                .then_with(|| a.id.cmp(&b.id)),
         }
     });
 }
@@ -604,15 +610,14 @@ fn parse_pi_models_config(raw: &str) -> Option<Vec<ModelInfo>> {
             if model_id.is_empty() {
                 continue;
             }
-            let id = format!("{provider_id}/{model_id}");
             let supports_thinking = entry
                 .get("reasoning")
                 .and_then(|v| v.as_bool())
                 .or_else(|| entry.get("thinking").and_then(|v| v.as_bool()))
                 .unwrap_or(false);
             models.push(ModelInfo {
-                id: id.clone(),
-                name: id,
+                id: model_id.to_string(),
+                name: model_id.to_string(),
                 provider_id: Some(provider_id.clone()),
                 reasoning_options: if supports_thinking {
                     pi_thinking_options()
@@ -705,12 +710,14 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
 ";
         let models = parse_pi_list_models(output).expect("models");
         assert_eq!(models.len(), 3);
-        // Custom providers first.
-        assert_eq!(models[0].id, "tokenpony/kimi-k3");
+        // Custom providers first; ids are provider-relative (bare).
+        assert_eq!(models[0].id, "kimi-k3");
         assert_eq!(models[0].provider_id.as_deref(), Some("tokenpony"));
         assert!(models[0].reasoning_options.is_empty());
-        assert_eq!(models[1].id, "xunmeng/claude-opus-4-8");
-        assert_eq!(models[2].id, "huggingface/deepseek-ai/DeepSeek-R1");
+        assert_eq!(models[1].id, "claude-opus-4-8");
+        assert_eq!(models[1].provider_id.as_deref(), Some("xunmeng"));
+        assert_eq!(models[2].id, "deepseek-ai/DeepSeek-R1");
+        assert_eq!(models[2].provider_id.as_deref(), Some("huggingface"));
         assert!(!models[2].reasoning_options.is_empty());
     }
 
@@ -731,10 +738,11 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
         // The entry with an empty provider is skipped.
         assert_eq!(models.len(), 2);
         // Custom providers sort before the huggingface catalog.
-        assert_eq!(models[0].id, "xunmeng/claude-opus-5");
+        assert_eq!(models[0].id, "claude-opus-5");
         assert_eq!(models[0].provider_id.as_deref(), Some("xunmeng"));
         assert!(models[0].reasoning_options.is_empty());
-        assert_eq!(models[1].id, "huggingface/deepseek-ai/DeepSeek-R1");
+        assert_eq!(models[1].id, "deepseek-ai/DeepSeek-R1");
+        assert_eq!(models[1].provider_id.as_deref(), Some("huggingface"));
         assert!(!models[1].reasoning_options.is_empty());
     }
 
@@ -743,7 +751,8 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
         let output = "warning: catalog refresh failed\n{\"models\":[{\"provider\":\"openai\",\"id\":\"gpt-4o\",\"selector\":\"openai/gpt-4o\",\"reasoning\":false}]}";
         let models = parse_oh_my_pi_models_json(output).expect("models");
         assert_eq!(models.len(), 1);
-        assert_eq!(models[0].id, "openai/gpt-4o");
+        assert_eq!(models[0].id, "gpt-4o");
+        assert_eq!(models[0].provider_id.as_deref(), Some("openai"));
     }
 
     #[test]
@@ -807,8 +816,8 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
         let models = parse_oh_my_pi_models_yaml(raw).expect("models");
         assert_eq!(models.len(), 6);
         let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
-        assert!(ids.contains(&"xunmeng/claude-opus-5"));
-        assert!(ids.contains(&"tokenpony/kimi-k3"));
+        assert!(ids.contains(&"claude-opus-5"));
+        assert!(ids.contains(&"kimi-k3"));
         // baseUrl/api/apiKey must never be mistaken for model entries.
         assert!(!ids.iter().any(|id| id.contains("baseUrl")));
         assert!(!ids.iter().any(|id| id.contains("apiKey")));
@@ -817,10 +826,7 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
                 .any(|id| id.contains("api") && id.ends_with("completions"))
         );
         // Provider attribution stays correct across the provider boundary.
-        let opus = models
-            .iter()
-            .find(|m| m.id == "xunmeng/claude-opus-5")
-            .unwrap();
+        let opus = models.iter().find(|m| m.id == "claude-opus-5").unwrap();
         assert_eq!(opus.provider_id.as_deref(), Some("xunmeng"));
     }
 
@@ -829,8 +835,13 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
         let raw = "providers:\n  local:\n    models:\n      - plain-model\n      - id: \"quoted-model\"\n";
         let models = parse_oh_my_pi_models_yaml(raw).expect("models");
         let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
-        assert!(ids.contains(&"local/plain-model"));
-        assert!(ids.contains(&"local/quoted-model"));
+        assert!(ids.contains(&"plain-model"));
+        assert!(ids.contains(&"quoted-model"));
+        assert!(
+            models
+                .iter()
+                .all(|m| m.provider_id.as_deref() == Some("local"))
+        );
     }
 
     #[test]
@@ -869,7 +880,12 @@ mod oh_my_pi_real_file_tests {
         for m in &models {
             let provider = m.provider_id.as_deref().unwrap_or("");
             assert!(!provider.is_empty(), "model {} lost its provider", m.id);
-            assert!(m.id.starts_with(&format!("{provider}/")), "bad id {}", m.id);
+            // Ids are provider-relative; do not embed the provider prefix.
+            assert!(
+                !m.id.starts_with(&format!("{provider}/")),
+                "id should be bare, got {}",
+                m.id
+            );
             // Config keys must never leak in as models.
             for key in ["baseUrl", "apiKey", "api:", "models"] {
                 assert!(!m.id.contains(key), "config key leaked into id: {}", m.id);
@@ -902,13 +918,18 @@ mod oh_my_pi_live_tests {
         let models = discover_oh_my_pi_models("omp", &cmd)
             .await
             .expect("model discovery");
+        let matched = models.iter().any(|m| {
+            m.id == default_model
+                || m.provider_id
+                    .as_ref()
+                    .is_some_and(|p| default_model == format!("{p}/{}", m.id))
+        });
         eprintln!(
-            "default={default_model} discovered={} match={}",
+            "default={default_model} discovered={} match={matched}",
             models.len(),
-            models.iter().any(|m| m.id == default_model)
         );
         assert!(
-            models.iter().any(|m| m.id == default_model),
+            matched,
             "configured default {default_model} missing from {} discovered models",
             models.len()
         );

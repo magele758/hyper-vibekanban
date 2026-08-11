@@ -384,8 +384,8 @@ impl StandardCodingAgentExecutor for OhMyPi {
             )
             .await
             .filter(|configured| {
-                // Only advertise it when the selector can actually represent it.
-                let known = models.iter().any(|m| m.id == *configured);
+                // default is a selector (`provider/model`); ModelInfo.id is bare.
+                let known = models.iter().any(|m| model_matches_selector(m, configured));
                 if !known {
                     tracing::debug!(
                         configured,
@@ -415,6 +415,19 @@ impl StandardCodingAgentExecutor for OhMyPi {
         Ok(Box::pin(
             futures::stream::once(async move { initial_patch }).chain(discovery_stream),
         ))
+    }
+}
+
+fn model_matches_selector(model: &crate::model_selector::ModelInfo, selector: &str) -> bool {
+    if model.id == selector {
+        return true;
+    }
+    match model.provider_id.as_deref() {
+        Some(provider) => {
+            selector == format!("{provider}/{}", model.id)
+                || selector.eq_ignore_ascii_case(&format!("{provider}/{}", model.id))
+        }
+        None => false,
     }
 }
 
