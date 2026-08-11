@@ -237,6 +237,7 @@ fn generate_types_content() -> String {
         executors::executors::droid::ReasoningEffortLevel::decl(),
         executors::executors::pi::Pi::decl(),
         executors::executors::pi::PiThinking::decl(),
+        executors::executors::oh_my_pi::OhMyPi::decl(),
         executors::executors::grok::Grok::decl(),
         executors::executors::AppendPrompt::decl(),
         executors::actions::coding_agent_initial::CodingAgentInitialRequest::decl(),
@@ -365,6 +366,10 @@ fn generate_schemas() -> Result<HashMap<&'static str, String>, serde_json::Error
         (
             "pi",
             generate_json_schema::<executors::executors::pi::Pi>()?,
+        ),
+        (
+            "oh_my_pi",
+            generate_json_schema::<executors::executors::oh_my_pi::OhMyPi>()?,
         ),
         (
             "grok",

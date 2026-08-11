@@ -1,0 +1,117 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "append_prompt": {
+      "title": "Append Prompt",
+      "description": "Extra text appended to the prompt",
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "textarea",
+      "default": null
+    },
+    "model": {
+      "title": "Model",
+      "description": "Model pattern or provider/id (e.g. anthropic/claude-sonnet-4, openai/gpt-4o)",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provider": {
+      "title": "Provider",
+      "description": "Provider name (e.g. anthropic, openai). Legacy; prefer model.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "thinking": {
+      "title": "Thinking",
+      "description": "Thinking level: off, minimal, low, medium, high, xhigh, max",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "off",
+        "minimal",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+        null
+      ]
+    },
+    "auto_approve": {
+      "description": "Auto-approve all tool calls. Default true for headless runs, which have\nno interactive approval UI.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "smol": {
+      "title": "Smol model",
+      "description": "Fast/cheap model for lightweight tasks",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "slow": {
+      "title": "Slow model",
+      "description": "Reasoning model for thorough analysis",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "no_skills": {
+      "description": "Disable skills discovery (`--no-skills`).",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "no_lsp": {
+      "description": "Disable LSP tools, formatting and diagnostics (`--no-lsp`).",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "base_command_override": {
+      "title": "Base Command Override",
+      "description": "Override the base command with a custom command",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "additional_params": {
+      "title": "Additional Parameters",
+      "description": "Additional parameters to append to the base command",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "env": {
+      "title": "Environment Variables",
+      "description": "Environment variables to set when running the executor",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    }
+  },
+  "type": "object"
+}

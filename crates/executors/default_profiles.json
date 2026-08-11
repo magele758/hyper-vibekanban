@@ -71,6 +71,13 @@
         }
       }
     },
+    "OH_MY_PI": {
+      "DEFAULT": {
+        "OH_MY_PI": {
+          "auto_approve": true
+        }
+      }
+    },
     "GROK": {
       "DEFAULT": {
         "GROK": {

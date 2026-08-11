@@ -401,6 +401,7 @@ impl CodingAgent {
             | CodingAgent::Amp(_)
             | CodingAgent::Droid(_)
             | CodingAgent::Pi(_)
+            | CodingAgent::OhMyPi(_)
             | CodingAgent::Grok(_) => Passthrough,
             CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) => Gemini,
             CodingAgent::CursorAgent(_) => Cursor,

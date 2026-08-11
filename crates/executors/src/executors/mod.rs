@@ -23,7 +23,8 @@ use crate::{
     env::ExecutionEnv,
     executors::{
         amp::Amp, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
-        droid::Droid, gemini::Gemini, grok::Grok, opencode::Opencode, pi::Pi, qwen::QwenCode,
+        droid::Droid, gemini::Gemini, grok::Grok, oh_my_pi::OhMyPi, opencode::Opencode, pi::Pi,
+        qwen::QwenCode,
     },
     logs::utils::patch,
     mcp_config::McpConfig,
@@ -39,6 +40,7 @@ pub mod cursor;
 pub mod droid;
 pub mod gemini;
 pub mod grok;
+pub mod oh_my_pi;
 pub mod opencode;
 pub mod pi;
 #[cfg(feature = "qa-mode")]
@@ -122,6 +124,10 @@ pub enum CodingAgent {
     Copilot,
     Droid,
     Pi,
+    #[serde(alias = "OMP")]
+    #[strum_discriminants(serde(alias = "OMP"))]
+    #[strum_discriminants(strum(serialize = "OMP", serialize = "OH_MY_PI"))]
+    OhMyPi,
     Grok,
     #[cfg(feature = "qa-mode")]
     QaMock(QaMockExecutor),
@@ -201,6 +207,8 @@ impl CodingAgent {
                 BaseAgentCapability::SessionFork,
                 BaseAgentCapability::ContextUsage,
             ],
+            // omp has no `--fork`; resume reuses the same session id.
+            Self::OhMyPi(_) => vec![BaseAgentCapability::ContextUsage],
             Self::Amp(_) | Self::Copilot(_) | Self::Droid(_) => vec![],
             #[cfg(feature = "qa-mode")]
             Self::QaMock(_) => vec![], // QA mock doesn't need special capabilities

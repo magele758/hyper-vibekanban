@@ -31,6 +31,8 @@ export function getAgentName(
       return 'Droid';
     case BaseCodingAgent.PI:
       return 'Pi';
+    case BaseCodingAgent.OH_MY_PI:
+      return 'Oh My Pi';
     case BaseCodingAgent.GROK:
       return 'Grok';
     default: {
@@ -83,6 +85,9 @@ export function AgentIcon({ agent, className = 'h-4 w-4' }: AgentIconProps) {
       break;
     case BaseCodingAgent.PI:
       iconPath = `/agents/pi${suffix}.svg`;
+      break;
+    case BaseCodingAgent.OH_MY_PI:
+      iconPath = `/agents/oh-my-pi${suffix}.svg`;
       break;
     case BaseCodingAgent.GROK:
       iconPath = `/agents/grok${suffix}.svg`;

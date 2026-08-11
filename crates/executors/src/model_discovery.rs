@@ -94,6 +94,183 @@ pub async fn discover_pi_models(
     })
 }
 
+/// Discover Oh My Pi (`omp`) models via `omp models --json`.
+///
+/// Unlike `pi --list-models` (ASCII table), omp emits structured JSON, so no
+/// column slicing is needed. Falls back to `~/.omp/agent/models.json`.
+pub async fn discover_oh_my_pi_models(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Result<Vec<ModelInfo>, ExecutorError> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["models", "--json"]),
+        cmd,
+    )
+    .map_err(|err| ExecutorError::Io(std::io::Error::other(err.to_string())))?;
+
+    match run_command_capture(&builder, &[], &cmd_env(cmd)).await {
+        Ok(output) => {
+            if let Some(models) = parse_oh_my_pi_models_json(&output) {
+                return Ok(models);
+            }
+            tracing::debug!("omp models --json returned no parseable models; trying models.json");
+        }
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                "omp models --json failed; trying ~/.omp/agent/models.json"
+            );
+        }
+    }
+
+    load_oh_my_pi_models_from_config(base_command, cmd)
+        .await
+        .ok_or_else(|| {
+            ExecutorError::Io(std::io::Error::other(
+                "failed to discover Oh My Pi models via `omp models --json` or models.yml",
+            ))
+        })
+}
+
+/// Parse `omp models --json` output: `{"models":[{provider,id,selector,...}]}`.
+pub fn parse_oh_my_pi_models_json(output: &str) -> Option<Vec<ModelInfo>> {
+    // omp may print warnings before the JSON payload; start at the first `{`.
+    let start = output.find('{')?;
+    let value: serde_json::Value = serde_json::from_str(output.get(start..)?).ok()?;
+    let entries = value.get("models")?.as_array()?;
+
+    let mut models = Vec::new();
+    for entry in entries {
+        let provider = entry.get("provider").and_then(|v| v.as_str()).unwrap_or("");
+        let model_id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        if provider.is_empty() || model_id.is_empty() {
+            continue;
+        }
+        // `selector` is what omp accepts for --model; prefer it when present.
+        let id = entry
+            .get("selector")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{provider}/{model_id}"));
+        let supports_thinking = entry
+            .get("reasoning")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+            || entry.get("thinking").is_some_and(|v| !v.is_null());
+        models.push(ModelInfo {
+            id: id.clone(),
+            name: id,
+            provider_id: Some(provider.to_string()),
+            reasoning_options: if supports_thinking {
+                pi_thinking_options()
+            } else {
+                vec![]
+            },
+        });
+    }
+
+    sort_pi_like_models(&mut models);
+    (!models.is_empty()).then_some(models)
+}
+
+/// Read configured custom providers from omp's `models.yml`.
+///
+/// omp stores providers as YAML (pi uses `models.json`), but the shape is the
+/// same: `providers.<id>.models[].id`. The workspace has no YAML dependency and
+/// this is only a fallback for when `omp models --json` fails, so the narrow
+/// subset emitted by omp is parsed directly.
+async fn load_oh_my_pi_models_from_config(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Option<Vec<ModelInfo>> {
+    let agent_dir = match oh_my_pi_agent_dir(base_command, cmd).await {
+        Some(dir) => dir,
+        None => dirs::home_dir()?.join(".omp").join("agent"),
+    };
+    let raw = std::fs::read_to_string(agent_dir.join("models.yml")).ok()?;
+    parse_oh_my_pi_models_yaml(&raw)
+}
+
+/// Parse the `providers:` section of omp's `models.yml`.
+///
+/// Handles the shape omp writes: two-space indented provider keys, each with a
+/// `models:` sequence of `- id: <name>` entries (or bare `- <name>`).
+pub fn parse_oh_my_pi_models_yaml(raw: &str) -> Option<Vec<ModelInfo>> {
+    let mut models = Vec::new();
+    let mut provider: Option<String> = None;
+    let mut in_providers = false;
+    let mut in_models = false;
+
+    for line in raw.lines() {
+        // Strip comments and skip blanks.
+        let line = line.split_once('#').map_or(line, |(head, _)| head);
+        if line.trim().is_empty() {
+            continue;
+        }
+        let indent = line.len() - line.trim_start().len();
+        let trimmed = line.trim();
+
+        if indent == 0 {
+            in_providers = trimmed.starts_with("providers:");
+            provider = None;
+            in_models = false;
+            continue;
+        }
+        if !in_providers {
+            continue;
+        }
+
+        // A provider key: `  <id>:` at the first nesting level.
+        if indent == 2 {
+            provider = trimmed
+                .strip_suffix(':')
+                .filter(|id| !id.is_empty())
+                .map(str::to_string);
+            in_models = false;
+            continue;
+        }
+
+        let Some(provider_id) = provider.as_deref() else {
+            continue;
+        };
+
+        // Inside a provider: track whether we are under its `models:` key.
+        if !trimmed.starts_with('-') {
+            in_models = trimmed.starts_with("models:");
+            continue;
+        }
+        if !in_models {
+            continue;
+        }
+
+        // Sequence entry: `- id: name`, `- id: "name"` or bare `- name`.
+        let entry = trimmed.trim_start_matches('-').trim();
+        let model_id = entry
+            .strip_prefix("id:")
+            .map(str::trim)
+            .unwrap_or(entry)
+            .trim_matches(['"', '\''])
+            .trim();
+        if model_id.is_empty() || model_id.ends_with(':') {
+            continue;
+        }
+
+        let id = format!("{provider_id}/{model_id}");
+        models.push(ModelInfo {
+            id: id.clone(),
+            name: id,
+            provider_id: Some(provider_id.to_string()),
+            // models.yml carries no reasoning flag; omp accepts --thinking on
+            // any model, so expose the full set rather than hiding the control.
+            reasoning_options: pi_thinking_options(),
+        });
+    }
+
+    sort_pi_like_models(&mut models);
+    (!models.is_empty()).then_some(models)
+}
+
 /// Providers extracted from a discovered Pi model list (stable order).
 pub fn pi_providers_from_models(models: &[ModelInfo]) -> Vec<ModelProvider> {
     let mut seen = std::collections::HashSet::new();
@@ -201,6 +378,55 @@ async fn run_command_capture(
 
 fn cmd_env(cmd: &CmdOverrides) -> HashMap<String, String> {
     cmd.env.clone().unwrap_or_default()
+}
+
+/// Read omp's configured default model (`modelRoles.default`).
+///
+/// omp resolves the model itself when no `--model` is passed, so this is only
+/// used to *display* the active choice in the model selector. Returns e.g.
+/// `xunmeng/claude-opus-5`.
+pub async fn oh_my_pi_default_model(base_command: &str, cmd: &CmdOverrides) -> Option<String> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["config", "get", "modelRoles", "--json"]),
+        cmd,
+    )
+    .ok()?;
+    let output = run_command_capture(&builder, &[], &cmd_env(cmd))
+        .await
+        .ok()?;
+    parse_oh_my_pi_default_model(&output)
+}
+
+/// Extract `modelRoles.default` from `omp config get modelRoles --json`.
+pub fn parse_oh_my_pi_default_model(output: &str) -> Option<String> {
+    let start = output.find('{')?;
+    let value: serde_json::Value = serde_json::from_str(output.get(start..)?).ok()?;
+    // `config get --json` wraps the value: {key, value, type, description}.
+    // Fall back to a bare record in case that envelope ever changes.
+    let roles = value.get("value").unwrap_or(&value);
+    let default = roles.get("default")?.as_str()?.trim();
+    (!default.is_empty()).then(|| default.to_string())
+}
+
+/// Ask omp for its active agent (config) directory via `omp config path`.
+///
+/// omp resolves this at runtime from `--profile`, XDG dirs and
+/// `PI_CODING_AGENT_DIR`, so `~/.omp/agent` is only correct in the plain case.
+pub async fn oh_my_pi_agent_dir(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Option<std::path::PathBuf> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["config", "path"]),
+        cmd,
+    )
+    .ok()?;
+    let output = run_command_capture(&builder, &[], &cmd_env(cmd))
+        .await
+        .ok()?;
+    let path = output.trim();
+    // Guard against help text / banners on stdout.
+    (!path.is_empty() && !path.contains('\n')).then(|| std::path::PathBuf::from(path))
 }
 
 pub fn parse_cursor_list_models(output: &str) -> Option<Vec<ModelInfo>> {
@@ -325,7 +551,13 @@ pub fn parse_pi_list_models(output: &str) -> Option<Vec<ModelInfo>> {
         });
     }
 
-    // Prefer user-configured providers (non-catalog) first for UX.
+    sort_pi_like_models(&mut models);
+
+    (!models.is_empty()).then_some(models)
+}
+
+/// Prefer user-configured providers (non-catalog) first for UX.
+fn sort_pi_like_models(models: &mut [ModelInfo]) {
     models.sort_by(|a, b| {
         let a_hf = a.provider_id.as_deref() == Some("huggingface");
         let b_hf = b.provider_id.as_deref() == Some("huggingface");
@@ -335,8 +567,6 @@ pub fn parse_pi_list_models(output: &str) -> Option<Vec<ModelInfo>> {
             _ => a.id.cmp(&b.id),
         }
     });
-
-    (!models.is_empty()).then_some(models)
 }
 
 fn slice_col(line: &str, start: usize, end: usize) -> String {
@@ -351,8 +581,12 @@ fn load_pi_models_from_config() -> Option<Vec<ModelInfo>> {
         .join(".pi")
         .join("agent")
         .join("models.json");
-    let raw = std::fs::read_to_string(path).ok()?;
-    let value: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    parse_pi_models_config(&std::fs::read_to_string(path).ok()?)
+}
+
+/// Parse a pi/omp `models.json` config (`{"providers":{"<id>":{"models":[..]}}}`).
+fn parse_pi_models_config(raw: &str) -> Option<Vec<ModelInfo>> {
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
     let providers = value.get("providers")?.as_object()?;
 
     let mut models = Vec::new();
@@ -484,5 +718,217 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
     fn parse_pi_list_models_rejects_help_text() {
         let output = "No models available. Use /login to log into a provider via OAuth or API key.";
         assert!(parse_pi_list_models(output).is_none());
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_json_output() {
+        let output = r#"{"models":[
+            {"provider":"huggingface","id":"deepseek-ai/DeepSeek-R1","selector":"huggingface/deepseek-ai/DeepSeek-R1","reasoning":true,"thinking":null},
+            {"provider":"xunmeng","id":"claude-opus-5","selector":"xunmeng/claude-opus-5","reasoning":false,"thinking":null},
+            {"provider":"","id":"broken","reasoning":false}
+        ]}"#;
+        let models = parse_oh_my_pi_models_json(output).expect("models");
+        // The entry with an empty provider is skipped.
+        assert_eq!(models.len(), 2);
+        // Custom providers sort before the huggingface catalog.
+        assert_eq!(models[0].id, "xunmeng/claude-opus-5");
+        assert_eq!(models[0].provider_id.as_deref(), Some("xunmeng"));
+        assert!(models[0].reasoning_options.is_empty());
+        assert_eq!(models[1].id, "huggingface/deepseek-ai/DeepSeek-R1");
+        assert!(!models[1].reasoning_options.is_empty());
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_json_skips_leading_noise() {
+        let output = "warning: catalog refresh failed\n{\"models\":[{\"provider\":\"openai\",\"id\":\"gpt-4o\",\"selector\":\"openai/gpt-4o\",\"reasoning\":false}]}";
+        let models = parse_oh_my_pi_models_json(output).expect("models");
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "openai/gpt-4o");
+    }
+
+    #[test]
+    fn parse_oh_my_pi_default_model_from_config_get() {
+        // Exact envelope from `omp config get modelRoles --json`.
+        let output = r#"{
+  "key": "modelRoles",
+  "value": {
+    "default": "xunmeng/claude-opus-5"
+  },
+  "type": "record",
+  "description": ""
+}"#;
+        assert_eq!(
+            parse_oh_my_pi_default_model(output).as_deref(),
+            Some("xunmeng/claude-opus-5")
+        );
+    }
+
+    #[test]
+    fn parse_oh_my_pi_default_model_accepts_bare_record() {
+        // `omp config get modelRoles` (no --json) prints the bare record.
+        let output = r#"{"default":"tokenpony/kimi-k3"}"#;
+        assert_eq!(
+            parse_oh_my_pi_default_model(output).as_deref(),
+            Some("tokenpony/kimi-k3")
+        );
+    }
+
+    #[test]
+    fn parse_oh_my_pi_default_model_handles_missing_or_empty() {
+        // No roles configured yet.
+        assert!(parse_oh_my_pi_default_model(r#"{"key":"modelRoles","value":{}}"#).is_none());
+        // Other roles set, but no default.
+        assert!(parse_oh_my_pi_default_model(r#"{"value":{"smol":"a/b"}}"#).is_none());
+        assert!(parse_oh_my_pi_default_model(r#"{"value":{"default":"  "}}"#).is_none());
+        assert!(parse_oh_my_pi_default_model("Unknown setting: modelRoles").is_none());
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_yaml_real_shape() {
+        // Byte-for-byte the shape omp writes to ~/.omp/agent/models.yml.
+        let raw = r#"providers:
+  xunmeng:
+    baseUrl: http://localhost:33000/v1
+    api: openai-completions
+    apiKey: sk-secret
+    models:
+      - id: claude-opus-5
+      - id: gpt-5.6-sol
+      - id: claude-opus-4-8
+  tokenpony:
+    baseUrl: https://api.tokenpony.cn/v1
+    api: openai-completions
+    apiKey: sk-other
+    models:
+      - id: glm-5.2
+      - id: kimi-k2.7-code
+      - id: kimi-k3
+"#;
+        let models = parse_oh_my_pi_models_yaml(raw).expect("models");
+        assert_eq!(models.len(), 6);
+        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"xunmeng/claude-opus-5"));
+        assert!(ids.contains(&"tokenpony/kimi-k3"));
+        // baseUrl/api/apiKey must never be mistaken for model entries.
+        assert!(!ids.iter().any(|id| id.contains("baseUrl")));
+        assert!(!ids.iter().any(|id| id.contains("apiKey")));
+        assert!(
+            !ids.iter()
+                .any(|id| id.contains("api") && id.ends_with("completions"))
+        );
+        // Provider attribution stays correct across the provider boundary.
+        let opus = models
+            .iter()
+            .find(|m| m.id == "xunmeng/claude-opus-5")
+            .unwrap();
+        assert_eq!(opus.provider_id.as_deref(), Some("xunmeng"));
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_yaml_handles_bare_and_quoted_entries() {
+        let raw = "providers:\n  local:\n    models:\n      - plain-model\n      - id: \"quoted-model\"\n";
+        let models = parse_oh_my_pi_models_yaml(raw).expect("models");
+        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"local/plain-model"));
+        assert!(ids.contains(&"local/quoted-model"));
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_yaml_ignores_non_provider_sections() {
+        // config.yml-style keys and comments must not yield models.
+        let raw = "modelRoles:\n  default: xunmeng/claude-opus-5\nsetupVersion: 1\n";
+        assert!(parse_oh_my_pi_models_yaml(raw).is_none());
+        assert!(parse_oh_my_pi_models_yaml("# just a comment\n").is_none());
+        assert!(parse_oh_my_pi_models_yaml("providers:\n").is_none());
+    }
+
+    #[test]
+    fn parse_oh_my_pi_models_json_rejects_non_json() {
+        assert!(parse_oh_my_pi_models_json("No models available.").is_none());
+        assert!(parse_oh_my_pi_models_json("{\"models\":[]}").is_none());
+    }
+}
+
+#[cfg(test)]
+mod oh_my_pi_real_file_tests {
+    use super::*;
+
+    /// Parse the developer's actual models.yml when present. Skipped in CI where
+    /// the file does not exist, so it never turns into a flaky failure.
+    #[test]
+    fn parses_real_models_yml_if_present() {
+        let Some(path) = dirs::home_dir().map(|h| h.join(".omp/agent/models.yml")) else {
+            return;
+        };
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let models = parse_oh_my_pi_models_yaml(&raw)
+            .unwrap_or_else(|| panic!("failed to parse real {}", path.display()));
+        assert!(!models.is_empty());
+        for m in &models {
+            let provider = m.provider_id.as_deref().unwrap_or("");
+            assert!(!provider.is_empty(), "model {} lost its provider", m.id);
+            assert!(m.id.starts_with(&format!("{provider}/")), "bad id {}", m.id);
+            // Config keys must never leak in as models.
+            for key in ["baseUrl", "apiKey", "api:", "models"] {
+                assert!(!m.id.contains(key), "config key leaked into id: {}", m.id);
+            }
+        }
+        eprintln!("parsed {} models from real models.yml", models.len());
+    }
+}
+
+#[cfg(test)]
+mod oh_my_pi_live_tests {
+    use super::*;
+
+    fn omp_installed() -> bool {
+        workspace_utils::shell::resolve_executable_path_blocking("omp").is_some()
+    }
+
+    /// End-to-end: the configured default model must appear in the discovered
+    /// list, otherwise the selector would show a value the user cannot pick.
+    #[tokio::test]
+    async fn configured_default_model_is_in_discovered_list() {
+        if !omp_installed() {
+            return;
+        }
+        let cmd = CmdOverrides::default();
+        let Some(default_model) = oh_my_pi_default_model("omp", &cmd).await else {
+            eprintln!("no modelRoles.default configured; skipping");
+            return;
+        };
+        let models = discover_oh_my_pi_models("omp", &cmd)
+            .await
+            .expect("model discovery");
+        eprintln!(
+            "default={default_model} discovered={} match={}",
+            models.len(),
+            models.iter().any(|m| m.id == default_model)
+        );
+        assert!(
+            models.iter().any(|m| m.id == default_model),
+            "configured default {default_model} missing from {} discovered models",
+            models.len()
+        );
+    }
+
+    /// `omp config path` must resolve to a real directory holding the config.
+    #[tokio::test]
+    async fn agent_dir_resolves_to_existing_config_dir() {
+        if !omp_installed() {
+            return;
+        }
+        let dir = oh_my_pi_agent_dir("omp", &CmdOverrides::default())
+            .await
+            .expect("agent dir");
+        eprintln!("agent dir: {}", dir.display());
+        assert!(dir.is_dir(), "{} is not a directory", dir.display());
+        assert!(
+            dir.join("config.yml").exists(),
+            "no config.yml in {}",
+            dir.display()
+        );
     }
 }

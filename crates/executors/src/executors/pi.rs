@@ -435,7 +435,10 @@ struct PiUsage {
     total_tokens: Option<u64>,
 }
 
-async fn normalize_pi_stdout(
+/// Normalize the pi-family JSON event stream (`-p --mode json`).
+///
+/// Shared with the Oh My Pi (`omp`) executor, which emits an identical schema.
+pub(crate) async fn normalize_pi_stdout(
     msg_store: Arc<MsgStore>,
     current_dir: std::path::PathBuf,
     entry_index_provider: EntryIndexProvider,

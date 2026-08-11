@@ -148,10 +148,12 @@ pub const KNOWN_CODING_AGENTS: &[&str] = &[
     "COPILOT",
     "DROID",
     "PI",
+    "OH_MY_PI",
+    "GROK",
 ];
 
 /// Historic aliases accepted on input and folded onto their canonical name.
-const CODING_AGENT_ALIASES: &[(&str, &str)] = &[("CURSOR", "CURSOR_AGENT")];
+const CODING_AGENT_ALIASES: &[(&str, &str)] = &[("CURSOR", "CURSOR_AGENT"), ("OMP", "OH_MY_PI")];
 
 /// Normalize and validate a `default_executor` value.
 ///
