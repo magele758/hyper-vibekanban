@@ -309,6 +309,180 @@ pub async fn discover_codex_models(
     })
 }
 
+pub const ANTIGRAVITY_DEFAULT_MODEL: &str = "gemini-3.6-flash-high";
+
+pub fn antigravity_default_models() -> Vec<ModelInfo> {
+    // Fallback catalog matching `agy models` ids (`id\tdisplay name`).
+    [
+        ("gemini-3.6-flash-high", "Gemini 3.6 Flash (High)"),
+        ("gemini-3.6-flash-medium", "Gemini 3.6 Flash (Medium)"),
+        ("gemini-3.6-flash-low", "Gemini 3.6 Flash (Low)"),
+        ("gemini-3.5-flash-high", "Gemini 3.5 Flash (High)"),
+        ("gemini-3.5-flash-medium", "Gemini 3.5 Flash (Medium)"),
+        ("gemini-3.5-flash-low", "Gemini 3.5 Flash (Low)"),
+        ("gemini-3.1-pro-high", "Gemini 3.1 Pro (High)"),
+        ("gemini-3.1-pro-low", "Gemini 3.1 Pro (Low)"),
+        ("claude-sonnet-4-6", "Claude Sonnet 4.6 (Thinking)"),
+        ("claude-opus-4-6-thinking", "Claude Opus 4.6 (Thinking)"),
+        ("gpt-oss-120b-medium", "GPT-OSS 120B (Medium)"),
+    ]
+    .into_iter()
+    .map(|(id, name)| ModelInfo {
+        id: id.to_string(),
+        name: name.to_string(),
+        provider_id: None,
+        reasoning_options: vec![],
+    })
+    .collect()
+}
+
+pub async fn discover_antigravity_models(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Result<Vec<ModelInfo>, ExecutorError> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["models"]),
+        cmd,
+    )
+    .map_err(|err| ExecutorError::Io(std::io::Error::other(err.to_string())))?;
+
+    match run_command_capture(&builder, &[], &cmd_env(cmd)).await {
+        Ok(output) => {
+            if let Some(models) = parse_antigravity_models_output(&output) {
+                return Ok(models);
+            }
+            tracing::debug!("agy models returned no parseable models; trying fallbacks");
+        }
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                "agy models failed; trying config/default Antigravity models"
+            );
+        }
+    }
+
+    if let Some(models) = load_antigravity_models_from_config() {
+        return Ok(models);
+    }
+
+    Ok(antigravity_default_models())
+}
+
+fn model_info_from_json_item(item: &serde_json::Value) -> Option<ModelInfo> {
+    let id = item
+        .get("id")
+        .or_else(|| item.get("model"))
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())?;
+    let name = item
+        .get("name")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(id);
+    Some(ModelInfo {
+        id: id.to_string(),
+        name: name.to_string(),
+        provider_id: None,
+        reasoning_options: vec![],
+    })
+}
+
+/// Parse `agy models` output.
+///
+/// Real CLI emits TSV lines: `gemini-3.6-flash-high\tGemini 3.6 Flash (High)`.
+/// Also accepts JSON arrays / `{ "models": [...] }` when present.
+pub fn parse_antigravity_models_output(output: &str) -> Option<Vec<ModelInfo>> {
+    if let Some(start) = output.find('[') {
+        if let Ok(serde_json::Value::Array(items)) =
+            serde_json::from_str::<serde_json::Value>(&output[start..])
+        {
+            let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
+            if !models.is_empty() {
+                return Some(models);
+            }
+        }
+    }
+
+    if let Some(start) = output.find('{') {
+        if let Ok(serde_json::Value::Object(map)) =
+            serde_json::from_str::<serde_json::Value>(&output[start..])
+        {
+            if let Some(serde_json::Value::Array(items)) = map.get("models") {
+                let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
+                if !models.is_empty() {
+                    return Some(models);
+                }
+            }
+        }
+    }
+
+    let mut models = Vec::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("fetching")
+            || lower.starts_with("usage")
+            || lower.starts_with("available models")
+        {
+            continue;
+        }
+
+        // Preferred: `id\tdisplay name`
+        if let Some((id, name)) = trimmed.split_once('\t') {
+            let id = id.trim();
+            let name = name.trim();
+            if id.is_empty() {
+                continue;
+            }
+            models.push(ModelInfo {
+                id: id.to_string(),
+                name: if name.is_empty() {
+                    id.to_string()
+                } else {
+                    name.to_string()
+                },
+                provider_id: None,
+                reasoning_options: vec![],
+            });
+            continue;
+        }
+
+        // Fallback: first whitespace token looks like a model id.
+        let id = trimmed.split_whitespace().next().unwrap_or("");
+        let id_lower = id.to_ascii_lowercase();
+        if !id.is_empty()
+            && (id_lower.contains("gemini")
+                || id_lower.contains("claude")
+                || id_lower.contains("gpt")
+                || id_lower.contains("flash")
+                || id_lower.contains("sonnet")
+                || id_lower.contains("opus"))
+        {
+            models.push(ModelInfo {
+                id: id.to_string(),
+                name: id.to_string(),
+                provider_id: None,
+                reasoning_options: vec![],
+            });
+        }
+    }
+
+    (!models.is_empty()).then_some(models)
+}
+
+fn load_antigravity_models_from_config() -> Option<Vec<ModelInfo>> {
+    let home = dirs::home_dir()?;
+    let path = home
+        .join(".gemini")
+        .join("antigravity-cli")
+        .join("models.json");
+    let content = std::fs::read_to_string(path).ok()?;
+    parse_antigravity_models_output(&content)
+}
+
 async fn run_command_capture(
     builder: &CommandBuilder,
     additional_args: &[String],
@@ -322,6 +496,7 @@ async fn run_command_capture(
     let mut command = Command::new(executable_path);
     command
         .kill_on_drop(true)
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .env("NPM_CONFIG_LOGLEVEL", "error")
@@ -344,22 +519,50 @@ async fn run_command_capture(
         .take()
         .ok_or_else(|| ExecutorError::Io(std::io::Error::other("missing stderr")))?;
 
-    let read_outputs = async {
+    // Wait for exit concurrently with pipe reads. Some CLIs (e.g. `agy`) leave
+    // grandchildren holding inherited stdout/stderr, so EOF may never arrive —
+    // after the leader exits, drain briefly then return whatever we have.
+    let result = time::timeout(DISCOVERY_TIMEOUT, async {
         let mut stdout_buf = String::new();
         let mut stderr_buf = String::new();
-        let (stdout_res, stderr_res) = tokio::join!(
-            stdout.read_to_string(&mut stdout_buf),
-            stderr.read_to_string(&mut stderr_buf)
-        );
-        stdout_res?;
-        stderr_res?;
-        Ok::<_, std::io::Error>((stdout_buf, stderr_buf))
-    };
+        let read_stdout = stdout.read_to_string(&mut stdout_buf);
+        let read_stderr = stderr.read_to_string(&mut stderr_buf);
+        let wait = child.inner().wait();
+        tokio::pin!(read_stdout, read_stderr, wait);
 
-    let result = time::timeout(DISCOVERY_TIMEOUT, async {
-        let outputs = read_outputs.await?;
-        let status = child.inner().wait().await?;
-        Ok::<_, std::io::Error>((outputs, status))
+        let mut stdout_done = false;
+        let mut stderr_done = false;
+        let mut status = None;
+
+        loop {
+            tokio::select! {
+                res = &mut read_stdout, if !stdout_done => {
+                    res?;
+                    stdout_done = true;
+                }
+                res = &mut read_stderr, if !stderr_done => {
+                    res?;
+                    stderr_done = true;
+                }
+                res = &mut wait, if status.is_none() => {
+                    status = Some(res?);
+                }
+                _ = time::sleep(Duration::from_millis(250)),
+                    if status.is_some() && (!stdout_done || !stderr_done) =>
+                {
+                    break;
+                }
+            }
+
+            if status.is_some() && stdout_done && stderr_done {
+                break;
+            }
+        }
+
+        let status = status.ok_or_else(|| {
+            std::io::Error::other("model discovery process ended without exit status")
+        })?;
+        Ok::<_, std::io::Error>(((stdout_buf, stderr_buf), status))
     })
     .await;
 
@@ -950,6 +1153,60 @@ mod oh_my_pi_live_tests {
             dir.join("config.yml").exists(),
             "no config.yml in {}",
             dir.display()
+        );
+    }
+
+    #[test]
+    fn test_parse_antigravity_models_output() {
+        let json_input = r#"[{"id":"gemini-3.6-flash-high","name":"Gemini 3.6 Flash (High)"},{"id":"gemini-3.1-pro-high","name":"Gemini 3.1 Pro (High)"}]"#;
+        let models = parse_antigravity_models_output(json_input).expect("models");
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "gemini-3.6-flash-high");
+
+        let tsv = "Fetching available models...\ngemini-3.6-flash-high\tGemini 3.6 Flash (High)\nclaude-sonnet-4-6\tClaude Sonnet 4.6 (Thinking)\n";
+        let models = parse_antigravity_models_output(tsv).expect("tsv models");
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "gemini-3.6-flash-high");
+        assert_eq!(models[0].name, "Gemini 3.6 Flash (High)");
+        assert_eq!(models[1].id, "claude-sonnet-4-6");
+
+        let defaults = antigravity_default_models();
+        assert!(defaults.iter().any(|m| m.id == ANTIGRAVITY_DEFAULT_MODEL));
+    }
+}
+
+#[cfg(test)]
+mod antigravity_live_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn discover_antigravity_models_live() {
+        if workspace_utils::shell::resolve_executable_path_blocking("agy").is_none() {
+            return;
+        }
+        let t0 = std::time::Instant::now();
+        let models = discover_antigravity_models("agy", &CmdOverrides::default())
+            .await
+            .expect("discover");
+        eprintln!(
+            "elapsed={:?} count={} first={:?}",
+            t0.elapsed(),
+            models.len(),
+            models.first()
+        );
+        assert!(!models.is_empty());
+        assert!(
+            models
+                .iter()
+                .any(|m| m.id.contains("flash") || m.id.contains("gemini")),
+            "unexpected models: {:?}",
+            models.iter().map(|m| &m.id).collect::<Vec<_>>()
+        );
+        // Pipe-sticky grandchildren previously forced a 45s timeout; keep this snappy.
+        assert!(
+            t0.elapsed() < Duration::from_secs(30),
+            "discovery took too long: {:?}",
+            t0.elapsed()
         );
     }
 }

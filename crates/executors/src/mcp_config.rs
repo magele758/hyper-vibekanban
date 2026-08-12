@@ -403,7 +403,9 @@ impl CodingAgent {
             | CodingAgent::Pi(_)
             | CodingAgent::OhMyPi(_)
             | CodingAgent::Grok(_) => Passthrough,
-            CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) => Gemini,
+            CodingAgent::QwenCode(_) | CodingAgent::Gemini(_) | CodingAgent::Antigravity(_) => {
+                Gemini
+            }
             CodingAgent::CursorAgent(_) => Cursor,
             CodingAgent::Codex(_) => Codex,
             CodingAgent::Opencode(_) => Opencode,

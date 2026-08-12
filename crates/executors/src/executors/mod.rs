@@ -22,9 +22,9 @@ use crate::{
     command::CommandBuildError,
     env::ExecutionEnv,
     executors::{
-        amp::Amp, claude::ClaudeCode, codex::Codex, copilot::Copilot, cursor::CursorAgent,
-        droid::Droid, gemini::Gemini, grok::Grok, oh_my_pi::OhMyPi, opencode::Opencode, pi::Pi,
-        qwen::QwenCode,
+        amp::Amp, antigravity::Antigravity, claude::ClaudeCode, codex::Codex, copilot::Copilot,
+        cursor::CursorAgent, droid::Droid, gemini::Gemini, grok::Grok, oh_my_pi::OhMyPi,
+        opencode::Opencode, pi::Pi, qwen::QwenCode,
     },
     logs::utils::patch,
     mcp_config::McpConfig,
@@ -33,6 +33,7 @@ use crate::{
 
 pub mod acp;
 pub mod amp;
+pub mod antigravity;
 pub mod claude;
 pub mod codex;
 pub mod copilot;
@@ -114,6 +115,10 @@ pub enum CodingAgent {
     ClaudeCode,
     Amp,
     Gemini,
+    #[serde(alias = "AGY")]
+    #[strum_discriminants(serde(alias = "AGY"))]
+    #[strum_discriminants(strum(serialize = "AGY", serialize = "ANTIGRAVITY"))]
+    Antigravity,
     Codex,
     Opencode,
     #[serde(alias = "CURSOR")]
@@ -199,7 +204,7 @@ impl CodingAgent {
                 BaseAgentCapability::SetupHelper,
                 BaseAgentCapability::ContextUsage,
             ],
-            Self::Gemini(_) | Self::QwenCode(_) | Self::Grok(_) => {
+            Self::Gemini(_) | Self::Antigravity(_) | Self::QwenCode(_) | Self::Grok(_) => {
                 vec![BaseAgentCapability::SessionFork]
             }
             Self::CursorAgent(_) => vec![BaseAgentCapability::SetupHelper],
@@ -451,5 +456,20 @@ mod tests {
         let result: Result<BaseCodingAgent, _> = serde_json::from_str(r#""GROK""#);
         assert!(result.is_ok(), "GROK should deserialize via serde");
         assert_eq!(result.unwrap(), BaseCodingAgent::Grok);
+    }
+
+    #[test]
+    fn test_antigravity_deserialization() {
+        let result = BaseCodingAgent::from_str("ANTIGRAVITY");
+        assert!(result.is_ok(), "ANTIGRAVITY should be valid");
+        assert_eq!(result.unwrap(), BaseCodingAgent::Antigravity);
+
+        let result = BaseCodingAgent::from_str("AGY");
+        assert!(result.is_ok(), "AGY alias should be valid");
+        assert_eq!(result.unwrap(), BaseCodingAgent::Antigravity);
+
+        let result: Result<BaseCodingAgent, _> = serde_json::from_str(r#""ANTIGRAVITY""#);
+        assert!(result.is_ok(), "ANTIGRAVITY should deserialize via serde");
+        assert_eq!(result.unwrap(), BaseCodingAgent::Antigravity);
     }
 }

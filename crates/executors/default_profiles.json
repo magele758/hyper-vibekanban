@@ -21,6 +21,13 @@
         }
       }
     },
+    "ANTIGRAVITY": {
+      "DEFAULT": {
+        "ANTIGRAVITY": {
+          "dangerously_skip_permissions": true
+        }
+      }
+    },
     "CODEX": {
       "DEFAULT": {
         "CODEX": {
