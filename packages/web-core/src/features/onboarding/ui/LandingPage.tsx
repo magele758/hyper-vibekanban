@@ -77,6 +77,7 @@ const SOUND_OPTIONS: SoundOption[] = [
 
 const AGENT_PRIORITY: BaseCodingAgent[] = [
   BaseCodingAgent.CLAUDE_CODE,
+  BaseCodingAgent.ANTIGRAVITY,
   BaseCodingAgent.CODEX,
   BaseCodingAgent.OPENCODE,
   BaseCodingAgent.GEMINI,

@@ -668,10 +668,7 @@ export function KanbanContainer() {
 
   // Active squad pipeline runs (prefer waiting_approval over running)
   const pipelineStatusByIssueId = useMemo(() => {
-    const result = new Map<
-      string,
-      'running' | 'waiting_approval' | 'queued'
-    >();
+    const result = new Map<string, 'running' | 'waiting_approval' | 'queued'>();
     for (const run of squadRuns) {
       if (
         run.status !== 'running' &&
