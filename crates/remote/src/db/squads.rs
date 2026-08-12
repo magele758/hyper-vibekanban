@@ -51,6 +51,7 @@ const SQUAD_COLUMNS: &str = r#"
     updated_at
 "#;
 
+#[allow(clippy::too_many_arguments)]
 fn map_squad_row(
     id: Uuid,
     project_id: Uuid,
@@ -132,6 +133,7 @@ impl SquadRepository {
         Ok(records.into_iter().map(squad_from_row).collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &PgPool,
         id: Option<Uuid>,
@@ -177,6 +179,7 @@ impl SquadRepository {
         Ok(MutationResponse { data, txid })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &PgPool,
         id: Uuid,

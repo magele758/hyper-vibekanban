@@ -275,7 +275,7 @@ async fn enqueue_mention_tasks(pool: &sqlx::PgPool, message: &str, issue_id: uui
             .unwrap_or(after.len());
         let uuid_str = &after[..end];
         if let Ok(agent_id) = uuid_str.parse::<uuid::Uuid>() {
-            if let Err(e) = AgentTaskRepository::enqueue(
+            let res = AgentTaskRepository::enqueue(
                 pool,
                 None,
                 agent_id,
@@ -289,8 +289,8 @@ async fn enqueue_mention_tasks(pool: &sqlx::PgPool, message: &str, issue_id: uui
                 None,
                 None,
             )
-            .await
-            {
+            .await;
+            if let Err(e) = res {
                 tracing::warn!(?e, %agent_id, %issue_id, "failed to enqueue mention task");
             }
         }

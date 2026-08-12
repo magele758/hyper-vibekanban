@@ -1017,6 +1017,7 @@ pub async fn execute_squad_pipeline(
         Some(diff)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn follow_edges(
         pool: &sqlx::PgPool,
         squad: &Squad,
@@ -1062,6 +1063,7 @@ pub async fn execute_squad_pipeline(
         Ok(false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn walk_node(
         pool: &sqlx::PgPool,
         squad: &Squad,

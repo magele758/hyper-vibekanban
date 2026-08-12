@@ -721,6 +721,7 @@ fn normalize_logs_with_stderr_filter(
 /// Match Rust `tracing` / `RUST_LOG` lines, including ANSI-colored levels.
 /// Also matches truncated heads like `8-07T07:41:07.249569Z  WARN ...` when a
 /// chunk boundary split the year digits off.
+#[allow(dead_code)]
 static TRACING_TELEMETRY_LINE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"(?x)
@@ -739,6 +740,7 @@ static TRACING_TELEMETRY_LINE: LazyLock<Regex> = LazyLock::new(|| {
 /// Drop tracing telemetry lines and their multi-line continuations (tool JSON,
 /// thinking fragments, HTTP dumps, etc.). Keep short non-tracing stderr such as
 /// harness "Failed to start execution: …".
+#[allow(dead_code)]
 fn filter_tracing_telemetry_lines(lines: &mut Vec<String>) {
     let mut kept = Vec::with_capacity(lines.len());
     let mut suppressing = false;

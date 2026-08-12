@@ -179,6 +179,7 @@ async fn create_issue_assignee(
     // - agent: enqueue agent task
     // - squad + leader_only (default): enqueue leader only (pure-issue friendly)
     // - squad + full_pipeline: background-run entire pipeline
+    #[allow(clippy::large_enum_variant)]
     enum AssignAction {
         Enqueue {
             agent_id: Uuid,

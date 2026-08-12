@@ -106,6 +106,7 @@ impl InboxRepository {
     }
 
     /// Insert an inbox notification.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &PgPool,
         recipient_user_id: Uuid,

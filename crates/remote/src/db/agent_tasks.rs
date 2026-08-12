@@ -166,6 +166,7 @@ impl AgentTaskRepository {
 
         // Soft-dedupe only for non-squad tasks (squad pipelines need serial/parallel
         // steps on the same agent+issue). Unique index also scopes to squad_id IS NULL.
+        #[allow(clippy::collapsible_if)]
         if squad_id.is_none() {
             if let Some(existing) = sqlx::query_as!(
                 AgentTask,

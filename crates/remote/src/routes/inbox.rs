@@ -44,7 +44,7 @@ async fn list_inbox(
     Extension(ctx): Extension<RequestContext>,
     Query(query): Query<ListInboxQuery>,
 ) -> Result<Json<ListInboxResponse>, ErrorResponse> {
-    let limit = query.limit.min(200).max(1);
+    let limit = query.limit.clamp(1, 200);
     let items = InboxRepository::list(state.pool(), ctx.user.id, query.include_archived, limit)
         .await
         .map_err(|e| {

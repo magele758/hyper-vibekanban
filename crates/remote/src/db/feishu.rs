@@ -129,6 +129,7 @@ impl FeishuRepository {
         Ok(row)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &PgPool,
         id: Option<Uuid>,
@@ -168,6 +169,7 @@ impl FeishuRepository {
         Ok(row.to_public())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn update(
         pool: &PgPool,
         id: Uuid,

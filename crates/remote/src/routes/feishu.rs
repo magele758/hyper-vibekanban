@@ -149,8 +149,8 @@ async fn update_binding(
         payload.agent_id,
         payload.app_id,
         payload.app_secret,
-        payload.encrypt_key.map(|v| empty_to_none(v)),
-        payload.verification_token.map(|v| empty_to_none(v)),
+        payload.encrypt_key.map(empty_to_none),
+        payload.verification_token.map(empty_to_none),
         payload.enabled,
         payload.reply_on_complete,
     )
@@ -380,7 +380,7 @@ async fn handle_message_event(
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    if message_type != "text" && message_type != "" {
+    if message_type != "text" && !message_type.is_empty() {
         // Only text messages trigger agents in MVP.
         tracing::debug!(message_type, "skip non-text feishu message");
         return Ok(());

@@ -49,7 +49,8 @@
     "subagent": {
       "defaultType": "Sous-agent"
     },
-    "loadingEarlierMessages": "Chargement des messages pr\u00e9c\u00e9dents"
+    "loadingEarlierMessages": "Chargement des messages précédents",
+    "loadEarlierMessages": "Charger les messages précédents"
   },
   "folderPicker": {
     "legend": "Cliquez sur les noms de dossiers pour naviguer • Utilisez les boutons d'action pour sélectionner",
@@ -517,19 +518,20 @@
       "setupHintDismiss": "Fermer",
       "setupHintLink": "Configure in Settings"
     },
-    "inPlace": {
-      "label": "Travailler dans le répertoire du dépôt (sans worktree)",
-      "warning": "L'agent s'exécute sur une nouvelle branche dans l'arbre de travail de votre propre dépôt. Validez ou remisez vos modifications d'abord ; un seul espace de travail in-place par dépôt à la fois."
-    },
     "mode": {
       "label": "Où l'agent doit-il s'exécuter ?",
       "worktree": "Worktree isolé (par défaut)",
-      "inPlace": "Dans le répertoire du dépôt, nouvelle branche",
       "console": "Console du répertoire principal (branche actuelle)"
     },
     "console": {
       "warning": "L'agent s'exécute directement dans le répertoire et la branche actuels de votre dépôt. Il ne créera pas de branche ni ne validera à votre place — vous gardez le contrôle des validations.",
       "repoLabel": "Ouvrir la console sur"
+    },
+    "hostPicker": {
+      "label": "Exécuter sur",
+      "thisMachine": "Cette machine",
+      "offlineHost": "{{name}} (hors ligne)",
+      "offlineHint": "L’hôte sélectionné est hors ligne. Choisissez cette machine ou un autre hôte en ligne."
     }
   },
   "modelSelector": {

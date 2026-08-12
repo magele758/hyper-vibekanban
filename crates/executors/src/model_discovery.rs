@@ -392,27 +392,28 @@ fn model_info_from_json_item(item: &serde_json::Value) -> Option<ModelInfo> {
 /// Real CLI emits TSV lines: `gemini-3.6-flash-high\tGemini 3.6 Flash (High)`.
 /// Also accepts JSON arrays / `{ "models": [...] }` when present.
 pub fn parse_antigravity_models_output(output: &str) -> Option<Vec<ModelInfo>> {
-    if let Some(start) = output.find('[') {
-        if let Ok(serde_json::Value::Array(items)) =
-            serde_json::from_str::<serde_json::Value>(&output[start..])
-        {
-            let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
-            if !models.is_empty() {
-                return Some(models);
-            }
+    if let Some(items) = output.find('[').and_then(|start| {
+        match serde_json::from_str::<serde_json::Value>(&output[start..]) {
+            Ok(serde_json::Value::Array(items)) => Some(items),
+            _ => None,
+        }
+    }) {
+        let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
+        if !models.is_empty() {
+            return Some(models);
         }
     }
 
-    if let Some(start) = output.find('{') {
-        if let Ok(serde_json::Value::Object(map)) =
-            serde_json::from_str::<serde_json::Value>(&output[start..])
-        {
-            if let Some(serde_json::Value::Array(items)) = map.get("models") {
-                let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
-                if !models.is_empty() {
-                    return Some(models);
-                }
-            }
+    if let Some(items) = output.find('{').and_then(|start| {
+        let val = serde_json::from_str::<serde_json::Value>(&output[start..]).ok()?;
+        match val.get("models") {
+            Some(serde_json::Value::Array(items)) => Some(items.clone()),
+            _ => None,
+        }
+    }) {
+        let models: Vec<_> = items.iter().filter_map(model_info_from_json_item).collect();
+        if !models.is_empty() {
+            return Some(models);
         }
     }
 

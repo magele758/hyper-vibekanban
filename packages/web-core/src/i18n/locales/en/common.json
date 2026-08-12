@@ -532,14 +532,9 @@
       "setupHintDismiss": "Dismiss",
       "setupHintLink": "Configure in Settings"
     },
-    "inPlace": {
-      "label": "Work in the repository directory (no worktree)",
-      "warning": "The agent runs on a new branch in your repo's own working tree. Commit or stash changes first; only one in-place workspace per repo at a time."
-    },
     "mode": {
       "label": "Where should the agent run?",
       "worktree": "Isolated worktree (default)",
-      "inPlace": "In repo directory, new branch",
       "console": "Main directory console (current branch)"
     },
     "hostPicker": {
