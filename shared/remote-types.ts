@@ -594,6 +594,13 @@ export const PROJECT_SQUAD_MEMBERS_SHAPE = defineShape<SquadMember>(
   '/v1/fallback/squad_members'
 );
 
+export const PROJECT_SQUAD_RUNS_SHAPE = defineShape<SquadRun>(
+  'squad_runs',
+  ['project_id'] as const,
+  '/v1/shape/project/{project_id}/squad_runs',
+  '/v1/fallback/squad_runs'
+);
+
 export const PROJECT_PROJECT_STATUSES_SHAPE = defineShape<ProjectStatus>(
   'project_statuses',
   ['project_id'] as const,

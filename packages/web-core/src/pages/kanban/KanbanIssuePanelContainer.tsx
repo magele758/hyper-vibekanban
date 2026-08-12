@@ -21,6 +21,7 @@ import { IssueRelationshipsSectionContainer } from './IssueRelationshipsSectionC
 import { IssueWorkspacesSectionContainer } from './IssueWorkspacesSectionContainer';
 import { IssueAgentTasksSectionContainer } from './IssueAgentTasksSectionContainer';
 import { IssueSquadRunSectionContainer } from './IssueSquadRunSectionContainer';
+import { IssueWorkflowQuickRun } from './IssueWorkflowQuickRun';
 import {
   KanbanIssuePanel,
   type IssueFormData,
@@ -1220,6 +1221,7 @@ export function KanbanIssuePanelContainer({
       )}
       renderAgentTasksSection={(issueId) => (
         <>
+          <IssueWorkflowQuickRun issueId={issueId} />
           <IssueSquadRunSectionContainer issueId={issueId} />
           <IssueAgentTasksSectionContainer issueId={issueId} />
         </>

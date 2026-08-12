@@ -125,6 +125,29 @@ impl SquadRunRepository {
         Ok(runs)
     }
 
+    /// Project-scoped list for Electric fallback / board badges.
+    pub async fn list_by_project(
+        pool: &PgPool,
+        project_id: Uuid,
+        limit: i64,
+    ) -> Result<Vec<SquadRun>, SquadRunError> {
+        let runs = sqlx::query_as::<_, SquadRun>(&format!(
+            r#"
+            SELECT {SQUAD_RUN_COLUMNS}
+            FROM squad_runs r
+            WHERE r.squad_id IN (SELECT id FROM squads WHERE project_id = $1)
+            ORDER BY r.created_at DESC
+            LIMIT $2
+            "#
+        ))
+        .bind(project_id)
+        .bind(limit)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(runs)
+    }
+
     pub async fn mark_waiting_approval(
         pool: &PgPool,
         id: Uuid,

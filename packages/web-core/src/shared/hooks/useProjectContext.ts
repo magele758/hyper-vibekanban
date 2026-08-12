@@ -18,6 +18,7 @@ import type {
   Autopilot,
   Squad,
   SquadMember,
+  SquadRun,
   CreateIssueRequest,
   UpdateIssueRequest,
   CreateProjectStatusRequest,
@@ -60,6 +61,7 @@ export interface ProjectContextValue {
   autopilots: Autopilot[];
   squads: Squad[];
   squadMembers: SquadMember[];
+  squadRuns: SquadRun[];
   issueAssignees: IssueAssignee[];
   issueFollowers: IssueFollower[];
   issueTags: IssueTag[];

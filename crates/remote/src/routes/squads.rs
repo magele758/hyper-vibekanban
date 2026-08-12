@@ -1400,14 +1400,23 @@ pub async fn execute_squad_pipeline(
                             break;
                         }
                     }
-                    let (cont, reason) =
+                    // Product semantics: **loop until condition is true**
+                    // (e.g. `verified:验收通过`). Body runs while the condition
+                    // is still false; when it becomes true, take the exit edge.
+                    // This matches the cookbook / Relentless template wording
+                    // ("until verified") — inverted from a C-style `while(cond)`.
+                    let (done, reason) =
                         eval_condition(node.condition.as_deref(), last.as_ref(), loop_success);
                     shared.run_log.lock().await.push(format!(
-                        "  - iter {}: condition → {} ({reason})",
+                        "  - iter {}: until-condition → {} ({reason})",
                         iter + 1,
-                        cont
+                        if done {
+                            "met — exit"
+                        } else {
+                            "not met — body"
+                        }
                     ));
-                    if !cont {
+                    if done {
                         break;
                     }
                     let body = edges_for_branch(outgoing, SquadPipelineEdgeBranch::Body);
@@ -2048,27 +2057,28 @@ pub async fn execute_squad_pipeline(
         }
     };
 
-    if let Some(p) = &pause {
-        let recipients: Vec<Uuid> = if let Some(uid) = actor_user_id {
-            vec![uid]
-        } else {
-            sqlx::query_scalar::<_, Uuid>(
-                r#"
+    // Notify humans on gates *and* hard failures so runs never die silently.
+    let recipients: Vec<Uuid> = if let Some(uid) = actor_user_id {
+        vec![uid]
+    } else {
+        sqlx::query_scalar::<_, Uuid>(
+            r#"
                 SELECT DISTINCT user_id FROM issue_subscribers
                 WHERE issue_id = $1 AND user_id IS NOT NULL
                 "#,
-            )
-            .bind(issue_id)
-            .fetch_all(pool)
-            .await
-            .unwrap_or_default()
-        };
+        )
+        .bind(issue_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+    };
+    let run_id = run.as_ref().map(|r| r.id);
 
-        let run_id = run.as_ref().map(|r| r.id);
-        for uid in recipients {
+    if let Some(p) = &pause {
+        for uid in &recipients {
             let _ = InboxRepository::create(
                 pool,
-                uid,
+                *uid,
                 Some(squad.project_id),
                 Some(issue_id),
                 "workflow_approval",
@@ -2079,6 +2089,27 @@ pub async fn execute_squad_pipeline(
                     "squad_id": squad.id,
                     "pause_node_id": p.pause_node_id,
                     "approval_kind": p.approval_kind,
+                }),
+            )
+            .await;
+        }
+    } else if last_failed {
+        let detail = fail_msg
+            .clone()
+            .unwrap_or_else(|| "pipeline failed (no detail)".into());
+        for uid in &recipients {
+            let _ = InboxRepository::create(
+                pool,
+                *uid,
+                Some(squad.project_id),
+                Some(issue_id),
+                "workflow_failed",
+                &format!("流水线失败：{}", squad.name),
+                &detail,
+                json!({
+                    "squad_run_id": run_id,
+                    "squad_id": squad.id,
+                    "error_message": detail,
                 }),
             )
             .await;

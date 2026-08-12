@@ -116,6 +116,11 @@ export function IssueSquadRunSectionContainer({ issueId }: Props) {
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-normal">
                   {STATUS_LABEL[run.status] ?? run.status}
+                  {run.approval_kind && waiting && (
+                    <span className="ml-1 text-xs text-brand">
+                      ({run.approval_kind})
+                    </span>
+                  )}
                   {run.pause_node_id && waiting && (
                     <span className="ml-1 text-xs text-low">
                       @ {run.pause_node_id}

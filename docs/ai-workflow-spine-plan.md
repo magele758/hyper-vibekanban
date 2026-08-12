@@ -1,8 +1,8 @@
 # AI 工作流主骨（Stage Protocol）与 Feature Autopilot
 
-> 状态：方案定稿，**Batch 1 已落地代码**（待本机 `VK_REBUILD` 跑 migration 验证）  
+> 状态：方案定稿；Batch 1/2 骨架已落地；**2026-08 增强切片见 [agentic-sdlc-enhancement.md](./agentic-sdlc-enhancement.md)**  
 > 关联：[board-agents-plan.md](./board-agents-plan.md)（Board Agent / Squad 已落地骨架）  
-> 更新：2026-07-15
+> 更新：2026-08-11
 
 把「想法 → 方案 → 实现 → 验证 → 合并 → 发布」做成 vibe-kanban 的一等编排能力；首个可演示 case 是 **Feature Autopilot（Closeout）**：挂 Squad 后自动 review / 测试 / rebase，并在合并前询问人。
 

@@ -15,6 +15,7 @@ import {
   PROJECT_AUTOPILOTS_SHAPE,
   PROJECT_SQUADS_SHAPE,
   PROJECT_SQUAD_MEMBERS_SHAPE,
+  PROJECT_SQUAD_RUNS_SHAPE,
   PROJECT_ISSUE_ASSIGNEES_SHAPE,
   PROJECT_ISSUE_FOLLOWERS_SHAPE,
   PROJECT_ISSUE_TAGS_SHAPE,
@@ -103,6 +104,9 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
     enabled: secondaryEnabled,
   });
   const squadMembersResult = useShape(PROJECT_SQUAD_MEMBERS_SHAPE, params, {
+    enabled: secondaryEnabled,
+  });
+  const squadRunsResult = useShape(PROJECT_SQUAD_RUNS_SHAPE, params, {
     enabled: secondaryEnabled,
   });
   const issueAssigneesResult = useShape(PROJECT_ISSUE_ASSIGNEES_SHAPE, params, {
@@ -363,6 +367,7 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       autopilots: autopilotsResult.data,
       squads: squadsResult.data,
       squadMembers: squadMembersResult.data,
+      squadRuns: squadRunsResult.data,
       issueAssignees: issueAssigneesResult.data,
       issueFollowers: issueFollowersResult.data,
       issueTags: issueTagsResult.data,
@@ -445,6 +450,7 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
       autopilotsResult,
       squadsResult,
       squadMembersResult,
+      squadRunsResult,
       issueAssigneesResult,
       issueFollowersResult,
       issueTagsResult,

@@ -26,6 +26,9 @@ function classifySeverity(item: InboxItem): SeverityLevel {
   if (item.type === 'workflow_approval') {
     return 'needs-approval';
   }
+  if (item.type === 'workflow_failed') {
+    return 'error';
+  }
   if (item.type === 'agent_task') {
     const payload = item.payload as { status?: string } | null;
     const status = payload?.status;

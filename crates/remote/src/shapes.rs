@@ -4,7 +4,7 @@ use api_types::{
     Agent, AgentTask, Autopilot, InboxItem, Issue, IssueAssignee, IssueComment,
     IssueCommentReaction, IssueFollower, IssueRelationship, IssueTag, Notification,
     OrganizationMember, Project, ProjectStatus, PullRequest, PullRequestIssue, Squad, SquadMember,
-    Tag, User, Workspace,
+    SquadRun, Tag, User, Workspace,
 };
 
 use crate::shape_definition::ShapeDefinition;
@@ -94,6 +94,15 @@ pub const PROJECT_SQUAD_MEMBERS_SHAPE: ShapeDefinition<SquadMember> = crate::def
     table: "squad_members",
     where_clause: r#""squad_id" IN (SELECT id FROM squads WHERE "project_id" = $1)"#,
     url: "/shape/project/{project_id}/squad_members",
+    params: ["project_id"],
+);
+
+/// Active + recent pipeline runs for kanban badges and Issue progress.
+pub const PROJECT_SQUAD_RUNS_SHAPE: ShapeDefinition<SquadRun> = crate::define_shape!(
+    name: "PROJECT_SQUAD_RUNS_SHAPE",
+    table: "squad_runs",
+    where_clause: r#""squad_id" IN (SELECT id FROM squads WHERE "project_id" = $1)"#,
+    url: "/shape/project/{project_id}/squad_runs",
     params: ["project_id"],
 );
 

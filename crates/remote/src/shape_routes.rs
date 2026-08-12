@@ -27,7 +27,8 @@ use crate::{
         issues::IssueRepository, notifications::NotificationRepository, organization_members,
         project_statuses::ProjectStatusRepository, projects::ProjectRepository,
         pull_request_issues::PullRequestIssueRepository, pull_requests::PullRequestRepository,
-        squads::SquadRepository, tags::TagRepository, workspaces::WorkspaceRepository,
+        squad_runs::SquadRunRepository, squads::SquadRepository, tags::TagRepository,
+        workspaces::WorkspaceRepository,
     },
     routes::{
         error::ErrorResponse,
@@ -139,6 +140,12 @@ pub fn all_shape_routes() -> Vec<ShapeRoute> {
             ShapeScope::Project,
             "/fallback/squad_members",
             fallback_list_squad_members,
+        ),
+        ShapeRoute::new(
+            &shapes::PROJECT_SQUAD_RUNS_SHAPE,
+            ShapeScope::Project,
+            "/fallback/squad_runs",
+            fallback_list_squad_runs,
         ),
         ShapeRoute::new(
             &shapes::PROJECT_PROJECT_STATUSES_SHAPE,
@@ -635,6 +642,32 @@ async fn fallback_list_squads(
         })?;
 
     Ok(Json(ListSquadsResponse { squads }))
+}
+
+#[derive(Debug, Serialize)]
+struct ListSquadRunsShapeFallback {
+    /// Field name must match the shape table (`squad_runs`) for Electric fallback.
+    squad_runs: Vec<api_types::SquadRun>,
+}
+
+async fn fallback_list_squad_runs(
+    State(state): State<AppState>,
+    Extension(ctx): Extension<RequestContext>,
+    Query(query): Query<ProjectFallbackQuery>,
+) -> Result<Json<ListSquadRunsShapeFallback>, ErrorResponse> {
+    ensure_project_access(state.pool(), ctx.user.id, query.project_id).await?;
+
+    let squad_runs = SquadRunRepository::list_by_project(state.pool(), query.project_id, 200)
+        .await
+        .map_err(|error| {
+            tracing::error!(?error, project_id = %query.project_id, "failed to list squad runs (fallback)");
+            ErrorResponse::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to list squad runs",
+            )
+        })?;
+
+    Ok(Json(ListSquadRunsShapeFallback { squad_runs }))
 }
 
 async fn fallback_list_squad_members(

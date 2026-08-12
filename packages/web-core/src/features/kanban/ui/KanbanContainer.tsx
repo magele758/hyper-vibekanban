@@ -155,6 +155,7 @@ export function KanbanContainer() {
     issuesById,
     agents,
     agentTasks,
+    squadRuns,
     insertIssueTag,
     removeIssueTag,
     insertTag,
@@ -664,6 +665,35 @@ export function KanbanContainer() {
     }
     return result;
   }, [agentTasks]);
+
+  // Active squad pipeline runs (prefer waiting_approval over running)
+  const pipelineStatusByIssueId = useMemo(() => {
+    const result = new Map<
+      string,
+      'running' | 'waiting_approval' | 'queued'
+    >();
+    for (const run of squadRuns) {
+      if (
+        run.status !== 'running' &&
+        run.status !== 'waiting_approval' &&
+        run.status !== 'queued'
+      ) {
+        continue;
+      }
+      const existing = result.get(run.issue_id);
+      if (
+        !existing ||
+        run.status === 'waiting_approval' ||
+        (run.status === 'running' && existing === 'queued')
+      ) {
+        result.set(
+          run.issue_id,
+          run.status as 'running' | 'waiting_approval' | 'queued'
+        );
+      }
+    }
+    return result;
+  }, [squadRuns]);
 
   const membersWithProfiles = useMemo(
     () => [...membersWithProfilesById.values()],
@@ -1259,6 +1289,9 @@ export function KanbanContainer() {
                                 isMobile={isMobile}
                                 agentTaskStatus={
                                   agentTaskStatusByIssueId.get(issue.id) ?? null
+                                }
+                                pipelineStatus={
+                                  pipelineStatusByIssueId.get(issue.id) ?? null
                                 }
                                 onPriorityClick={(e) => {
                                   e.stopPropagation();

@@ -15,56 +15,58 @@
 Coding agent 经常改一半就宣布完工。这条流水线不信它的自述：
 
 ```
-实现 → while(最多 5 轮) → 硬验证脚本 → 完成度审计 → 鞭策回修 ─┐
-                ↑                                          │
-                └──────────────────────────────────────────┘
-         退出 → Ask Merge
+实现
+  → while(until verified:验收通过, max 5)
+       body: check → 审计 → if(需回修) → 鞭策回修
+       exit: Ask Merge
 ```
 
 关键字段：
 
 | 字段 | 值 | 作用 |
 |------|-----|------|
-| While `condition` | `verified:验收通过` | **严格判据**：上一步必须 `Completed` **且**输出含「验收通过」才退出 |
+| While `condition` | `verified:验收通过` | **直到条件为真才退出**：上一步必须 `Completed` **且**输出含「验收通过」 |
 | While `max_iterations` | `5` | 硬上限，绝不无限循环 |
 | Script `command` | `pnpm run check` | 真实退出码做闸门，脚本失败 → 该步 Failed → 严格判据判定「未完成」 |
+| if after 审计 | `agent:需回修` | 只有审计写了「需回修」才进回修；通过时 body 停在审计，while 头下一轮可退出 |
 | Agent `handoff_diff` | ✅ | 审计员看真实 diff，不是总结文字 |
 
 **为什么能防死循环**：三重保险 —— `max_iterations` 上限、`script` 节点有 30
 分钟超时（`VK_PIPELINE_SCRIPT_TIMEOUT_SECS` 可调）、agent 等待有 45 分钟上限。
 
-**为什么能防「假完成」**：`verified:` 前缀是本次新增的严格条件形式。普通条件
-在「agent 说完成了」时会走软判定放行，`verified:` 不会 —— 它要求上一步真的
-成功。把它指向 `script` 节点，完成度就由退出码而不是措辞决定。
+**为什么能防「假完成」**：`verified:` 是严格条件：要求上一步真的成功且含标记。
+while 采用 **until-true**（条件满足才退出），与 Closeout / Full Flow 一致。
 
 ---
 
 ## 2. A 写 → B review → A 改
 
-**装模板**：`Feature Closeout`（已有）
+**装模板**：`Feature Closeout`（已加固）
 
 ```
-Review → 完成度? ──需回修──→ 回修 ──→ (回到 Review)
-             └──通过──→ 测试 → 跑 check → Rebase → Ask Merge
+Review(handoff_diff)
+  → while(until verified:验收通过, max 5)
+       body: 回修 → 再审查
+       exit: 测试 → check → (失败→脚本回修→再 Review) → rebase → Ask Merge → merge
 ```
 
-**必须打开的开关**：给 coder 节点勾上 **「把本步 diff 传给下一步」**
-(`handoff_diff`)。
+模板默认已打开 **`handoff_diff`**（Reviewer 看真实 diff）。while 语义是
+**直到条件为真才退出**（与 Relentless 一致）；max 5 防止无限环。
 
-不勾的话，reviewer 的 prompt 里只有上一步的 `summary`（一段自我描述），
-它没法判断代码对不对。勾上以后，运行时会在该步之后自动跑一次
-`git diff`，把补丁塞进下一步的 prompt：
+Issue 面板有 **「从步骤运行」**（`entry_label`：代码审查 / 测试验证 / Ask Merge…）。
+
+---
+
+## 2b. 从想法到合并（Full Feature Flow）
+
+**装模板**：`Full Feature Flow`
 
 ```
-## Diff from previous step
-Review the actual changes below rather than trusting the summary.
-```diff
-...真实补丁...
-```
+研究方案 → 确认方案(wait) → 架构 → 选型确认(wait)
+  → 实现 → [Closeout 收尾：Review while / check / rebase / Ask Merge / merge]
 ```
 
-diff 超过 12000 字符会截断（保护 agent 上下文窗口）。收集失败不会中断流水线，
-只是退回「仅传总结」。
+任意 `entry_label` 可切入（例如方案已定从「开始实现」、代码已写从「代码审查」）。
 
 ---
 

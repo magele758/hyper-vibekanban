@@ -31,6 +31,7 @@ const SIDECAR_BASE = (
 /** Built-in pipeline templates installable per project. */
 export type WorkflowTemplateKey =
   | 'feature-closeout'
+  | 'feature-full-flow'
   | 'relentless-delivery'
   | 'scout-digest';
 
@@ -42,7 +43,12 @@ export const WORKFLOW_TEMPLATES: {
   {
     key: 'feature-closeout',
     label: 'Feature Closeout',
-    hint: 'Review → 测试 → rebase → Ask Merge',
+    hint: 'Review(diff) → while≤5 → 测试 → check → rebase → Ask Merge → merge',
+  },
+  {
+    key: 'feature-full-flow',
+    label: 'Full Feature Flow',
+    hint: '研究 → 确认方案 → 架构 → 选型 → 实现 → Closeout 收尾',
   },
   {
     key: 'relentless-delivery',

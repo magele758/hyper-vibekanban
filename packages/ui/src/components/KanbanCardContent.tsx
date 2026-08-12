@@ -140,6 +140,8 @@ export type KanbanCardContentProps<TTag extends KanbanTag = KanbanTag> = {
   isMobile?: boolean;
   /** Active agent task status shown as a small badge on the card. */
   agentTaskStatus?: 'queued' | 'dispatched' | 'running' | null;
+  /** Active squad pipeline run status (shown when more specific than agent task). */
+  pipelineStatus?: 'running' | 'waiting_approval' | 'queued' | null;
 };
 
 export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
@@ -160,6 +162,7 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
   tagEditProps,
   isMobile,
   agentTaskStatus = null,
+  pipelineStatus = null,
 }: KanbanCardContentProps<TTag>) {
   const { t } = useTranslation('common');
   const previewDescription = useMemo(() => {
@@ -215,21 +218,31 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
           <span className="font-ibm-plex-mono text-sm text-low truncate">
             {displayId}
           </span>
-          {agentTaskStatus && (
-            <span
-              className={cn(
-                'shrink-0 rounded-sm px-1 py-px text-[10px] font-medium',
-                agentTaskStatus === 'running'
-                  ? 'bg-brand/15 text-brand'
-                  : 'bg-secondary text-low'
-              )}
-            >
-              {agentTaskStatus === 'queued'
-                ? '排队'
-                : agentTaskStatus === 'dispatched'
-                  ? '派发'
-                  : '执行中'}
+          {pipelineStatus === 'waiting_approval' ? (
+            <span className="shrink-0 rounded-sm bg-yellow-500/15 px-1 py-px text-[10px] font-medium text-yellow-700 dark:text-yellow-400">
+              待批准
             </span>
+          ) : pipelineStatus === 'running' || pipelineStatus === 'queued' ? (
+            <span className="shrink-0 rounded-sm bg-brand/15 px-1 py-px text-[10px] font-medium text-brand">
+              {pipelineStatus === 'queued' ? '流水线排队' : '流水线中'}
+            </span>
+          ) : (
+            agentTaskStatus && (
+              <span
+                className={cn(
+                  'shrink-0 rounded-sm px-1 py-px text-[10px] font-medium',
+                  agentTaskStatus === 'running'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-secondary text-low'
+                )}
+              >
+                {agentTaskStatus === 'queued'
+                  ? '排队'
+                  : agentTaskStatus === 'dispatched'
+                    ? '派发'
+                    : '执行中'}
+              </span>
+            )
           )}
           {isLoading && <RunningDots />}
         </div>
