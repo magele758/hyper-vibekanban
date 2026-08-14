@@ -245,6 +245,13 @@ impl RemoteClient {
                 Err(err) if err.is_definitive_auth_failure() => {
                     warn!(
                         error = %err,
+                        "Definitive remote auth failure; attempting auto local login if configured"
+                    );
+                    if let Some(token) = self.try_auto_local_login().await {
+                        return Ok(token);
+                    }
+                    warn!(
+                        error = %err,
                         "Discarding local credentials after definitive remote auth failure"
                     );
                     let _ = self.auth_context.clear_credentials().await;
@@ -259,6 +266,43 @@ impl RemoteClient {
                 }
             }
         })
+    }
+
+    /// Self-host worker recovery: after refresh-token reuse/revocation (common when
+    /// Mac Remote flaps longer than the refresh grace window), re-login with
+    /// `VK_LOCAL_LOGIN_EMAIL` / `VK_LOCAL_LOGIN_PASSWORD` (or
+    /// `$VK_ASSET_DIR/local_login.json`) instead of staying dead until a human
+    /// notices.
+    async fn try_auto_local_login(&self) -> Option<String> {
+        let (email, password) = local_login_credentials()?;
+
+        warn!(%email, "Auto local login after definitive auth failure");
+        let response = match self
+            .local_login(&LocalLoginRequest {
+                email: email.clone(),
+                password,
+            })
+            .await
+        {
+            Ok(response) => response,
+            Err(err) => {
+                warn!(error = %err, %email, "Auto local login failed");
+                return None;
+            }
+        };
+
+        let expires_at = extract_expiration(&response.access_token).ok();
+        let creds = Credentials {
+            access_token: Some(response.access_token.clone()),
+            refresh_token: response.refresh_token,
+            expires_at,
+        };
+        if let Err(err) = self.auth_context.save_credentials(&creds).await {
+            warn!(error = %err, "Failed to persist credentials after auto local login");
+            return None;
+        }
+        self.auth_context.clear_remote_auth_degraded_slug().await;
+        Some(response.access_token)
     }
 
     async fn refresh_credentials(
@@ -1143,6 +1187,30 @@ fn classify_auth_status_error(status: u16, body: String) -> RemoteClientError {
         return RemoteClientError::Auth;
     }
     RemoteClientError::Http { status, body }
+}
+
+fn local_login_credentials() -> Option<(String, String)> {
+    if let (Ok(email), Ok(password)) = (
+        std::env::var("VK_LOCAL_LOGIN_EMAIL"),
+        std::env::var("VK_LOCAL_LOGIN_PASSWORD"),
+    ) {
+        if !email.trim().is_empty() && !password.is_empty() {
+            return Some((email, password));
+        }
+    }
+
+    let path = utils::assets::asset_dir().join("local_login.json");
+    let bytes = std::fs::read(&path).ok()?;
+    #[derive(Deserialize)]
+    struct LocalLoginFile {
+        email: String,
+        password: String,
+    }
+    let parsed: LocalLoginFile = serde_json::from_slice(&bytes).ok()?;
+    if parsed.email.trim().is_empty() || parsed.password.is_empty() {
+        return None;
+    }
+    Some((parsed.email, parsed.password))
 }
 
 #[cfg(test)]
