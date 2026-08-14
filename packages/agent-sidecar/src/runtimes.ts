@@ -99,15 +99,15 @@ export async function openaiCompatibleChat(
         try {
           const parsed = JSON.parse(data) as {
             choices?: Array<{
-              delta?: { content?: string };
+              delta?: { content?: string | null; reasoning_content?: string | null };
               finish_reason?: string | null;
             }>;
           };
           const choice = parsed.choices?.[0];
-          const delta = choice?.delta?.content;
-          if (delta) {
-            reply += delta;
-            params.onDelta?.(delta);
+          const textChunk = choice?.delta?.content ?? choice?.delta?.reasoning_content;
+          if (textChunk) {
+            reply += textChunk;
+            params.onDelta?.(textChunk);
           }
           if (choice?.finish_reason) {
             streamFinished = true;
