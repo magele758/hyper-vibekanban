@@ -9,6 +9,7 @@ import {
   UsersThreeIcon,
   WebhooksLogoIcon,
   PlayIcon,
+  PencilSimpleIcon,
   CopyIcon,
   ArrowsClockwiseIcon,
 } from '@phosphor-icons/react';
@@ -428,6 +429,7 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
   const [runs, setRuns] = useState<Record<string, AutopilotRun[]>>({});
   const [showRuns, setShowRuns] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [agentId, setAgentId] = useState('');
   const [squadId, setSquadId] = useState('');
@@ -441,6 +443,37 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setCreating(false);
+    setEditingId(null);
+    setName('');
+    setAgentId('');
+    setSquadId('');
+    setCron('0 9 * * 1-5');
+    setExecutionMode('create_issue');
+    setConcurrency('skip');
+    setTitleTemplate('{{autopilot_name}} - {{date}}');
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setCreating(true);
+    setError(null);
+  };
+
+  const openEdit = (ap: Autopilot) => {
+    setCreating(false);
+    setEditingId(ap.id);
+    setName(ap.name);
+    setAgentId(ap.agent_id ?? '');
+    setSquadId(ap.squad_id ?? '');
+    setCron(ap.cron_expression);
+    setExecutionMode(ap.execution_mode);
+    setConcurrency(ap.concurrency_policy);
+    setTitleTemplate(ap.issue_title_template);
+    setError(null);
+  };
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -463,10 +496,34 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
         issue_title_template: titleTemplate.trim(),
         enabled: true,
       });
-      setCreating(false);
-      setName('');
-      setAgentId('');
-      setSquadId('');
+      resetForm();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!editingId || !name.trim()) return;
+    if (!agentId && !squadId) {
+      setError('请选择 Agent 或 Squad');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await boardAgentsApi.updateAutopilot(editingId, {
+        name: name.trim(),
+        agent_id: squadId ? null : agentId || null,
+        squad_id: squadId || null,
+        cron_expression: cron.trim(),
+        timezone: getLocalTimezone(),
+        execution_mode: executionMode,
+        concurrency_policy: concurrency,
+        issue_title_template: titleTemplate.trim(),
+      } as UpdateAutopilotRequest);
+      resetForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -485,8 +542,19 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
   };
 
   const handleTrigger = async (id: string) => {
+    setError(null);
     try {
       await boardAgentsApi.triggerAutopilot(id);
+      // Force refresh when records panel is open.
+      setRuns((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      if (showRuns === id) {
+        const list = await boardAgentsApi.listAutopilotRuns(id);
+        setRuns((prev) => ({ ...prev, [id]: list }));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -496,6 +564,7 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
     if (!window.confirm(`确定删除 Autopilot「${apName}」？`)) return;
     try {
       await boardAgentsApi.deleteAutopilot(id);
+      if (editingId === id) resetForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -517,13 +586,15 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
     }
   };
 
+  const formOpen = creating || !!editingId;
+
   return (
     <div className="p-6">
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-low">
           定时任务：按 Cron 表达式自动创建 Issue 或触发 Agent 执行。
         </p>
-        <PrimaryButton onClick={() => setCreating(true)}>
+        <PrimaryButton onClick={openCreate}>
           <PlusIcon className="size-4" />
           新建 Autopilot
         </PrimaryButton>
@@ -531,9 +602,11 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
 
       {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
-      {creating && (
+      {formOpen && (
         <div className="mb-6 max-w-xl space-y-3 rounded-lg border border-border bg-secondary p-4">
-          <h2 className="font-medium text-normal">创建 Autopilot</h2>
+          <h2 className="font-medium text-normal">
+            {editingId ? '编辑 Autopilot' : '创建 Autopilot'}
+          </h2>
           <input
             className="w-full rounded-md border border-border bg-primary px-3 py-2 text-sm"
             placeholder="名称"
@@ -615,13 +688,22 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
             />
           </label>
           <div className="flex gap-2">
-            <PrimaryButton disabled={busy} onClick={() => void handleCreate()}>
-              {busy ? '创建中…' : '创建'}
+            <PrimaryButton
+              disabled={busy}
+              onClick={() => void (editingId ? handleUpdate() : handleCreate())}
+            >
+              {busy
+                ? editingId
+                  ? '保存中…'
+                  : '创建中…'
+                : editingId
+                  ? '保存'
+                  : '创建'}
             </PrimaryButton>
             <button
               type="button"
               className="rounded-md px-3 py-1.5 text-sm text-low"
-              onClick={() => setCreating(false)}
+              onClick={resetForm}
             >
               取消
             </button>
@@ -642,7 +724,10 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
             return (
               <div
                 key={ap.id}
-                className="rounded-lg border border-border bg-secondary p-4"
+                className={cn(
+                  'rounded-lg border border-border bg-secondary p-4',
+                  editingId === ap.id && 'ring-1 ring-brand'
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -685,6 +770,14 @@ function AutopilotsTab({ projectId }: { projectId: string }) {
                       onClick={() => void handleTrigger(ap.id)}
                     >
                       <PlayIcon className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="编辑"
+                      className="rounded-md p-1.5 text-low hover:bg-brand/10 hover:text-brand"
+                      onClick={() => openEdit(ap)}
+                    >
+                      <PencilSimpleIcon className="size-4" />
                     </button>
                     <button
                       type="button"

@@ -95,7 +95,10 @@ async function json<T>(res: Response): Promise<T> {
     const text = await res.text();
     throw new Error(`${res.status}: ${text}`);
   }
-  return res.json() as Promise<T>;
+  // Some endpoints (e.g. autopilot trigger → 202) return an empty body.
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 export const boardAgentsApi = {

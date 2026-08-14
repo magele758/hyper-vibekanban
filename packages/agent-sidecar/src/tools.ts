@@ -30,7 +30,10 @@ async function remoteFetch<T>(
     const body = await res.text();
     throw new Error(`Remote ${path} → ${res.status}: ${body}`);
   }
-  return (await res.json()) as T;
+  // Autopilot trigger returns 202 with an empty body.
+  const body = await res.text();
+  if (!body) return undefined as T;
+  return JSON.parse(body) as T;
 }
 
 export const TOOL_SYSTEM_PROMPT = `You are a board Copilot for Vibe Kanban (参谋，不是 coding agent).
