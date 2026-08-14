@@ -484,6 +484,192 @@ fn load_antigravity_models_from_config() -> Option<Vec<ModelInfo>> {
     parse_antigravity_models_output(&content)
 }
 
+pub const GROK_DEFAULT_MODEL: &str = "grok-4.6";
+
+pub fn grok_fallback_models() -> Vec<ModelInfo> {
+    ["grok-4.6", "grok-4.5"]
+        .into_iter()
+        .map(grok_model_info)
+        .collect()
+}
+
+fn grok_model_info(id: &str) -> ModelInfo {
+    ModelInfo {
+        id: id.to_string(),
+        name: grok_model_display_name(id),
+        provider_id: None,
+        reasoning_options: vec![],
+    }
+}
+
+fn grok_model_display_name(id: &str) -> String {
+    id.strip_prefix("grok-")
+        .map(|rest| format!("Grok {rest}"))
+        .unwrap_or_else(|| id.to_string())
+}
+
+fn is_grok_model_id(id: &str) -> bool {
+    let id = id.trim();
+    !id.is_empty()
+        && id.to_ascii_lowercase().contains("grok")
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
+}
+
+/// Discover Grok models via `grok models`, falling back to `~/.grok/models_cache.json`.
+pub async fn discover_grok_models(
+    base_command: &str,
+    cmd: &CmdOverrides,
+) -> Result<(Vec<ModelInfo>, Option<String>), ExecutorError> {
+    let builder = apply_overrides(
+        CommandBuilder::new(base_command).extend_params(["models"]),
+        cmd,
+    )
+    .map_err(|err| ExecutorError::Io(std::io::Error::other(err.to_string())))?;
+
+    match run_command_capture(&builder, &[], &cmd_env(cmd)).await {
+        Ok(output) => {
+            if let Some(parsed) = parse_grok_models_output(&output) {
+                return Ok(parsed);
+            }
+            tracing::debug!("grok models returned no parseable models; trying models_cache.json");
+        }
+        Err(error) => {
+            tracing::warn!(
+                ?error,
+                "grok models failed; trying ~/.grok/models_cache.json"
+            );
+        }
+    }
+
+    load_grok_models_from_cache()
+        .map(|models| {
+            let default_model = models
+                .iter()
+                .find(|m| m.id == GROK_DEFAULT_MODEL)
+                .or(models.first())
+                .map(|m| m.id.clone());
+            (models, default_model)
+        })
+        .ok_or_else(|| {
+            ExecutorError::Io(std::io::Error::other(
+                "failed to discover Grok models via `grok models` or ~/.grok/models_cache.json",
+            ))
+        })
+}
+
+/// Parse `grok models` CLI output.
+///
+/// Example:
+/// ```text
+/// You are logged in with grok.com.
+///
+/// Default model: grok-4.6
+///
+/// Available models:
+///   * grok-4.6 (default)
+///   - grok-4.5
+/// ```
+pub fn parse_grok_models_output(output: &str) -> Option<(Vec<ModelInfo>, Option<String>)> {
+    let mut default_model = None;
+    let mut in_list = false;
+    let mut models = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("Default model:") {
+            let id = rest.trim();
+            if is_grok_model_id(id) {
+                default_model = Some(id.to_string());
+                grok_push_model(&mut models, &mut seen, id);
+            }
+            continue;
+        }
+
+        if trimmed.to_ascii_lowercase().starts_with("available models") {
+            in_list = true;
+            continue;
+        }
+        if !in_list {
+            continue;
+        }
+
+        let rest = trimmed
+            .strip_prefix("* ")
+            .or_else(|| trimmed.strip_prefix("- "))
+            .or_else(|| trimmed.strip_prefix("• "))
+            .unwrap_or(trimmed)
+            .trim();
+        let id = rest.split_whitespace().next().unwrap_or("");
+        if !is_grok_model_id(id) {
+            continue;
+        }
+        if rest.to_ascii_lowercase().contains("(default)") {
+            default_model = default_model.or_else(|| Some(id.to_string()));
+        }
+        grok_push_model(&mut models, &mut seen, id);
+    }
+
+    (!models.is_empty()).then_some((models, default_model))
+}
+
+fn grok_push_model(
+    models: &mut Vec<ModelInfo>,
+    seen: &mut std::collections::HashSet<String>,
+    id: &str,
+) {
+    if seen.insert(id.to_string()) {
+        models.push(grok_model_info(id));
+    }
+}
+
+/// Parse `~/.grok/models_cache.json` (`{"models":{"<id>":{"info":{...}}}}`).
+pub fn parse_grok_models_cache(raw: &str) -> Option<Vec<ModelInfo>> {
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let entries = value.get("models")?.as_object()?;
+
+    let mut models = Vec::new();
+    for (id, entry) in entries {
+        let info = entry.get("info").unwrap_or(entry);
+        if info.get("hidden").and_then(|v| v.as_bool()) == Some(true) {
+            continue;
+        }
+        if info.get("supported_in_api").and_then(|v| v.as_bool()) == Some(false) {
+            continue;
+        }
+        let model_id = info.get("id").and_then(|v| v.as_str()).unwrap_or(id).trim();
+        if model_id.is_empty() {
+            continue;
+        }
+        let name = info
+            .get("name")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| grok_model_display_name(model_id));
+        models.push(ModelInfo {
+            id: model_id.to_string(),
+            name,
+            provider_id: None,
+            reasoning_options: vec![],
+        });
+    }
+
+    models.sort_by(|a, b| b.id.cmp(&a.id));
+    (!models.is_empty()).then_some(models)
+}
+
+fn load_grok_models_from_cache() -> Option<Vec<ModelInfo>> {
+    let path = dirs::home_dir()?.join(".grok").join("models_cache.json");
+    parse_grok_models_cache(&std::fs::read_to_string(path).ok()?)
+}
+
 async fn run_command_capture(
     builder: &CommandBuilder,
     additional_args: &[String],
@@ -1062,6 +1248,71 @@ xunmeng      claude-opus-4-8                      128K     16.4K    no        no
         assert!(parse_oh_my_pi_models_json("No models available.").is_none());
         assert!(parse_oh_my_pi_models_json("{\"models\":[]}").is_none());
     }
+
+    #[test]
+    fn parse_grok_models_cli_output() {
+        let output = r"You are logged in with grok.com.
+
+Default model: grok-4.6
+
+Available models:
+  * grok-4.6 (default)
+  - grok-4.5
+";
+        let (models, default_model) = parse_grok_models_output(output).expect("models");
+        assert_eq!(default_model.as_deref(), Some("grok-4.6"));
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "grok-4.6");
+        assert_eq!(models[0].name, "Grok 4.6");
+        assert_eq!(models[1].id, "grok-4.5");
+        assert_eq!(models[1].name, "Grok 4.5");
+    }
+
+    #[test]
+    fn parse_grok_models_cache_json() {
+        let raw = r#"{
+            "models": {
+                "grok-4.5": {
+                    "info": {
+                        "id": "grok-4.5",
+                        "name": "Grok 4.5",
+                        "hidden": false,
+                        "supported_in_api": true
+                    }
+                },
+                "grok-4.6": {
+                    "info": {
+                        "id": "grok-4.6",
+                        "name": "Grok 4.6",
+                        "hidden": false,
+                        "supported_in_api": true
+                    }
+                },
+                "hidden-model": {
+                    "info": {
+                        "id": "hidden-model",
+                        "name": "Hidden",
+                        "hidden": true,
+                        "supported_in_api": true
+                    }
+                }
+            }
+        }"#;
+        let models = parse_grok_models_cache(raw).expect("cache models");
+        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"grok-4.6"));
+        assert!(ids.contains(&"grok-4.5"));
+        assert!(!ids.contains(&"hidden-model"));
+        let grok46 = models.iter().find(|m| m.id == "grok-4.6").unwrap();
+        assert_eq!(grok46.name, "Grok 4.6");
+    }
+
+    #[test]
+    fn parse_grok_models_rejects_help_text() {
+        assert!(parse_grok_models_output("Usage: grok models [OPTIONS]").is_none());
+        assert!(parse_grok_models_output("You are logged in with grok.com.").is_none());
+        assert!(parse_grok_models_cache(r#"{"models":{}}"#).is_none());
+    }
 }
 
 #[cfg(test)]
@@ -1204,6 +1455,47 @@ mod antigravity_live_tests {
             models.iter().map(|m| &m.id).collect::<Vec<_>>()
         );
         // Pipe-sticky grandchildren previously forced a 45s timeout; keep this snappy.
+        assert!(
+            t0.elapsed() < Duration::from_secs(30),
+            "discovery took too long: {:?}",
+            t0.elapsed()
+        );
+    }
+}
+
+#[cfg(test)]
+mod grok_live_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn discover_grok_models_live() {
+        if workspace_utils::shell::resolve_executable_path_blocking("grok").is_none() {
+            return;
+        }
+        let t0 = std::time::Instant::now();
+        let (models, default_model) = discover_grok_models("grok", &CmdOverrides::default())
+            .await
+            .expect("discover");
+        eprintln!(
+            "elapsed={:?} count={} default={:?} ids={:?}",
+            t0.elapsed(),
+            models.len(),
+            default_model,
+            models.iter().map(|m| &m.id).collect::<Vec<_>>()
+        );
+        assert!(
+            models.len() >= 2,
+            "expected at least grok-4.6 and grok-4.5, got {:?}",
+            models.iter().map(|m| &m.id).collect::<Vec<_>>()
+        );
+        assert!(models.iter().any(|m| m.id == "grok-4.6"));
+        assert!(models.iter().any(|m| m.id == "grok-4.5"));
+        if let Some(default) = default_model {
+            assert!(
+                models.iter().any(|m| m.id == default),
+                "default {default} missing from discovered list"
+            );
+        }
         assert!(
             t0.elapsed() < Duration::from_secs(30),
             "discovery took too long: {:?}",

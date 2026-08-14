@@ -88,7 +88,7 @@
     "GROK": {
       "DEFAULT": {
         "GROK": {
-          "model": "grok-4.5",
+          "model": "grok-4.6",
           "always_approve": true
         }
       }
