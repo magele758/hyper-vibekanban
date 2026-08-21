@@ -15,6 +15,7 @@ use db::{
         coding_agent_turn::CodingAgentTurn,
         execution_process::{
             ExecutionContext, ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus,
+            SharedTreeWritePolicy,
         },
         execution_process_repo_state::ExecutionProcessRepoState,
         repo::Repo,
@@ -681,6 +682,14 @@ impl LocalContainerService {
                 let mut already_finalized = false;
 
                 if success || cleanup_done {
+                    let shared_tree_policy = ExecutionProcess::shared_tree_write_policy(
+                        &db.pool,
+                        ctx.workspace.id,
+                        ctx.session.id,
+                    )
+                    .await
+                    .unwrap_or(SharedTreeWritePolicy::Defer);
+
                     // Commit changes (if any) and get feedback about whether changes were made
                     let changes_committed = match container.try_commit_changes(&ctx).await {
                         Ok(committed) => committed,
@@ -691,7 +700,17 @@ impl LocalContainerService {
                         }
                     };
 
-                    let should_start_next = if matches!(
+                    let should_start_next = if !shared_tree_policy.allows_shared_tree_git_write()
+                        && matches!(
+                            ctx.execution_process.run_reason,
+                            ExecutionProcessRunReason::CodingAgent
+                                | ExecutionProcessRunReason::CleanupScript
+                        ) {
+                        // Another coding agent still owns the shared tree; skip
+                        // cleanup and any mid-flight combine. Queued follow-up
+                        // for *this* session is still consumed below.
+                        false
+                    } else if matches!(
                         ctx.execution_process.run_reason,
                         ExecutionProcessRunReason::CodingAgent
                     ) {
@@ -1771,6 +1790,21 @@ impl ContainerService for LocalContainerService {
         // we never commit on their behalf. The user decides what to commit.
         if ctx.workspace.kind.is_console() {
             tracing::debug!("Console workspace: skipping auto-commit (user-controlled)");
+            return Ok(false);
+        }
+
+        let shared_tree_policy = ExecutionProcess::shared_tree_write_policy(
+            &self.db.pool,
+            ctx.workspace.id,
+            ctx.session.id,
+        )
+        .await?;
+        if !shared_tree_policy.allows_shared_tree_git_write() {
+            tracing::info!(
+                session_id = %ctx.session.id,
+                workspace_id = %ctx.workspace.id,
+                "Skipping auto-commit of shared workspace tree; another coding agent is running"
+            );
             return Ok(false);
         }
 

@@ -11,8 +11,8 @@ use db::{
     models::{
         coding_agent_turn::{CodingAgentTurn, CreateCodingAgentTurn},
         execution_process::{
-            CreateExecutionProcess, ExecutionContext, ExecutionProcess, ExecutionProcessError,
-            ExecutionProcessRunReason, ExecutionProcessStatus,
+            CodingAgentTurnAdmission, CreateExecutionProcess, ExecutionContext, ExecutionProcess,
+            ExecutionProcessError, ExecutionProcessRunReason, ExecutionProcessStatus,
         },
         execution_process_repo_state::{
             CreateExecutionProcessRepoState, ExecutionProcessRepoState,
@@ -663,6 +663,24 @@ pub trait ContainerService {
             ExecutionProcessRepoState::find_by_execution_process_id(pool, target_process_id)
                 .await?;
 
+        // Shared tree: do not git-reset while another coding agent is writing.
+        let perform_git_reset = if perform_git_reset {
+            let policy =
+                ExecutionProcess::shared_tree_write_policy(pool, workspace.id, session_id).await?;
+            if !policy.allows_shared_tree_git_write() {
+                tracing::info!(
+                    session_id = %session_id,
+                    workspace_id = %workspace.id,
+                    "Skipping git reset of shared workspace tree; another coding agent is running"
+                );
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+
         let container_ref = self.ensure_container_exists(&workspace).await?;
         let workspace_dir = std::path::PathBuf::from(container_ref);
         let is_dirty = self
@@ -701,44 +719,55 @@ pub trait ContainerService {
             }
         }
 
-        self.try_stop(&workspace, false).await;
+        self.try_stop_session(session_id, false).await;
         ExecutionProcess::drop_at_and_after(pool, session_id, target_process_id).await?;
 
         Ok(())
     }
 
+    /// Stop running processes for a single session. Does not touch other
+    /// sessions in the same workspace.
+    async fn try_stop_session(&self, session_id: Uuid, include_dev_server: bool) {
+        let processes = match ExecutionProcess::find_stop_targets_for_session(
+            &self.db().pool,
+            session_id,
+            include_dev_server,
+        )
+        .await
+        {
+            Ok(processes) => processes,
+            Err(e) => {
+                tracing::debug!(
+                    "Failed to list stop targets for session {}: {}",
+                    session_id,
+                    e
+                );
+                return;
+            }
+        };
+
+        for process in processes {
+            self.stop_execution(&process, ExecutionProcessStatus::Killed)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!(
+                        "Failed to stop execution process {} for session {}: {}",
+                        process.id,
+                        session_id,
+                        e
+                    );
+                });
+        }
+    }
+
     async fn try_stop(&self, workspace: &Workspace, include_dev_server: bool) {
-        // stop execution processes for this workspace's sessions
         let sessions = match Session::find_by_workspace_id(&self.db().pool, workspace.id).await {
             Ok(s) => s,
             Err(_) => return,
         };
 
         for session in sessions {
-            if let Ok(processes) =
-                ExecutionProcess::find_by_session_id(&self.db().pool, session.id, false).await
-            {
-                for process in processes {
-                    // Skip dev server processes unless explicitly included
-                    if !include_dev_server
-                        && process.run_reason == ExecutionProcessRunReason::DevServer
-                    {
-                        continue;
-                    }
-                    if process.status == ExecutionProcessStatus::Running {
-                        self.stop_execution(&process, ExecutionProcessStatus::Killed)
-                            .await
-                            .unwrap_or_else(|e| {
-                                tracing::debug!(
-                                    "Failed to stop execution process {} for workspace {}: {}",
-                                    process.id,
-                                    workspace.id,
-                                    e
-                                );
-                            });
-                    }
-                }
-            }
+            self.try_stop_session(session.id, include_dev_server).await;
         }
     }
 
@@ -1134,6 +1163,15 @@ pub trait ContainerService {
         executor_action: &ExecutorAction,
         run_reason: &ExecutionProcessRunReason,
     ) -> Result<ExecutionProcess, ContainerError> {
+        if *run_reason == ExecutionProcessRunReason::CodingAgent {
+            match ExecutionProcess::admit_coding_agent_turn(&self.db().pool, session.id).await? {
+                CodingAgentTurnAdmission::Allow => {}
+                CodingAgentTurnAdmission::SessionAlreadyRunning => {
+                    return Err(SessionError::CodingAgentAlreadyRunning.into());
+                }
+            }
+        }
+
         // Create new execution process record
         // Capture current HEAD per repository as the "before" commit for this execution
         let repositories =

@@ -254,6 +254,18 @@ pub async fn reset_process(
     Ok(ResponseJson(ApiResponse::success(())))
 }
 
+pub async fn stop_session(
+    Extension(session): Extension<Session>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+    deployment
+        .container()
+        .try_stop_session(session.id, false)
+        .await;
+
+    Ok(ResponseJson(ApiResponse::success(())))
+}
+
 pub async fn run_setup_script(
     Extension(session): Extension<Session>,
     State(deployment): State<DeploymentImpl>,
@@ -316,6 +328,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/", get(get_session).put(update_session))
         .route("/follow-up", post(follow_up))
         .route("/reset", post(reset_process))
+        .route("/stop", post(stop_session))
         .route("/setup", post(run_setup_script))
         .route("/review", post(review::start_review))
         .layer(from_fn_with_state(

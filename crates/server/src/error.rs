@@ -363,6 +363,10 @@ impl IntoResponse for ApiError {
                     ),
                 )
             }
+            ApiError::Session(SessionError::CodingAgentAlreadyRunning) => ErrorInfo::conflict(
+                "SessionError",
+                "A coding agent is already running for this session.".to_string(),
+            ),
 
             ApiError::ScratchError(ScratchError::Database(_)) => {
                 ErrorInfo::internal("ScratchError")
