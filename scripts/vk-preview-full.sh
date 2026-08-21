@@ -201,6 +201,8 @@ cmd_up_host() {
       PORT="${SIDECAR_PORT}" \
       VK_REMOTE_API_BASE="${server_api}" \
       VK_LOCAL_API_BASE="http://127.0.0.1:${BACKEND_PORT}" \
+      VK_STATE_DIR="${STATE_DIR}" \
+      VK_COPILOT_CONFIG_FILE="${STATE_DIR}/copilot-model-config.json" \
       pnpm exec tsx src/index.ts \
       >"${LOG_DIR}/sidecar.log" 2>&1 &
     echo $! >"$(_pid_file sidecar)"

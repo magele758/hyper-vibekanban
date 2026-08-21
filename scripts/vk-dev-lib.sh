@@ -344,6 +344,8 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:\$PATH"
 export VK_REMOTE_API_BASE="http://127.0.0.1:${remote_port}"
 export VK_LOCAL_API_BASE="http://127.0.0.1:${backend_port}"
 export PORT="${port}"
+export VK_STATE_DIR="${state_dir}"
+export VK_COPILOT_CONFIG_FILE="${state_dir}/copilot-model-config.json"
 # Keep sidecar on direct http Remote — never the Caddy h2 URL.
 CADDY_ROOT_CA="\${HOME}/.vk-kanban/certs/caddy-root.crt"
 if [[ -f "\${CADDY_ROOT_CA}" ]]; then

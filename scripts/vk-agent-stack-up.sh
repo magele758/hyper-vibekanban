@@ -78,6 +78,8 @@ nohup env \
   VK_REMOTE_API_BASE="$REMOTE_URL" \
   VK_REMOTE_TOKEN="$TOKEN" \
   PORT="$SIDECAR_PORT" \
+  VK_STATE_DIR="$ROOT/.vk-test" \
+  VK_COPILOT_CONFIG_FILE="$ROOT/.vk-test/copilot-model-config.json" \
   /opt/homebrew/bin/pnpm --dir "$ROOT/packages/agent-sidecar" start \
   >>"$LOG_DIR/agent-sidecar.log" 2>&1 &
 echo $! >"$PID_DIR/agent-sidecar.pid"

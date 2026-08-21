@@ -54,6 +54,10 @@ pids
 # Agent session transcripts (local only)
 .pi/sessions/
 
+# Sidecar copilot LLM config (plaintext api_key; lives under ~/.vk-kanban)
+.copilot-model-config.json
+**/copilot-model-config.json
+
 # Coverage directory used by tools like istanbul
 coverage/
 *.lcov

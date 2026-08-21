@@ -1,12 +1,16 @@
 /**
- * Server-side store for global-copilot (agent_id: null) model config, keyed by
- * project_id. Lets multiple devices share one config; api_key stays server-side.
+ * Local sidecar store for global-copilot (agent_id: null) model config, keyed
+ * by project_id. api_key stays on this machine and is never returned by GET.
+ *
+ * Default path is under VK_STATE_DIR (~/.vk-kanban), not the repo cwd — the
+ * file contains secrets and must not show up in git status.
  *
  * ponytail: single JSON file, whole-map read/write. Fine for a handful of
  * projects on a single sidecar instance; move to the remote DB if it ever needs
  * multi-instance or per-user scoping.
  */
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export type CopilotModelConfig = {
@@ -15,9 +19,16 @@ export type CopilotModelConfig = {
   model?: string;
 };
 
-const FILE =
-  process.env.VK_COPILOT_CONFIG_FILE ??
-  path.join(process.cwd(), ".copilot-model-config.json");
+function resolveFile(): string {
+  if (process.env.VK_COPILOT_CONFIG_FILE) {
+    return process.env.VK_COPILOT_CONFIG_FILE;
+  }
+  const stateDir =
+    process.env.VK_STATE_DIR ?? path.join(os.homedir(), ".vk-kanban");
+  return path.join(stateDir, "copilot-model-config.json");
+}
+
+const FILE = resolveFile();
 
 type Store = Record<string, CopilotModelConfig>;
 
@@ -50,6 +61,11 @@ export async function upsertConfig(
     else next[k] = v.trim();
   }
   all[projectId] = next;
-  await fs.writeFile(FILE, JSON.stringify(all, null, 2), "utf8");
+  await fs.mkdir(path.dirname(FILE), { recursive: true });
+  await fs.writeFile(FILE, JSON.stringify(all, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await fs.chmod(FILE, 0o600);
   return next;
 }
