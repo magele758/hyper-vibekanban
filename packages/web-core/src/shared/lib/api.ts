@@ -376,6 +376,13 @@ export const sessionsApi = {
     return handleApiResponse<void>(response);
   },
 
+  stop: async (sessionId: string): Promise<void> => {
+    const response = await makeRequest(`/api/sessions/${sessionId}/stop`, {
+      method: 'POST',
+    });
+    return handleApiResponse<void>(response);
+  },
+
   runSetupScript: async (
     sessionId: string
   ): Promise<Result<ExecutionProcess, RunScriptError>> => {

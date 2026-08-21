@@ -232,7 +232,7 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
 
   // Execution state
   const { isAttemptRunning, stopExecution, isStopping, processes } =
-    useWorkspaceExecution(workspaceId);
+    useWorkspaceExecution(workspaceId, sessionId);
 
   // Approvals state
   const { getPendingForProcess } = useApprovals();

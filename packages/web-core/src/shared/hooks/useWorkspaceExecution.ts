@@ -4,20 +4,34 @@ import {
   useMutationState,
   useQueries,
 } from '@tanstack/react-query';
-import { workspacesApi, executionProcessesApi } from '@/shared/lib/api';
+import {
+  workspacesApi,
+  sessionsApi,
+  executionProcessesApi,
+} from '@/shared/lib/api';
 import { useExecutionProcessesContext } from '@/shared/hooks/useExecutionProcessesContext';
 import type { AttemptData } from '@/shared/lib/types';
 import type { ExecutionProcess } from 'shared/types';
 
-export function useWorkspaceExecution(workspaceId?: string) {
+export function useWorkspaceExecution(
+  workspaceId?: string,
+  sessionId?: string
+) {
   const stopMutationKey = useMemo(
-    () => ['stopWorkspaceExecution', workspaceId] as const,
-    [workspaceId]
+    () =>
+      sessionId
+        ? (['stopSessionExecution', sessionId] as const)
+        : (['stopWorkspaceExecution', workspaceId] as const),
+    [sessionId, workspaceId]
   );
 
   const stopMutation = useMutation({
     mutationKey: stopMutationKey,
     mutationFn: async () => {
+      if (sessionId) {
+        await sessionsApi.stop(sessionId);
+        return;
+      }
       if (!workspaceId) return;
       await workspacesApi.stop(workspaceId);
     },
@@ -75,7 +89,8 @@ export function useWorkspaceExecution(workspaceId?: string) {
   }, [executionProcesses, setupProcesses, processDetailQueries]);
 
   const stopExecution = useCallback(async () => {
-    if (!workspaceId || isStopping) return;
+    if (isStopping) return;
+    if (!sessionId && !workspaceId) return;
 
     try {
       await stopMutation.mutateAsync();
@@ -83,7 +98,7 @@ export function useWorkspaceExecution(workspaceId?: string) {
       console.error('Failed to stop executions:', error);
       throw error;
     }
-  }, [workspaceId, isStopping, stopMutation]);
+  }, [sessionId, workspaceId, isStopping, stopMutation]);
 
   const isLoading =
     streamLoading || processDetailQueries.some((q) => q.isLoading);
