@@ -120,6 +120,33 @@ pub struct MissingBeforeContext {
     pub repo_path: Option<String>,
 }
 
+/// Session-scoped gate used by coding-agent start / follow-up.
+/// Another Session in the same workspace being `running` is not a reject reason.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CodingAgentTurnAdmission {
+    Allow,
+    SessionAlreadyRunning,
+}
+
+/// Whether this Session may git-write the shared workspace tree on turn
+/// finish / reset. Concurrent Sessions share one tree; combine is left to
+/// the existing workspace merge path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharedTreeWritePolicy {
+    /// No other coding agent is writing; auto-commit / git-reset / cleanup
+    /// of the shared tree may proceed.
+    Exclusive,
+    /// Another coding agent is still running on this workspace. Skip
+    /// auto-commit, git-reset, cleanup, and any mid-flight combine.
+    Defer,
+}
+
+impl SharedTreeWritePolicy {
+    pub fn allows_shared_tree_git_write(self) -> bool {
+        matches!(self, Self::Exclusive)
+    }
+}
+
 impl ExecutionProcess {
     /// Find execution process by ID
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
@@ -678,5 +705,92 @@ impl ExecutionProcess {
         .await?;
 
         Ok(rows.into_iter().collect())
+    }
+
+    /// Admit a coding-agent turn on this session. One runner per Session:
+    /// a running coding agent on a *different* session in the same workspace
+    /// does not block. Called by `start_execution` for `CodingAgent`.
+    pub async fn admit_coding_agent_turn(
+        pool: &SqlitePool,
+        session_id: Uuid,
+    ) -> Result<CodingAgentTurnAdmission, sqlx::Error> {
+        if Self::has_running_coding_agent_for_session(pool, session_id).await? {
+            Ok(CodingAgentTurnAdmission::SessionAlreadyRunning)
+        } else {
+            Ok(CodingAgentTurnAdmission::Allow)
+        }
+    }
+
+    /// True when a coding agent on a different session of this workspace is
+    /// still `running`. Used by turn-finish auto-commit, reset git-reset, and
+    /// cleanup so we do not rewrite the shared tree mid-flight.
+    pub async fn has_running_coding_agent_for_workspace_except_session(
+        pool: &SqlitePool,
+        workspace_id: Uuid,
+        except_session_id: Uuid,
+    ) -> Result<bool, sqlx::Error> {
+        let sessions = Session::find_by_workspace_id(pool, workspace_id).await?;
+        for session in sessions {
+            if session.id == except_session_id {
+                continue;
+            }
+            if Self::has_running_coding_agent_for_session(pool, session.id).await? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub async fn shared_tree_write_policy(
+        pool: &SqlitePool,
+        workspace_id: Uuid,
+        session_id: Uuid,
+    ) -> Result<SharedTreeWritePolicy, sqlx::Error> {
+        if Self::has_running_coding_agent_for_workspace_except_session(
+            pool,
+            workspace_id,
+            session_id,
+        )
+        .await?
+        {
+            Ok(SharedTreeWritePolicy::Defer)
+        } else {
+            Ok(SharedTreeWritePolicy::Exclusive)
+        }
+    }
+
+    pub fn is_stop_target(&self, include_dev_server: bool) -> bool {
+        self.status == ExecutionProcessStatus::Running
+            && (include_dev_server || self.run_reason != ExecutionProcessRunReason::DevServer)
+    }
+
+    /// Running processes that session-scoped stop/reset should kill.
+    /// Does not include other sessions on the same workspace.
+    pub async fn find_stop_targets_for_session(
+        pool: &SqlitePool,
+        session_id: Uuid,
+        include_dev_server: bool,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let processes = Self::find_by_session_id(pool, session_id, false).await?;
+        Ok(processes
+            .into_iter()
+            .filter(|process| process.is_stop_target(include_dev_server))
+            .collect())
+    }
+
+    /// Running processes that workspace-level `try_stop` should kill.
+    pub async fn find_stop_targets_for_workspace(
+        pool: &SqlitePool,
+        workspace_id: Uuid,
+        include_dev_server: bool,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let sessions = Session::find_by_workspace_id(pool, workspace_id).await?;
+        let mut targets = Vec::new();
+        for session in sessions {
+            targets.extend(
+                Self::find_stop_targets_for_session(pool, session.id, include_dev_server).await?,
+            );
+        }
+        Ok(targets)
     }
 }
