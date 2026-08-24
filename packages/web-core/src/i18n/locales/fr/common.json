@@ -328,6 +328,7 @@
       "toggle-changes-mode": "Basculer le panneau Modifications",
       "toggle-logs-mode": "Basculer le panneau Logs",
       "toggle-preview-mode": "Basculer le panneau Aperçu",
+      "toggle-trajectory-mode": "Basculer le panneau Trajectoire",
       "toggle-left-sidebar": "Basculer la barre latérale gauche",
       "toggle-left-main-panel": "Basculer le panneau Chat",
       "create-issue": "Créer un ticket",

@@ -545,6 +545,8 @@ export type WorkspaceSummaryResponse = { summaries: Array<WorkspaceSummary>, };
 
 export type DiffStats = { files_changed: number, lines_added: number, lines_removed: number, };
 
+export type TrajectoryEvent = { index: number, kind: string, label: string, status: string | null, timestamp: string | null, preview: string, };
+
 export type TrajectorySegment = { execution_process_id: string, run_reason: ExecutionProcessRunReason, status: ExecutionProcessStatus, exit_code: bigint | null, 
 /**
  * True if this process was excluded from current history (restore/trim)
@@ -562,6 +564,10 @@ has_logs: boolean,
  * Final assistant message/summary from coding_agent_turns
  */
 final_message: string | null, 
+/**
+ * Slim events for the sequence tape (always included)
+ */
+events: Array<TrajectoryEvent>, 
 /**
  * Full entries (only included when include_entries=true)
  */

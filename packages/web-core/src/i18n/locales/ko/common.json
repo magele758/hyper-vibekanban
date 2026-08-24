@@ -328,6 +328,7 @@
       "toggle-changes-mode": "변경사항 패널 전환",
       "toggle-logs-mode": "로그 패널 전환",
       "toggle-preview-mode": "미리보기 패널 전환",
+      "toggle-trajectory-mode": "궤적 패널 전환",
       "toggle-left-sidebar": "왼쪽 사이드바 전환",
       "toggle-left-main-panel": "채팅 패널 전환",
       "create-issue": "이슈 만들기",

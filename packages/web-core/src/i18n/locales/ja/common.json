@@ -328,6 +328,7 @@
       "toggle-changes-mode": "変更パネルの切り替え",
       "toggle-logs-mode": "ログパネルの切り替え",
       "toggle-preview-mode": "プレビューパネルの切り替え",
+      "toggle-trajectory-mode": "軌跡パネルの切り替え",
       "toggle-left-sidebar": "左サイドバーの切り替え",
       "toggle-left-main-panel": "チャットパネルの切り替え",
       "create-issue": "課題を作成",

@@ -328,6 +328,7 @@
       "toggle-changes-mode": "切换更改面板",
       "toggle-logs-mode": "切换日志面板",
       "toggle-preview-mode": "切换预览面板",
+      "toggle-trajectory-mode": "切换轨迹面板",
       "toggle-left-sidebar": "切换左侧边栏",
       "toggle-left-main-panel": "切换聊天面板",
       "create-issue": "创建问题",

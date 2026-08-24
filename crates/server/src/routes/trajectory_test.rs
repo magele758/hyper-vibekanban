@@ -6,7 +6,7 @@ mod tests {
 
     use crate::routes::trajectory::{
         TokenUsageSummary, TrajectoryCompleteness, TrajectoryResponse, TrajectoryTotals,
-        update_totals_from_entry,
+        event_from_entry, update_totals_from_entry,
     };
 
     #[test]
@@ -130,6 +130,31 @@ mod tests {
         assert!(json.contains("tool_use"));
         assert!(json.contains("success"));
         assert!(json.contains("500"));
+    }
+
+    #[test]
+    fn test_event_from_entry_tool_use() {
+        let entry = NormalizedEntry {
+            timestamp: Some("2026-08-11T17:33:20Z".to_string()),
+            entry_type: NormalizedEntryType::ToolUse {
+                tool_name: "bash".to_string(),
+                action_type: ActionType::CommandRun {
+                    command: "ls -la src/cli".to_string(),
+                    result: None,
+                    category: Default::default(),
+                },
+                status: ToolStatus::Success,
+            },
+            content: "listed files".to_string(),
+            metadata: None,
+        };
+
+        let event = event_from_entry(3, &entry);
+        assert_eq!(event.index, 3);
+        assert_eq!(event.kind, "tool_use");
+        assert_eq!(event.label, "ls -la src/cli");
+        assert_eq!(event.status.as_deref(), Some("success"));
+        assert_eq!(event.preview, "listed files");
     }
 
     #[test]

@@ -183,6 +183,7 @@ fn generate_types_content() -> String {
         server::routes::workspaces::workspace_summary::WorkspaceSummary::decl(),
         server::routes::workspaces::workspace_summary::WorkspaceSummaryResponse::decl(),
         server::routes::workspaces::workspace_summary::DiffStats::decl(),
+        server::routes::trajectory::TrajectoryEvent::decl(),
         server::routes::trajectory::TrajectorySegment::decl(),
         server::routes::trajectory::TrajectoryCompleteness::decl(),
         server::routes::trajectory::TrajectoryTotals::decl(),

@@ -13,7 +13,8 @@ use db::models::{
 };
 use deployment::Deployment;
 use executors::logs::{
-    NormalizedEntry, NormalizedEntryType, utils::patch::extract_normalized_entry_from_patch,
+    ActionType, NormalizedEntry, NormalizedEntryType, ToolStatus,
+    utils::patch::extract_normalized_entry_from_patch,
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,17 @@ fn default_include_entries() -> bool {
     true
 }
 
+/// Slim timeline event for the overview tape (always included)
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct TrajectoryEvent {
+    pub index: usize,
+    pub kind: String,
+    pub label: String,
+    pub status: Option<String>,
+    pub timestamp: Option<String>,
+    pub preview: String,
+}
+
 /// A single execution process segment in the trajectory
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct TrajectorySegment {
@@ -63,6 +75,8 @@ pub struct TrajectorySegment {
     pub has_logs: bool,
     /// Final assistant message/summary from coding_agent_turns
     pub final_message: Option<String>,
+    /// Slim events for the sequence tape (always included)
+    pub events: Vec<TrajectoryEvent>,
     /// Full entries (only included when include_entries=true)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entries: Option<Vec<NormalizedEntry>>,
@@ -202,10 +216,10 @@ async fn build_trajectory(
             completeness.missing_logs.push(process.id);
         }
 
-        let (entries_opt, entry_count) = if let Some(stream) = log_stream {
+        let (entries_opt, events, entry_count) = if let Some(stream) = log_stream {
             extract_entries_from_stream(stream, include_entries, &mut totals).await
         } else {
-            (None, 0)
+            (None, Vec::new(), 0)
         };
 
         // Fetch final message from coding_agent_turns
@@ -226,6 +240,7 @@ async fn build_trajectory(
             entry_count,
             has_logs,
             final_message,
+            events,
             entries: entries_opt,
         });
     }
@@ -246,7 +261,7 @@ async fn extract_entries_from_stream(
     stream: impl futures_util::Stream<Item = Result<LogMsg, std::io::Error>>,
     include_full_entries: bool,
     totals: &mut TrajectoryTotals,
-) -> (Option<Vec<NormalizedEntry>>, usize) {
+) -> (Option<Vec<NormalizedEntry>>, Vec<TrajectoryEvent>, usize) {
     let mut by_index: std::collections::BTreeMap<usize, NormalizedEntry> = Default::default();
     let mut stream = std::pin::pin!(stream);
 
@@ -264,13 +279,114 @@ async fn extract_entries_from_stream(
         }
     }
 
+    let events: Vec<TrajectoryEvent> = by_index
+        .iter()
+        .map(|(index, entry)| event_from_entry(*index, entry))
+        .collect();
     let entries: Vec<NormalizedEntry> = by_index.into_values().collect();
     let count = entries.len();
 
     if include_full_entries {
-        (Some(entries), count)
+        (Some(entries), events, count)
     } else {
-        (None, count)
+        (None, events, count)
+    }
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    let mut chars = value.chars();
+    let taken: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{taken}…")
+    } else {
+        taken
+    }
+}
+
+fn tool_status_key(status: &ToolStatus) -> String {
+    match status {
+        ToolStatus::Created => "created".to_string(),
+        ToolStatus::Success => "success".to_string(),
+        ToolStatus::Failed => "failed".to_string(),
+        ToolStatus::Denied { .. } => "denied".to_string(),
+        ToolStatus::PendingApproval { .. } => "pending_approval".to_string(),
+        ToolStatus::TimedOut => "timed_out".to_string(),
+    }
+}
+
+fn action_label(action: &ActionType, tool_name: &str) -> String {
+    match action {
+        ActionType::FileRead { path } => truncate_chars(path, 48),
+        ActionType::FileEdit { path, .. } => truncate_chars(path, 48),
+        ActionType::CommandRun { command, .. } => truncate_chars(command, 48),
+        ActionType::Search { query } => truncate_chars(query, 48),
+        ActionType::WebFetch { url } => truncate_chars(url, 48),
+        ActionType::Tool { tool_name, .. } => tool_name.clone(),
+        ActionType::TaskCreate { description, .. } => truncate_chars(description, 48),
+        ActionType::PlanPresentation { .. } => "plan".to_string(),
+        ActionType::TodoManagement { operation, .. } => format!("todo:{operation}"),
+        ActionType::AskUserQuestion { .. } => "ask_user".to_string(),
+        ActionType::Other { description } => truncate_chars(description, 48),
+    }
+    .if_empty(tool_name)
+}
+
+trait IfEmpty {
+    fn if_empty(self, fallback: &str) -> String;
+}
+
+impl IfEmpty for String {
+    fn if_empty(self, fallback: &str) -> String {
+        if self.trim().is_empty() {
+            fallback.to_string()
+        } else {
+            self
+        }
+    }
+}
+
+pub(crate) fn event_from_entry(index: usize, entry: &NormalizedEntry) -> TrajectoryEvent {
+    let (kind, label, status) = match &entry.entry_type {
+        NormalizedEntryType::UserMessage => ("user_message", "User".to_string(), None),
+        NormalizedEntryType::UserFeedback { denied_tool } => (
+            "user_feedback",
+            format!("denied:{denied_tool}"),
+            Some("denied".to_string()),
+        ),
+        NormalizedEntryType::AssistantMessage => {
+            ("assistant_message", "Assistant".to_string(), None)
+        }
+        NormalizedEntryType::ToolUse {
+            tool_name,
+            action_type,
+            status,
+        } => (
+            "tool_use",
+            action_label(action_type, tool_name),
+            Some(tool_status_key(status)),
+        ),
+        NormalizedEntryType::SystemMessage => ("system_message", "System".to_string(), None),
+        NormalizedEntryType::ErrorMessage { .. } => (
+            "error_message",
+            "Error".to_string(),
+            Some("failed".to_string()),
+        ),
+        NormalizedEntryType::Thinking => ("thinking", "Thinking".to_string(), None),
+        NormalizedEntryType::Loading => ("loading", "Loading".to_string(), None),
+        NormalizedEntryType::NextAction { .. } => ("next_action", "Next action".to_string(), None),
+        NormalizedEntryType::TokenUsageInfo(_) => ("token_usage_info", "Tokens".to_string(), None),
+        NormalizedEntryType::UserAnsweredQuestions { .. } => {
+            ("user_answered_questions", "Answers".to_string(), None)
+        }
+    };
+
+    TrajectoryEvent {
+        index,
+        kind: kind.to_string(),
+        label,
+        status,
+        timestamp: entry.timestamp.clone(),
+        preview: truncate_chars(&entry.content, 240),
     }
 }
 

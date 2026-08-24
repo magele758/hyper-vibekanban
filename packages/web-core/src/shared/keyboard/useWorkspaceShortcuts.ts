@@ -62,6 +62,7 @@ export function useWorkspaceShortcuts() {
   useHotkeys('v>c', () => execute(Actions.ToggleChangesMode), OPTIONS);
   useHotkeys('v>l', () => execute(Actions.ToggleLogsMode), OPTIONS);
   useHotkeys('v>p', () => execute(Actions.TogglePreviewMode), OPTIONS);
+  useHotkeys('v>t', () => execute(Actions.ToggleTrajectoryMode), OPTIONS);
   useHotkeys('v>s', () => execute(Actions.ToggleLeftSidebar), OPTIONS);
   useHotkeys('v>h', () => execute(Actions.ToggleLeftMainPanel), OPTIONS);
 

@@ -342,6 +342,7 @@
       "toggle-changes-mode": "Toggle Changes panel",
       "toggle-logs-mode": "Toggle Logs panel",
       "toggle-preview-mode": "Toggle Preview panel",
+      "toggle-trajectory-mode": "Toggle Trajectory panel",
       "toggle-left-sidebar": "Toggle Left Sidebar",
       "toggle-left-main-panel": "Toggle Chat panel",
       "create-issue": "Create Issue",

@@ -148,6 +148,13 @@ export const sequentialBindings: SequentialBinding[] = [
     actionId: 'toggle-preview-mode',
   },
   {
+    id: 'seq-view-trajectory',
+    keys: ['v', 't'],
+    description: 'Toggle Trajectory panel',
+    group: 'View',
+    actionId: 'toggle-trajectory-mode',
+  },
+  {
     id: 'seq-view-sidebar',
     keys: ['v', 's'],
     description: 'Toggle Left Sidebar',

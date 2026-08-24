@@ -31,6 +31,7 @@ import {
   ArrowsClockwiseIcon,
   CrosshairIcon,
   DesktopIcon,
+  Path as PathIcon,
   PencilSimpleIcon,
   ArrowUpIcon,
   HighlighterIcon,
@@ -691,6 +692,30 @@ export const Actions = {
         .getState()
         .toggleRightMainPanelMode(
           RIGHT_MAIN_PANEL_MODES.PREVIEW,
+          ctx.currentWorkspaceId ?? undefined
+        );
+    },
+  },
+
+  ToggleTrajectoryMode: {
+    id: 'toggle-trajectory-mode',
+    label: 'Toggle Trajectory Panel',
+    icon: PathIcon,
+    shortcut: 'V T',
+    requiresTarget: ActionTargetType.NONE,
+    isVisible: (ctx) => !ctx.isCreateMode && ctx.layoutMode === 'workspaces',
+    isActive: (ctx) =>
+      ctx.rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.TRAJECTORY,
+    isEnabled: (ctx) => !ctx.isCreateMode,
+    getLabel: (ctx) =>
+      ctx.rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.TRAJECTORY
+        ? 'Hide Trajectory Panel'
+        : 'Show Trajectory Panel',
+    execute: (ctx) => {
+      useUiPreferencesStore
+        .getState()
+        .toggleRightMainPanelMode(
+          RIGHT_MAIN_PANEL_MODES.TRAJECTORY,
           ctx.currentWorkspaceId ?? undefined
         );
     },
@@ -1565,6 +1590,7 @@ export const NavbarActionGroups = {
     Actions.ToggleChangesMode,
     Actions.ToggleLogsMode,
     Actions.TogglePreviewMode,
+    Actions.ToggleTrajectoryMode,
     Actions.ToggleRightSidebar,
     NavbarDivider,
     Actions.OpenCommandBar,

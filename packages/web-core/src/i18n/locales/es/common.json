@@ -328,6 +328,7 @@
       "toggle-changes-mode": "Alternar panel de cambios",
       "toggle-logs-mode": "Alternar panel de registros",
       "toggle-preview-mode": "Alternar panel de vista previa",
+      "toggle-trajectory-mode": "Alternar panel de trayectoria",
       "toggle-left-sidebar": "Alternar barra lateral izquierda",
       "toggle-left-main-panel": "Alternar panel de chat",
       "create-issue": "Crear issue",
