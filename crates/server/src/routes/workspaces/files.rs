@@ -97,10 +97,16 @@ pub async fn read_workspace_file(
     let pool = &deployment.db().pool;
     let rel_path = safe_relative_path(&query.path)?;
 
-    let container_ref = deployment
-        .container()
-        .ensure_container_exists(&workspace)
-        .await?;
+    let container_ref = if workspace.skip_worktree_materialize() {
+        workspace.container_ref.clone().ok_or_else(|| {
+            ApiError::BadRequest("Workspace worktree has been released".to_string())
+        })?
+    } else {
+        deployment
+            .container()
+            .ensure_container_exists(&workspace)
+            .await?
+    };
     let workspace_dir = PathBuf::from(&container_ref);
 
     // Resolve the candidate repos to probe. When a repo_id is given, only that

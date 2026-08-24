@@ -18,7 +18,7 @@ use executors::{
     profile::ExecutorConfig,
 };
 use serde::{Deserialize, Serialize};
-use services::services::container::ContainerService;
+use services::services::{container::ContainerService, remote_sync};
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
@@ -47,7 +47,7 @@ pub async fn start_review(
 ) -> Result<ResponseJson<ApiResponse<ExecutionProcess, ReviewError>>, ApiError> {
     let pool = &deployment.db().pool;
 
-    let workspace = Workspace::find_by_id(pool, session.workspace_id)
+    let mut workspace = Workspace::find_by_id(pool, session.workspace_id)
         .await?
         .ok_or(ApiError::Workspace(WorkspaceError::ValidationError(
             "Workspace not found".to_string(),
@@ -61,10 +61,35 @@ pub async fn start_review(
         )));
     }
 
+    let needs_setup = deployment.container().needs_setup_after_rebuild(&workspace);
+    let was_archived = workspace.archived;
+
     let container_ref = deployment
         .container()
         .ensure_container_exists(&workspace)
         .await?;
+
+    if let Ok(Some(updated)) = Workspace::find_by_id(pool, workspace.id).await {
+        workspace = updated;
+    }
+
+    if was_archived {
+        Workspace::set_archived(pool, workspace.id, false).await?;
+        workspace.archived = false;
+        if let Ok(client) = deployment.remote_client() {
+            let workspace_id = workspace.id;
+            tokio::spawn(async move {
+                remote_sync::sync_workspace_to_remote(
+                    &client,
+                    workspace_id,
+                    None,
+                    Some(false),
+                    None,
+                )
+                .await;
+            });
+        }
+    }
 
     let agent_session_id = CodingAgentTurn::find_latest_session_info(pool, session.id)
         .await?
@@ -102,7 +127,7 @@ pub async fn start_review(
     let prompt = build_review_prompt(context.as_deref(), payload.additional_prompt.as_deref());
     let resumed_session = agent_session_id.is_some();
 
-    let action = ExecutorAction::new(
+    let mut action = ExecutorAction::new(
         ExecutorActionType::ReviewRequest(ReviewAction {
             executor_config: payload.executor_config.clone(),
             context,
@@ -112,15 +137,18 @@ pub async fn start_review(
         }),
         None,
     );
+    let mut run_reason = ExecutionProcessRunReason::CodingAgent;
+    if needs_setup {
+        let repos = WorkspaceRepo::find_repos_for_workspace(pool, workspace.id).await?;
+        if let Some(setup) = deployment.container().setup_actions_for_repos(&repos) {
+            action = setup.append_action(action);
+            run_reason = ExecutionProcessRunReason::SetupScript;
+        }
+    }
 
     let execution_process = deployment
         .container()
-        .start_execution(
-            &workspace,
-            &session,
-            &action,
-            &ExecutionProcessRunReason::CodingAgent,
-        )
+        .start_execution(&workspace, &session, &action, &run_reason)
         .await?;
 
     deployment

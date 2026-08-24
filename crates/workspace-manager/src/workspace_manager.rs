@@ -1048,4 +1048,71 @@ mod in_place_tests {
         assert_eq!(container.workspace_dir, dir_path);
         assert!(!dir_path.join(".git").exists());
     }
+
+    /// Soft-delete path: cleanup removes the worktree directory but keeps the
+    /// `vk/...` branch, and `ensure_workspace_exists` rebuilds from that branch.
+    #[tokio::test]
+    async fn worktree_cleanup_then_ensure_rebuilds_from_branch() {
+        let td = tempfile::TempDir::new().unwrap();
+        let repo_path = td.path().join("repo");
+        let workspace_dir = td.path().join("workspace");
+        let git = GitService::new();
+        git.initialize_repo_with_main_branch(&repo_path).unwrap();
+
+        let repo = make_repo(repo_path.clone());
+        let input = RepoWorkspaceInput::new(repo.clone(), "main".to_string());
+        let branch = "vk/rebuild-test";
+
+        WorkspaceManager::create_workspace(
+            &workspace_dir,
+            std::slice::from_ref(&input),
+            branch,
+            WorkspaceKind::Worktree,
+        )
+        .await
+        .unwrap();
+
+        let worktree_path = workspace_dir.join(&repo.name);
+        assert!(worktree_path.exists(), "worktree should be created");
+
+        let sentinel = worktree_path.join("SENTINEL.txt");
+        std::fs::write(&sentinel, b"keep me").unwrap();
+        assert!(
+            git.commit(&worktree_path, "add sentinel").unwrap(),
+            "expected a commit on the workspace branch"
+        );
+
+        WorkspaceManager::cleanup_workspace(
+            &workspace_dir,
+            std::slice::from_ref(&repo),
+            WorkspaceKind::Worktree,
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            !workspace_dir.exists(),
+            "workspace directory must be removed on cleanup"
+        );
+        assert!(
+            git.check_branch_exists(&repo_path, branch).unwrap(),
+            "workspace branch must survive worktree cleanup"
+        );
+
+        WorkspaceManager::ensure_workspace_exists(
+            &workspace_dir,
+            std::slice::from_ref(&input),
+            branch,
+            WorkspaceKind::Worktree,
+        )
+        .await
+        .unwrap();
+
+        let rebuilt = workspace_dir.join(&repo.name).join("SENTINEL.txt");
+        assert!(
+            rebuilt.exists(),
+            "rebuilt worktree must contain committed files"
+        );
+        assert_eq!(std::fs::read(&rebuilt).unwrap(), b"keep me");
+    }
 }

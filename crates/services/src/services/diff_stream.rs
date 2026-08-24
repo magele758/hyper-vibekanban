@@ -45,6 +45,11 @@ pub async fn compute_diff_stats(
     git: &GitService,
     workspace: &Workspace,
 ) -> Option<DiffStats> {
+    // A released/archived worktree has no (or the wrong) working tree to
+    // diff. Returning zeros here would overwrite the last known remote stats.
+    if workspace.skip_worktree_materialize() {
+        return None;
+    }
     let container_ref = workspace.container_ref.as_ref()?;
 
     let workspace_repos =

@@ -54,6 +54,7 @@ import {
 } from '@/shared/stores/useUiPreferencesStore';
 
 import { workspacesApi, relayApi, repoApi } from '@/shared/lib/api';
+import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
 import { bulkUpdateIssues } from '@/shared/lib/remoteApi';
 import { workspaceRecordKeys } from '@/shared/hooks/useWorkspaceRecord';
 import { workspaceRepoKeys } from '@/shared/hooks/useWorkspaceRepo';
@@ -278,6 +279,9 @@ export const Actions = {
 
       // Perform the archive/unarchive
       await workspacesApi.update(workspaceId, { archived: !wasArchived });
+      if (!wasArchived) {
+        enableArchivedWorkspaceStream();
+      }
       invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
 
       // Select next workspace after successful archive
@@ -307,27 +311,35 @@ export const Actions = {
       const result = await DeleteWorkspaceDialog.show({
         branchName: workspace.branch,
         hasOpenPR,
+        usesRepoWorkingTree:
+          workspace.kind === 'in_place' || workspace.kind === 'console',
       });
-      if (result.action === 'confirmed') {
-        // Calculate next workspace before deleting (only if deleting current)
-        const isCurrentWorkspace = ctx.currentWorkspaceId === workspaceId;
-        const nextWorkspaceId = isCurrentWorkspace
-          ? getNextWorkspaceId(ctx.activeWorkspaces, workspaceId)
-          : null;
+      if (result.action === 'canceled') {
+        return;
+      }
 
+      const isCurrentWorkspace = ctx.currentWorkspaceId === workspaceId;
+      const nextWorkspaceId = isCurrentWorkspace
+        ? getNextWorkspaceId(ctx.activeWorkspaces, workspaceId)
+        : null;
+
+      if (result.action === 'archived') {
+        await workspacesApi.delete(workspaceId, false, true, true);
+        enableArchivedWorkspaceStream();
+        invalidateWorkspaceQueries(ctx.queryClient, workspaceId);
+      } else {
         // Local delete also clears the remote workspace record by default.
         await workspacesApi.delete(workspaceId, result.deleteBranches);
         ctx.queryClient.invalidateQueries({
           queryKey: workspaceSummaryKeys.all,
         });
+      }
 
-        // Navigate away if we deleted the current workspace
-        if (isCurrentWorkspace) {
-          if (nextWorkspaceId) {
-            ctx.selectWorkspace(nextWorkspaceId);
-          } else {
-            ctx.appNavigation.goToWorkspacesCreate();
-          }
+      if (isCurrentWorkspace) {
+        if (nextWorkspaceId) {
+          ctx.selectWorkspace(nextWorkspaceId);
+        } else {
+          ctx.appNavigation.goToWorkspacesCreate();
         }
       }
     },

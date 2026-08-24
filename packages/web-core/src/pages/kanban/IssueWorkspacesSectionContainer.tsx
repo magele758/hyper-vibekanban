@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { LinkIcon, PlusIcon } from '@phosphor-icons/react';
@@ -10,6 +11,9 @@ import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useProjectWorkspaceCreateDraft } from '@/shared/hooks/useProjectWorkspaceCreateDraft';
 import { workspacesApi } from '@/shared/lib/api';
+import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
+import { workspaceRecordKeys } from '@/shared/hooks/useWorkspaceRecord';
+import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { getWorkspaceDefaults } from '@/shared/lib/workspaceDefaults';
 import {
   buildLinkedIssueCreateState,
@@ -35,6 +39,7 @@ export function IssueWorkspacesSectionContainer({
   issueId,
 }: IssueWorkspacesSectionContainerProps) {
   const { t } = useTranslation('common');
+  const queryClient = useQueryClient();
   const { projectId } = useParams({ strict: false });
   const appNavigation = useAppNavigation();
   const { openWorkspaceCreateFromState } = useProjectWorkspaceCreateDraft();
@@ -258,15 +263,29 @@ export function IssueWorkspacesSectionContainer({
               (workspace) => workspace.localWorkspaceId === localWorkspaceId
             )
             ?.prs.some((pr) => pr.status === 'open') ?? false,
+        usesRepoWorkingTree:
+          localWorkspace.kind === 'in_place' ||
+          localWorkspace.kind === 'console',
       });
 
-      if (result.action !== 'confirmed') {
+      if (result.action === 'canceled') {
         return;
       }
 
       try {
-        // Clears local workspace and the remote Issue link in one request.
-        await workspacesApi.delete(localWorkspaceId, result.deleteBranches);
+        if (result.action === 'archived') {
+          enableArchivedWorkspaceStream();
+          await workspacesApi.delete(localWorkspaceId, false, true, true);
+          queryClient.invalidateQueries({
+            queryKey: workspaceRecordKeys.byId(localWorkspaceId),
+          });
+          queryClient.invalidateQueries({
+            queryKey: workspaceSummaryKeys.all,
+          });
+        } else {
+          // Clears local workspace and the remote Issue link in one request.
+          await workspacesApi.delete(localWorkspaceId, result.deleteBranches);
+        }
       } catch (error) {
         ConfirmDialog.show({
           title: t('common:error'),
@@ -279,7 +298,7 @@ export function IssueWorkspacesSectionContainer({
         });
       }
     },
-    [localWorkspacesById, workspacesWithStats, t]
+    [localWorkspacesById, workspacesWithStats, queryClient, t]
   );
 
   // Actions for the section header

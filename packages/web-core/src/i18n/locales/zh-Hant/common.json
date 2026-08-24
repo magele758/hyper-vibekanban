@@ -147,10 +147,18 @@
     "deleteError": "刪除工作區失敗",
     "filesChanged": "{{count}} 個檔案",
     "deleteDialog": {
-      "title": "刪除工作區",
-      "description": "確定要刪除此工作區嗎？此操作無法復原。",
+      "title": "移除工作區",
+      "description": "封存可釋放磁碟並保留對話紀錄，或徹底刪除此工作區。",
+      "archiveLabel": "封存工作區",
+      "archiveDescription": "立即釋放本機 Worktree。工作階段紀錄與過程日誌會保留，之後可從 git 分支還原。",
+      "archiveDescriptionInPlace": "從使用中清單隱藏並保留對話紀錄。不會刪除倉庫工作目錄。",
+      "recommended": "建議",
+      "deleteLabel": "徹底刪除",
+      "deleteDescription": "清除工作區、工作階段紀錄、過程日誌，並可選擇刪除 git 分支。此操作無法復原。",
       "deleteBranchLabel": "刪除分支",
       "cannotDeleteOpenPr": "PR 開啟時無法刪除分支",
+      "confirmArchive": "封存",
+      "confirmDelete": "徹底刪除",
       "unlinkFromIssueLabel": "同時取消與議題的關聯"
     },
     "linkError": "Failed to link workspace"

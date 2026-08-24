@@ -81,9 +81,14 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   });
 
   // Stats/paths only at provider level — Changes panel opens a full-content stream.
-  const { diffs } = useDiffStream(workspaceId ?? null, !isCreateMode, {
-    statsOnly: true,
-  });
+  // Don't reconnect a released/archived worktree just because the chat page mounted.
+  const { diffs } = useDiffStream(
+    workspaceId ?? null,
+    !isCreateMode && !workspace?.archived && !workspace?.worktree_deleted,
+    {
+      statsOnly: true,
+    }
+  );
 
   const diffPaths = useMemo(
     () =>

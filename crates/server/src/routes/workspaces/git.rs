@@ -373,11 +373,20 @@ pub async fn get_workspace_branch_status(
         .map(|wr| (wr.repo_id, wr.target_branch.clone()))
         .collect();
 
-    let container_ref = deployment
-        .container()
-        .ensure_container_exists(&workspace)
-        .await?;
-    let workspace_dir = PathBuf::from(&container_ref);
+    // Status is polled every 5s from the chat/Git panels. Recreating a
+    // released worktree or checking out an archived in-place branch here
+    // would undo archive-to-free-disk / steal the user's repo.
+    let skip_materialize = workspace.skip_worktree_materialize();
+    let workspace_dir = if skip_materialize {
+        workspace.container_ref.as_ref().map(PathBuf::from)
+    } else {
+        Some(PathBuf::from(
+            deployment
+                .container()
+                .ensure_container_exists(&workspace)
+                .await?,
+        ))
+    };
 
     let all_merges = Merge::find_by_workspace_id(pool, workspace.id).await?;
     let merges_by_repo: HashMap<Uuid, Vec<Merge>> =
@@ -430,39 +439,52 @@ pub async fn get_workspace_branch_status(
             continue;
         }
 
-        let worktree_path = workspace.kind.repo_working_path(&workspace_dir, &repo.name);
+        let worktree_path = workspace_dir
+            .as_ref()
+            .map(|dir| workspace.kind.repo_working_path(dir, &repo.name));
+        let worktree_available =
+            worktree_path.as_ref().is_some_and(|path| path.exists()) && !workspace.archived;
 
-        let head_oid = deployment
-            .git()
-            .get_head_info(&worktree_path)
-            .ok()
-            .map(|h| h.oid);
+        let head_oid = if worktree_available {
+            worktree_path
+                .as_ref()
+                .and_then(|path| deployment.git().get_head_info(path).ok())
+                .map(|h| h.oid)
+        } else {
+            None
+        };
 
-        let (is_rebase_in_progress, conflicted_files, conflict_op) = {
+        let (is_rebase_in_progress, conflicted_files, conflict_op) = if worktree_available {
+            let path = worktree_path.as_ref().unwrap();
             let in_rebase = deployment
                 .git()
-                .is_rebase_in_progress(&worktree_path)
+                .is_rebase_in_progress(path)
                 .unwrap_or(false);
             let conflicts = deployment
                 .git()
-                .get_conflicted_files(&worktree_path)
+                .get_conflicted_files(path)
                 .unwrap_or_default();
             let op = if conflicts.is_empty() {
                 None
             } else {
-                deployment
-                    .git()
-                    .detect_conflict_op(&worktree_path)
-                    .unwrap_or(None)
+                deployment.git().detect_conflict_op(path).unwrap_or(None)
             };
             (in_rebase, conflicts, op)
+        } else {
+            (false, Vec::new(), None)
         };
 
-        let (uncommitted_count, untracked_count) =
-            match deployment.git().get_worktree_change_counts(&worktree_path) {
+        let (uncommitted_count, untracked_count) = if worktree_available {
+            match deployment
+                .git()
+                .get_worktree_change_counts(worktree_path.as_ref().unwrap())
+            {
                 Ok((a, b)) => (Some(a), Some(b)),
                 Err(_) => (None, None),
-            };
+            }
+        } else {
+            (Some(0), Some(0))
+        };
 
         let has_uncommitted_changes = uncommitted_count.map(|c| c > 0);
 

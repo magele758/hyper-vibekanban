@@ -147,10 +147,18 @@
     "deleteError": "Échec de la suppression de l'espace de travail",
     "filesChanged": "{{count}} fichiers",
     "deleteDialog": {
-      "title": "Supprimer l'espace de travail",
-      "description": "Êtes-vous sûr de vouloir supprimer cet espace de travail ? Cette action est irréversible.",
+      "title": "Retirer l'espace de travail",
+      "description": "Archivez pour libérer de l'espace disque tout en conservant l'historique, ou supprimez définitivement cet espace de travail.",
+      "archiveLabel": "Archiver l'espace de travail",
+      "archiveDescription": "Libère le worktree local. L'historique de conversation et les journaux sont conservés, et l'espace de travail peut être restauré depuis sa branche git.",
+      "archiveDescriptionInPlace": "Masque de la liste active et conserve l'historique. L'arbre de travail du dépôt n'est pas supprimé.",
+      "recommended": "Recommandé",
+      "deleteLabel": "Supprimer définitivement",
+      "deleteDescription": "Efface l'espace de travail, l'historique, les journaux et éventuellement la branche git. Cette action est irréversible.",
       "deleteBranchLabel": "Supprimer la branche",
       "cannotDeleteOpenPr": "Impossible de supprimer la branche tant que la PR est ouverte",
+      "confirmArchive": "Archiver",
+      "confirmDelete": "Supprimer définitivement",
       "unlinkFromIssueLabel": "Également dissocier du ticket"
     },
     "linkError": "Failed to link workspace"

@@ -25,7 +25,7 @@ use executors::{
     profile::ExecutorConfig,
 };
 use serde::Deserialize;
-use services::services::container::ContainerService;
+use services::services::{container::ContainerService, remote_sync};
 use ts_rs::TS;
 use utils::response::ApiResponse;
 use uuid::Uuid;
@@ -129,7 +129,7 @@ pub async fn follow_up(
     let pool = &deployment.db().pool;
 
     // Load workspace from session
-    let workspace = Workspace::find_by_id(pool, session.workspace_id)
+    let mut workspace = Workspace::find_by_id(pool, session.workspace_id)
         .await?
         .ok_or(ApiError::Workspace(WorkspaceError::ValidationError(
             "Workspace not found".to_string(),
@@ -137,14 +137,10 @@ pub async fn follow_up(
 
     tracing::info!("{:?}", workspace);
 
-    deployment
-        .container()
-        .ensure_container_exists(&workspace)
-        .await?;
-
     let executor_profile_id = payload.executor_config.profile_id();
 
-    // Validate executor matches session if session has prior executions
+    // Validate executor matches session if session has prior executions.
+    // Do this before materializing a released worktree.
     let expected_executor: Option<String> =
         ExecutionProcess::latest_executor_profile_for_session(pool, session.id)
             .await?
@@ -164,6 +160,36 @@ pub async fn follow_up(
     if session.executor.is_none() {
         Session::update_executor(pool, session.id, &executor_profile_id.executor.to_string())
             .await?;
+    }
+
+    let needs_setup = deployment.container().needs_setup_after_rebuild(&workspace);
+    let was_archived = workspace.archived;
+
+    deployment
+        .container()
+        .ensure_container_exists(&workspace)
+        .await?;
+
+    if let Ok(Some(updated)) = Workspace::find_by_id(pool, workspace.id).await {
+        workspace = updated;
+    }
+
+    if was_archived {
+        Workspace::set_archived(pool, workspace.id, false).await?;
+        workspace.archived = false;
+        if let Ok(client) = deployment.remote_client() {
+            let workspace_id = workspace.id;
+            tokio::spawn(async move {
+                remote_sync::sync_workspace_to_remote(
+                    &client,
+                    workspace_id,
+                    None,
+                    Some(false),
+                    None,
+                )
+                .await;
+            });
+        }
     }
 
     if let Some(proc_id) = payload.retry_process_id {
@@ -207,16 +233,17 @@ pub async fn follow_up(
         )
     };
 
-    let action = ExecutorAction::new(action_type, cleanup_action.map(Box::new));
+    let mut action = ExecutorAction::new(action_type, cleanup_action.map(Box::new));
+    let mut run_reason = ExecutionProcessRunReason::CodingAgent;
+    if needs_setup && let Some(setup) = deployment.container().setup_actions_for_repos(&repos) {
+        // Rebuild dropped node_modules / env by running setup before the agent.
+        action = setup.append_action(action);
+        run_reason = ExecutionProcessRunReason::SetupScript;
+    }
 
     let execution_process = deployment
         .container()
-        .start_execution(
-            &workspace,
-            &session,
-            &action,
-            &ExecutionProcessRunReason::CodingAgent,
-        )
+        .start_execution(&workspace, &session, &action, &run_reason)
         .await?;
 
     // Clear the draft follow-up scratch on successful spawn

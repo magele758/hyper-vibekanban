@@ -493,13 +493,14 @@ pub trait ContainerService {
         {
             return Ok(());
         }
-        if self.ensure_container_exists(&workspace).await.is_err() {
-            return Ok(());
-        }
         let repos = WorkspaceRepo::find_repos_for_workspace(pool, workspace.id).await?;
         let Some(action) = self.archive_actions_for_repos(&repos) else {
             return Ok(());
         };
+        // Only materialize the worktree when an archive script actually needs it.
+        if self.ensure_container_exists(&workspace).await.is_err() {
+            return Ok(());
+        }
         let session = match Session::find_latest_by_workspace_id(pool, workspace.id).await? {
             Some(s) => s,
             None => {
@@ -526,30 +527,20 @@ pub trait ContainerService {
         Ok(())
     }
 
-    /// Archive a workspace: set archived flag, stop running dev servers, and run archive script.
+    /// Archive a workspace: set archived flag, stop running processes, run
+    /// archive script if configured, then release the disposable worktree.
     async fn archive_workspace(&self, workspace_id: Uuid) -> Result<(), ContainerError> {
         let pool = &self.db().pool;
 
         Workspace::set_archived(pool, workspace_id, true).await?;
 
-        // Stop running dev servers
-        if let Ok(dev_servers) =
-            ExecutionProcess::find_running_dev_servers_by_workspace(pool, workspace_id).await
-        {
-            for dev_server in dev_servers {
-                if let Err(e) = self
-                    .stop_execution(&dev_server, ExecutionProcessStatus::Killed)
-                    .await
-                {
-                    tracing::error!(
-                        "Failed to stop dev server {} for workspace {}: {}",
-                        dev_server.id,
-                        workspace_id,
-                        e
-                    );
-                }
-            }
-        }
+        let workspace = match Workspace::find_by_id(pool, workspace_id).await? {
+            Some(workspace) => workspace,
+            None => return Ok(()),
+        };
+
+        // Stop coding agents and dev servers before tearing down the worktree.
+        self.try_stop(&workspace, true).await;
 
         // Run archive script (silently skips if not configured)
         if let Err(e) = self.try_run_archive_script(workspace_id).await {
@@ -560,6 +551,53 @@ pub trait ContainerService {
             );
         }
 
+        self.release_worktree_on_archive(&workspace).await;
+
+        Ok(())
+    }
+
+    /// Release a disposable worktree after archive. Default is a no-op so
+    /// deployments without a local worktree (or whose workspace *is* the
+    /// user's repo) do not delete anything.
+    async fn release_worktree_on_archive(&self, _workspace: &Workspace) {}
+
+    /// Disposable worktrees drop `node_modules` / env on cleanup. Callers must
+    /// snapshot this *before* `ensure_container_exists`, which clears the flag.
+    fn needs_setup_after_rebuild(&self, workspace: &Workspace) -> bool {
+        workspace.worktree_deleted && !workspace.kind.uses_repo_working_tree()
+    }
+
+    /// Re-run repo setup scripts after a worktree rebuild. No-op when none are
+    /// configured or the workspace has no session yet.
+    async fn try_start_setup_after_rebuild(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<(), ContainerError> {
+        if ExecutionProcess::has_running_non_dev_server_processes_for_workspace(
+            &self.db().pool,
+            workspace.id,
+        )
+        .await
+        .unwrap_or(true)
+        {
+            return Ok(());
+        }
+        let repos = WorkspaceRepo::find_repos_for_workspace(&self.db().pool, workspace.id).await?;
+        let Some(action) = self.setup_actions_for_repos(&repos) else {
+            return Ok(());
+        };
+        let Some(session) =
+            Session::find_latest_by_workspace_id(&self.db().pool, workspace.id).await?
+        else {
+            return Ok(());
+        };
+        self.start_execution(
+            workspace,
+            &session,
+            &action,
+            &ExecutionProcessRunReason::SetupScript,
+        )
+        .await?;
         Ok(())
     }
 

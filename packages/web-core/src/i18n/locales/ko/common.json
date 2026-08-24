@@ -147,10 +147,18 @@
     "deleteError": "워크스페이스 삭제 실패",
     "filesChanged": "{{count}}개 파일",
     "deleteDialog": {
-      "title": "워크스페이스 삭제",
-      "description": "이 워크스페이스를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+      "title": "워크스페이스 제거",
+      "description": "기록을 유지한 채 디스크를 확보하거나, 이 워크스페이스를 영구 삭제하세요.",
+      "archiveLabel": "워크스페이스 보관",
+      "archiveDescription": "로컬 worktree를 해제합니다. 대화 기록과 세션 로그는 유지되며 git 브랜치에서 복원할 수 있습니다.",
+      "archiveDescriptionInPlace": "활성 목록에서 숨기고 대화 기록을 유지합니다. 저장소 작업 트리는 삭제하지 않습니다.",
+      "recommended": "권장",
+      "deleteLabel": "영구 삭제",
+      "deleteDescription": "워크스페이스, 대화 기록, 세션 로그와 선택적으로 git 브랜치를 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
       "deleteBranchLabel": "브랜치 삭제",
       "cannotDeleteOpenPr": "PR이 열려 있는 동안에는 브랜치를 삭제할 수 없습니다",
+      "confirmArchive": "보관",
+      "confirmDelete": "영구 삭제",
       "unlinkFromIssueLabel": "이슈에서도 연결 해제"
     },
     "linkError": "Failed to link workspace"

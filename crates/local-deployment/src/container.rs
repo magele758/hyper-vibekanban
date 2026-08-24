@@ -329,6 +329,13 @@ impl LocalContainerService {
         );
         for workspace in &expired_workspaces {
             if workspace.kind.is_console() {
+                // Soft-deleted (archived) console workspaces keep their DB history
+                // until the user hard-deletes. The 1h archived TTL is only meant
+                // to reclaim leftover worktree directories, which console never
+                // has.
+                if workspace.archived {
+                    continue;
+                }
                 // Console workspaces own no worktree and no branch, so there is
                 // nothing on disk to reclaim — only stale DB rows. Reuse the exact
                 // explicit-deletion machinery so the two paths can't drift: deleting
@@ -847,6 +854,18 @@ impl LocalContainerService {
                             }
                         }
                     }
+                }
+
+                // Archive scripts keep the worktree until they finish. Reclaim it
+                // immediately afterwards so soft-delete still frees disk.
+                if matches!(
+                    ctx.execution_process.run_reason,
+                    ExecutionProcessRunReason::ArchiveScript
+                ) && let Ok(Some(workspace)) =
+                    Workspace::find_by_id(&db.pool, ctx.workspace.id).await
+                    && workspace.archived
+                {
+                    container.release_worktree_on_archive(&workspace).await;
                 }
 
                 // Fire analytics event when CodingAgent execution has finished
@@ -1436,10 +1455,51 @@ impl ContainerService for LocalContainerService {
         Ok(())
     }
 
+    async fn release_worktree_on_archive(&self, workspace: &Workspace) {
+        // InPlace/Console workspaces *are* the user's repo — never delete them.
+        if workspace.kind.uses_repo_working_tree() {
+            return;
+        }
+
+        // Archive scripts run inside the worktree. If one is still going, leave
+        // the directory for the periodic cleanup (1h after archive).
+        match ExecutionProcess::has_running_non_dev_server_processes_for_workspace(
+            &self.db.pool,
+            workspace.id,
+        )
+        .await
+        {
+            Ok(true) => {
+                tracing::info!(
+                    "Skipping immediate worktree cleanup for workspace {}; a process is still running. Periodic cleanup will reclaim it.",
+                    workspace.id
+                );
+                return;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to check running processes before worktree cleanup for workspace {}: {}",
+                    workspace.id,
+                    e
+                );
+            }
+        }
+
+        self.cleanup_workspace(workspace).await;
+        tracing::info!(
+            "Worktree cleaned up immediately upon archive for workspace {}",
+            workspace.id
+        );
+    }
+
     async fn ensure_container_exists(
         &self,
         workspace: &Workspace,
     ) -> Result<ContainerRef, ContainerError> {
+        // Recreates a missing worktree. Read-only viewers (diff WS, branch
+        // status, file read) must not call this when `worktree_deleted` —
+        // opening chat would otherwise undo archive-to-free-disk.
         self.touch(workspace).await?;
         let (repositories, workspace_inputs) = self.workspace_repo_inputs(workspace.id).await?;
 
@@ -1726,13 +1786,34 @@ impl ContainerService for LocalContainerService {
 
         let mut streams = Vec::new();
 
-        let container_ref = self.ensure_container_exists(workspace).await?;
-        let workspace_root = PathBuf::from(container_ref);
+        // Viewing chat / Changes / Git must not pull a released worktree back
+        // onto disk, and must not check out an archived in-place workspace's
+        // branch in the user's repo. Follow-up and unarchive call
+        // ensure_container_exists themselves when the user actually needs the tree.
+        let skip_materialize = workspace.skip_worktree_materialize();
+        if skip_materialize && workspace.kind.uses_repo_working_tree() {
+            return Ok(Box::pin(futures::stream::once(async { Ok(LogMsg::Ready) })));
+        }
+        let workspace_root = if skip_materialize {
+            match workspace.container_ref.as_ref() {
+                Some(container_ref) if PathBuf::from(container_ref).exists() => {
+                    PathBuf::from(container_ref)
+                }
+                _ => {
+                    return Ok(Box::pin(futures::stream::once(async { Ok(LogMsg::Ready) })));
+                }
+            }
+        } else {
+            PathBuf::from(self.ensure_container_exists(workspace).await?)
+        };
 
         for repo in repositories {
             let worktree_path = workspace
                 .kind
                 .repo_working_path(&workspace_root, &repo.name);
+            if !worktree_path.exists() {
+                continue;
+            }
             let branch = &workspace.branch;
 
             let Some(target_branch) = target_branches.get(&repo.id) else {
@@ -1778,7 +1859,7 @@ impl ContainerService for LocalContainerService {
         }
 
         if streams.is_empty() {
-            return Ok(Box::pin(futures::stream::empty()));
+            return Ok(Box::pin(futures::stream::once(async { Ok(LogMsg::Ready) })));
         }
 
         // Merge all streams into one

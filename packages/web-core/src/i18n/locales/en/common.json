@@ -162,10 +162,18 @@
     "linkError": "Failed to link workspace",
     "filesChanged": "{{count}} files",
     "deleteDialog": {
-      "title": "Delete Workspace",
-      "description": "Are you sure you want to delete this workspace? This action cannot be undone.",
+      "title": "Remove workspace",
+      "description": "Archive to free disk space while keeping history, or permanently delete this workspace.",
+      "archiveLabel": "Archive workspace",
+      "archiveDescription": "Release the local worktree. Conversation history and session logs are kept, and the workspace can be restored from its git branch.",
+      "archiveDescriptionInPlace": "Hide from the active list and keep conversation history. The repository working tree is not removed.",
+      "recommended": "Recommended",
+      "deleteLabel": "Delete permanently",
+      "deleteDescription": "Erase the workspace, conversation history, session logs, and optionally the git branch. This cannot be undone.",
       "deleteBranchLabel": "Delete branch",
       "cannotDeleteOpenPr": "Cannot delete branch while PR is open",
+      "confirmArchive": "Archive",
+      "confirmDelete": "Delete permanently",
       "unlinkFromIssueLabel": "Also unlink from issue"
     }
   },

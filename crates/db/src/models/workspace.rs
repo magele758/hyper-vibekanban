@@ -169,6 +169,12 @@ pub struct CreateWorkspace {
 }
 
 impl Workspace {
+    /// History viewers must not recreate a released worktree or check out an
+    /// archived in-place branch in the user's repo.
+    pub fn skip_worktree_materialize(&self) -> bool {
+        self.archived || self.worktree_deleted
+    }
+
     /// Fetch all workspaces. Newest first.
     pub async fn fetch_all(pool: &SqlitePool) -> Result<Vec<Self>, WorkspaceError> {
         let workspaces = sqlx::query_as!(

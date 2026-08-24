@@ -495,7 +495,8 @@ export const workspacesApi = {
   delete: async (
     workspaceId: string,
     deleteBranches?: boolean,
-    deleteRemote: boolean = true
+    deleteRemote: boolean = true,
+    softDelete: boolean = false
   ): Promise<void> => {
     const params = new URLSearchParams();
     if (deleteBranches) {
@@ -503,6 +504,9 @@ export const workspacesApi = {
     }
     // Always send explicitly so older servers and query parsers agree.
     params.set('delete_remote', deleteRemote ? 'true' : 'false');
+    if (softDelete) {
+      params.set('soft_delete', 'true');
+    }
     const queryString = params.toString();
     const url = `/api/workspaces/${workspaceId}?${queryString}`;
     const response = await makeRequest(url, {

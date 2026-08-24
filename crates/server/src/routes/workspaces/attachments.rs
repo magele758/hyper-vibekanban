@@ -88,7 +88,8 @@ pub async fn upload_file(
     let attachment_response =
         process_file_upload(&deployment, multipart, Some(workspace.id)).await?;
 
-    let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
+    let base_path =
+        resolve_session_base_path(&deployment, &workspace, query.session_id, true).await?;
     deployment
         .file()
         .copy_files_by_ids_to_worktree(&base_path, &[attachment_response.id])
@@ -139,77 +140,90 @@ pub async fn import_issue_attachments(
     )))
 }
 
+fn missing_attachment_metadata(path: String) -> AttachmentMetadata {
+    AttachmentMetadata {
+        exists: false,
+        file_name: None,
+        path: Some(path),
+        size_bytes: None,
+        format: None,
+        proxy_url: None,
+    }
+}
+
 pub async fn get_attachment_metadata(
     Extension(workspace): Extension<Workspace>,
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<AttachmentMetadataQuery>,
 ) -> Result<ResponseJson<ApiResponse<AttachmentMetadata>>, ApiError> {
     let vibe_attachments_prefix = format!("{}/", utils::path::VIBE_ATTACHMENTS_DIR);
-    if !query.path.starts_with(&vibe_attachments_prefix) {
-        return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
-            exists: false,
-            file_name: None,
-            path: Some(query.path),
-            size_bytes: None,
-            format: None,
-            proxy_url: None,
-        })));
+    if !query.path.starts_with(&vibe_attachments_prefix) || query.path.contains("..") {
+        return Ok(ResponseJson(ApiResponse::success(
+            missing_attachment_metadata(query.path),
+        )));
     }
 
-    if query.path.contains("..") {
-        return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
-            exists: false,
-            file_name: None,
-            path: Some(query.path),
-            size_bytes: None,
-            format: None,
-            proxy_url: None,
-        })));
-    }
-
-    let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
     let file_path = query
         .path
         .strip_prefix(&vibe_attachments_prefix)
         .unwrap_or("");
-    ensure_workspace_attachment_exists(&deployment, &base_path, file_path).await?;
+    let skip_materialize = workspace.skip_worktree_materialize();
+    let base_path =
+        resolve_session_base_path(&deployment, &workspace, query.session_id, !skip_materialize)
+            .await?;
+
+    if !skip_materialize {
+        ensure_workspace_attachment_exists(&deployment, &base_path, file_path).await?;
+    }
+
     let full_path = base_path.join(&query.path);
+    if let Ok(metadata) = tokio::fs::metadata(&full_path).await
+        && metadata.is_file()
+    {
+        let file_name = Path::new(&query.path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string());
+        let format = Path::new(&query.path)
+            .extension()
+            .map(|ext| ext.to_string_lossy().to_lowercase());
+        let proxy_url = format!(
+            "/api/workspaces/{}/attachments/file/{}?session_id={}",
+            workspace.id, file_path, query.session_id
+        );
+        return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
+            exists: true,
+            file_name,
+            path: Some(query.path),
+            size_bytes: Some(metadata.len() as i64),
+            format,
+            proxy_url: Some(proxy_url),
+        })));
+    }
 
-    let metadata = match tokio::fs::metadata(&full_path).await {
-        Ok(m) if m.is_file() => m,
-        _ => {
-            return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
-                exists: false,
-                file_name: None,
-                path: Some(query.path),
-                size_bytes: None,
-                format: None,
-                proxy_url: None,
-            })));
-        }
-    };
+    // Released worktrees no longer have the copy. Serve history images from
+    // the attachment cache instead of recreating the tree.
+    if skip_materialize
+        && let Some(file) = File::find_by_file_path(&deployment.db().pool, file_path).await?
+    {
+        let file_name = Path::new(&query.path)
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string());
+        let format = Path::new(&query.path)
+            .extension()
+            .map(|ext| ext.to_string_lossy().to_lowercase());
+        return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
+            exists: true,
+            file_name,
+            path: Some(query.path),
+            size_bytes: Some(file.size_bytes),
+            format,
+            proxy_url: Some(format!("/api/attachments/{}/file", file.id)),
+        })));
+    }
 
-    let file_name = Path::new(&query.path)
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string());
-
-    let format = Path::new(&query.path)
-        .extension()
-        .map(|ext| ext.to_string_lossy().to_lowercase());
-
-    let proxy_url = format!(
-        "/api/workspaces/{}/attachments/file/{}?session_id={}",
-        workspace.id, file_path, query.session_id
-    );
-
-    Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
-        exists: true,
-        file_name,
-        path: Some(query.path),
-        size_bytes: Some(metadata.len() as i64),
-        format,
-        proxy_url: Some(proxy_url),
-    })))
+    Ok(ResponseJson(ApiResponse::success(
+        missing_attachment_metadata(query.path),
+    )))
 }
 
 pub async fn serve_file(
@@ -221,22 +235,51 @@ pub async fn serve_file(
     if path.contains("..") {
         return Err(ApiError::File(FileError::NotFound));
     }
-    let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
-    ensure_workspace_attachment_exists(&deployment, &base_path, &path).await?;
+    let skip_materialize = workspace.skip_worktree_materialize();
+    let base_path =
+        resolve_session_base_path(&deployment, &workspace, query.session_id, !skip_materialize)
+            .await?;
+    if !skip_materialize {
+        ensure_workspace_attachment_exists(&deployment, &base_path, &path).await?;
+    }
     let vibe_attachments_dir = base_path.join(utils::path::VIBE_ATTACHMENTS_DIR);
     let full_path = vibe_attachments_dir.join(&path);
 
-    let canonical_path = tokio::fs::canonicalize(&full_path)
-        .await
-        .map_err(|_| ApiError::File(FileError::NotFound))?;
-
-    let canonical_vibe_attachments = tokio::fs::canonicalize(&vibe_attachments_dir)
-        .await
-        .map_err(|_| ApiError::File(FileError::NotFound))?;
-
-    if !canonical_path.starts_with(&canonical_vibe_attachments) {
-        return Err(ApiError::File(FileError::NotFound));
-    }
+    let (canonical_path, content_type) = match tokio::fs::canonicalize(&full_path).await {
+        Ok(canonical_path) => {
+            let canonical_vibe_attachments = tokio::fs::canonicalize(&vibe_attachments_dir)
+                .await
+                .map_err(|_| ApiError::File(FileError::NotFound))?;
+            if !canonical_path.starts_with(&canonical_vibe_attachments) {
+                return Err(ApiError::File(FileError::NotFound));
+            }
+            let content_type = MimeGuess::from_path(&path)
+                .first_raw()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+            (canonical_path, content_type)
+        }
+        Err(_) if skip_materialize => {
+            let file_record = File::find_by_file_path(&deployment.db().pool, &path)
+                .await?
+                .ok_or_else(|| ApiError::File(FileError::NotFound))?;
+            let cache_path = deployment.file().get_absolute_path(&file_record);
+            if !cache_path.exists() {
+                return Err(ApiError::File(FileError::NotFound));
+            }
+            let content_type = file_record
+                .mime_type
+                .clone()
+                .or_else(|| {
+                    MimeGuess::from_path(&path)
+                        .first_raw()
+                        .map(ToOwned::to_owned)
+                })
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            (cache_path, content_type)
+        }
+        Err(_) => return Err(ApiError::File(FileError::NotFound)),
+    };
 
     let file = TokioFile::open(&canonical_path)
         .await
@@ -250,11 +293,8 @@ pub async fn serve_file(
     let stream = ReaderStream::new(file);
     let body = Body::from_stream(stream);
 
-    let content_type = MimeGuess::from_path(&path)
-        .first_raw()
-        .unwrap_or("application/octet-stream");
     let (content_type, content_disposition) =
-        content_type_and_disposition_for_attachment(content_type);
+        content_type_and_disposition_for_attachment(&content_type);
 
     let mut response = Response::builder()
         .status(StatusCode::OK)
@@ -299,6 +339,7 @@ async fn resolve_session_base_path(
     deployment: &DeploymentImpl,
     workspace: &Workspace,
     session_id: Uuid,
+    materialize: bool,
 ) -> Result<std::path::PathBuf, ApiError> {
     let session = Session::find_by_id(&deployment.db().pool, session_id)
         .await?
@@ -310,10 +351,14 @@ async fn resolve_session_base_path(
         ));
     }
 
-    let container_ref = deployment
-        .container()
-        .ensure_container_exists(workspace)
-        .await?;
+    let container_ref = if materialize {
+        deployment
+            .container()
+            .ensure_container_exists(workspace)
+            .await?
+    } else {
+        workspace.container_ref.clone().unwrap_or_default()
+    };
     let workspace_path = std::path::PathBuf::from(container_ref);
     let base_path = match session.agent_working_dir.as_deref() {
         Some(dir) if !dir.is_empty() => workspace_path.join(dir),

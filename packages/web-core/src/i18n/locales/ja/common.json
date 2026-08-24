@@ -148,9 +148,17 @@
     "filesChanged": "{{count}}ファイル",
     "deleteDialog": {
       "title": "ワークスペースを削除",
-      "description": "このワークスペースを削除してもよろしいですか？この操作は元に戻せません。",
+      "description": "履歴を残してディスクを解放するか、このワークスペースを完全に削除します。",
+      "archiveLabel": "ワークスペースをアーカイブ",
+      "archiveDescription": "ローカルの worktree を解放します。会話履歴とセッションログは保持され、git ブランチから復元できます。",
+      "archiveDescriptionInPlace": "アクティブ一覧から非表示にし、会話履歴は保持します。リポジトリの作業ツリーは削除しません。",
+      "recommended": "推奨",
+      "deleteLabel": "完全に削除",
+      "deleteDescription": "ワークスペース、会話履歴、セッションログ、必要に応じて git ブランチを消去します。この操作は元に戻せません。",
       "deleteBranchLabel": "ブランチを削除",
       "cannotDeleteOpenPr": "PRがオープン中はブランチを削除できません",
+      "confirmArchive": "アーカイブ",
+      "confirmDelete": "完全に削除",
       "unlinkFromIssueLabel": "イシューからもリンク解除する"
     },
     "linkError": "Failed to link workspace"

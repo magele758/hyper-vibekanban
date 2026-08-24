@@ -147,10 +147,18 @@
     "deleteError": "Error al eliminar el espacio de trabajo",
     "filesChanged": "{{count}} archivos",
     "deleteDialog": {
-      "title": "Eliminar espacio de trabajo",
-      "description": "¿Estás seguro de que deseas eliminar este espacio de trabajo? Esta acción no se puede deshacer.",
+      "title": "Quitar espacio de trabajo",
+      "description": "Archiva para liberar disco y conservar el historial, o elimina este espacio de trabajo de forma permanente.",
+      "archiveLabel": "Archivar espacio de trabajo",
+      "archiveDescription": "Libera el worktree local. Se conservan el historial de conversación y los registros, y se puede restaurar desde su rama git.",
+      "archiveDescriptionInPlace": "Ocúltalo de la lista activa y conserva el historial. El árbol de trabajo del repositorio no se elimina.",
+      "recommended": "Recomendado",
+      "deleteLabel": "Eliminar de forma permanente",
+      "deleteDescription": "Borra el espacio de trabajo, el historial, los registros y, opcionalmente, la rama git. Esta acción no se puede deshacer.",
       "deleteBranchLabel": "Eliminar rama",
       "cannotDeleteOpenPr": "No se puede eliminar la rama mientras el PR está abierto",
+      "confirmArchive": "Archivar",
+      "confirmDelete": "Eliminar de forma permanente",
       "unlinkFromIssueLabel": "También desvincular del issue"
     },
     "linkError": "Failed to link workspace"

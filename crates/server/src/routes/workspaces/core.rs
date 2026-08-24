@@ -32,6 +32,10 @@ pub struct DeleteWorkspaceQuery {
     pub delete_remote: bool,
     #[serde(default)]
     pub delete_branches: bool,
+    /// When true, archive the workspace and release its worktree instead of
+    /// permanently deleting DB records, session logs, and git branches.
+    #[serde(default)]
+    pub soft_delete: bool,
 }
 
 pub async fn get_workspaces(
@@ -55,6 +59,16 @@ pub async fn update_workspace(
 ) -> Result<ResponseJson<ApiResponse<Workspace>>, ApiError> {
     let pool = &deployment.db().pool;
     let is_archiving = request.archived == Some(true) && !workspace.archived;
+    let is_unarchiving = request.archived == Some(false) && workspace.archived;
+    let needs_setup =
+        is_unarchiving && deployment.container().needs_setup_after_rebuild(&workspace);
+
+    if is_unarchiving {
+        deployment
+            .container()
+            .ensure_container_exists(&workspace)
+            .await?;
+    }
 
     Workspace::update(
         pool,
@@ -64,6 +78,25 @@ pub async fn update_workspace(
         request.name.as_deref(),
     )
     .await?;
+
+    if needs_setup && let Ok(Some(restored)) = Workspace::find_by_id(pool, workspace.id).await {
+        if let Err(e) = deployment
+            .container()
+            .try_start_setup_after_rebuild(&restored)
+            .await
+        {
+            tracing::error!(
+                "Failed to re-run setup after unarchiving workspace {}: {}",
+                workspace.id,
+                e
+            );
+        }
+    }
+
+    if is_archiving && let Err(e) = deployment.container().archive_workspace(workspace.id).await {
+        tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+    }
+
     let updated = Workspace::find_by_id(pool, workspace.id)
         .await?
         .ok_or(WorkspaceError::WorkspaceNotFound)?;
@@ -88,10 +121,6 @@ pub async fn update_workspace(
         });
     }
 
-    if is_archiving && let Err(e) = deployment.container().archive_workspace(workspace.id).await {
-        tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
-    }
-
     Ok(ResponseJson(ApiResponse::success(updated)))
 }
 
@@ -109,6 +138,10 @@ pub async fn delete_workspace(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<DeleteWorkspaceQuery>,
 ) -> Result<(StatusCode, ResponseJson<ApiResponse<()>>), ApiError> {
+    if query.soft_delete {
+        return soft_delete_workspace(workspace, deployment).await;
+    }
+
     let pool = &deployment.db().pool;
     let workspace_manager = deployment.workspace_manager();
     let workspace_id = workspace.id;
@@ -187,6 +220,27 @@ pub async fn delete_workspace(
         .await;
 
     WorkspaceManager::spawn_workspace_deletion_cleanup(deletion_context, query.delete_branches);
+
+    Ok((StatusCode::ACCEPTED, ResponseJson(ApiResponse::success(()))))
+}
+
+async fn soft_delete_workspace(
+    workspace: Workspace,
+    deployment: DeploymentImpl,
+) -> Result<(StatusCode, ResponseJson<ApiResponse<()>>), ApiError> {
+    let workspace_id = workspace.id;
+
+    deployment
+        .container()
+        .archive_workspace(workspace_id)
+        .await?;
+
+    if let Ok(client) = deployment.remote_client() {
+        tokio::spawn(async move {
+            remote_sync::sync_workspace_to_remote(&client, workspace_id, None, Some(true), None)
+                .await;
+        });
+    }
 
     Ok((StatusCode::ACCEPTED, ResponseJson(ApiResponse::success(()))))
 }

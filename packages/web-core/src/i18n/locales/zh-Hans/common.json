@@ -147,10 +147,18 @@
     "deleteError": "删除工作区失败",
     "filesChanged": "{{count}} 个文件",
     "deleteDialog": {
-      "title": "删除工作区",
-      "description": "确定要删除此工作区吗？此操作无法撤销。",
+      "title": "移除工作区",
+      "description": "归档可释放磁盘并保留对话记录，或彻底删除此工作区。",
+      "archiveLabel": "归档工作区",
+      "archiveDescription": "立即释放本地 Worktree。会话记录与过程日志会保留，之后可从 git 分支恢复。",
+      "archiveDescriptionInPlace": "从活跃列表中隐藏并保留对话记录。不会删除仓库工作目录。",
+      "recommended": "推荐",
+      "deleteLabel": "彻底删除",
+      "deleteDescription": "清除工作区、会话记录、过程日志，并可选择删除 git 分支。此操作无法撤销。",
       "deleteBranchLabel": "删除分支",
       "cannotDeleteOpenPr": "PR 开启时无法删除分支",
+      "confirmArchive": "归档",
+      "confirmDelete": "彻底删除",
       "unlinkFromIssueLabel": "同时取消与议题的关联"
     },
     "linkError": "Failed to link workspace"

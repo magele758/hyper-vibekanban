@@ -26,6 +26,7 @@ import {
   useGetGitHubCommentsForFile,
 } from '@/shared/stores/useWorkspaceDiffStore';
 import { useDiffStream } from '@/shared/hooks/useDiffStream';
+import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import {
   useDiffViewMode,
@@ -599,8 +600,12 @@ export const ChangesPanelContainer = memo(function ChangesPanelContainer({
   className,
   workspaceId,
 }: ChangesPanelContainerProps) {
+  const { workspace } = useWorkspaceContext();
+  // Don't reconnect a released/archived worktree just because Changes is open.
+  const diffEnabled =
+    !workspace?.archived && !workspace?.worktree_deleted;
   // Provider keeps stats-only diffs for sidebar/chat; this panel needs full content.
-  const { diffs: fullDiffs } = useDiffStream(workspaceId, true, {
+  const { diffs: fullDiffs } = useDiffStream(workspaceId, diffEnabled, {
     statsOnly: false,
   });
   const statsDiffs = useDiffs();
