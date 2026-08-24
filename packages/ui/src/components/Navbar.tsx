@@ -13,6 +13,7 @@ import {
   CaretLeft as CaretLeftIcon,
   ArrowClockwise as ArrowClockwiseIcon,
   SidebarSimple as SidebarSimpleIcon,
+  Path as PathIcon,
 } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
 import { Tooltip } from './Tooltip';
@@ -98,7 +99,8 @@ export type MobileTabId =
   | 'changes'
   | 'logs'
   | 'preview'
-  | 'git';
+  | 'git'
+  | 'trajectory';
 
 export const MOBILE_TABS: { id: MobileTabId; icon: Icon; label: string }[] = [
   { id: 'workspaces', icon: LayoutIcon, label: 'Wksps' },
@@ -107,6 +109,7 @@ export const MOBILE_TABS: { id: MobileTabId; icon: Icon; label: string }[] = [
   { id: 'logs', icon: TerminalIcon, label: 'Logs' },
   { id: 'preview', icon: DesktopIcon, label: 'Preview' },
   { id: 'git', icon: GitForkIcon, label: 'Git' },
+  { id: 'trajectory', icon: PathIcon, label: 'Path' },
 ];
 
 export interface NavbarBreadcrumbItem {

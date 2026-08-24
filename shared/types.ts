@@ -545,6 +545,68 @@ export type WorkspaceSummaryResponse = { summaries: Array<WorkspaceSummary>, };
 
 export type DiffStats = { files_changed: number, lines_added: number, lines_removed: number, };
 
+export type TrajectorySegment = { execution_process_id: string, run_reason: ExecutionProcessRunReason, status: ExecutionProcessStatus, exit_code: bigint | null, 
+/**
+ * True if this process was excluded from current history (restore/trim)
+ */
+dropped: boolean, started_at: string, completed_at: string | null, 
+/**
+ * Number of normalized entries in this segment
+ */
+entry_count: number, 
+/**
+ * True if log files exist for this process
+ */
+has_logs: boolean, 
+/**
+ * Final assistant message/summary from coding_agent_turns
+ */
+final_message: string | null, 
+/**
+ * Full entries (only included when include_entries=true)
+ */
+entries: Array<NormalizedEntry> | null, };
+
+export type TrajectoryCompleteness = { 
+/**
+ * Total number of execution processes in this session
+ */
+total_processes: number, 
+/**
+ * Number of processes with available logs
+ */
+with_logs: number, 
+/**
+ * Number of dropped (soft-deleted) processes
+ */
+dropped: number, 
+/**
+ * IDs of processes missing log files
+ */
+missing_logs: Array<string>, };
+
+export type TrajectoryTotals = { 
+/**
+ * Entry counts by type
+ */
+entries_by_type: { [key in string]?: number }, 
+/**
+ * Tool call counts by status
+ */
+tool_calls_by_status: { [key in string]?: number }, 
+/**
+ * Last known token usage info
+ */
+last_token_usage: TokenUsageSummary | null, };
+
+export type TokenUsageSummary = { total_tokens: number, model_context_window: number, };
+
+export type TrajectoryResponse = { session_id: string, workspace_id: string, session_name: string | null, executor: string | null, 
+/**
+ * Segments ordered by started_at (chronological)
+ */
+segments: Array<TrajectorySegment>, completeness: TrajectoryCompleteness, totals: TrajectoryTotals, };
+
 export type DirectoryEntry = { name: string, path: string, is_directory: boolean, is_git_repo: boolean, last_modified: bigint | null, };
 
 export type DirectoryListResponse = { entries: Array<DirectoryEntry>, current_path: string, };

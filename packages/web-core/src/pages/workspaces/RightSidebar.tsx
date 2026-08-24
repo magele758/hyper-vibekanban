@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { FileTreeContainer } from './FileTreeContainer';
 import { ProcessListContainer } from './ProcessListContainer';
 import { PreviewControlsContainer } from './PreviewControlsContainer';
+import { TrajectoryPanel } from './TrajectoryPanel';
 import { GitPanelContainer } from './GitPanelContainer';
 import { TerminalPanelContainer } from '@/shared/components/TerminalPanelContainer';
 import { WorkspaceNotesContainer } from './WorkspaceNotesContainer';
@@ -60,6 +61,10 @@ export const RightSidebar = memo(function RightSidebar({
     PERSIST_KEYS.devServerSection,
     true
   );
+  const [trajectoryExpanded] = usePersistedExpanded(
+    PERSIST_KEYS.trajectorySection,
+    true
+  );
   const [gitExpanded] = usePersistedExpanded(
     PERSIST_KEYS.gitPanelRepositories,
     true
@@ -76,7 +81,8 @@ export const RightSidebar = memo(function RightSidebar({
   const hasUpperContent =
     rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.CHANGES ||
     rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.LOGS ||
-    rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.PREVIEW;
+    rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.PREVIEW ||
+    rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.TRAJECTORY;
 
   const upperExpanded = (() => {
     if (rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.CHANGES)
@@ -85,6 +91,8 @@ export const RightSidebar = memo(function RightSidebar({
       return processesExpanded;
     if (rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.PREVIEW)
       return devServerExpanded;
+    if (rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.TRAJECTORY)
+      return trajectoryExpanded;
     return false;
   })();
 
@@ -168,6 +176,16 @@ export const RightSidebar = memo(function RightSidebar({
           });
         }
         break;
+      case RIGHT_MAIN_PANEL_MODES.TRAJECTORY:
+        result.unshift({
+          title: 'Trajectory',
+          persistKey: PERSIST_KEYS.trajectorySection,
+          visible: hasUpperContent,
+          expanded: upperExpanded,
+          content: <TrajectoryPanel />,
+          actions: [],
+        });
+        break;
       case null:
         break;
     }
@@ -184,6 +202,7 @@ export const RightSidebar = memo(function RightSidebar({
     changesExpanded,
     processesExpanded,
     devServerExpanded,
+    trajectoryExpanded,
     isTerminalVisible,
     isTerminalExpanded,
     hasUpperContent,

@@ -7,6 +7,7 @@ export const RIGHT_MAIN_PANEL_MODES = {
   CHANGES: 'changes',
   LOGS: 'logs',
   PREVIEW: 'preview',
+  TRAJECTORY: 'trajectory',
 } as const;
 
 export type RightMainPanelMode =
@@ -20,7 +21,8 @@ export type MobileTab =
   | 'changes'
   | 'logs'
   | 'preview'
-  | 'git';
+  | 'git'
+  | 'trajectory';
 
 export type MobileFontScale = 'default' | 'small' | 'smaller';
 export const DEFAULT_CREATE_DRAFT_WORKSPACE_BY_DEFAULT = false;
@@ -264,6 +266,8 @@ export const PERSIST_KEYS = {
   changesSection: 'changes-section',
   // Preview panel sections
   devServerSection: 'dev-server-section',
+  // Trajectory panel sections
+  trajectorySection: 'trajectory-section',
   // Terminal panel section
   terminalSection: 'terminal-section',
   // Notes panel section
@@ -297,6 +301,7 @@ export type PersistKey =
   | typeof PERSIST_KEYS.processesSection
   | typeof PERSIST_KEYS.changesSection
   | typeof PERSIST_KEYS.devServerSection
+  | typeof PERSIST_KEYS.trajectorySection
   | typeof PERSIST_KEYS.terminalSection
   | typeof PERSIST_KEYS.notesSection
   | typeof PERSIST_KEYS.showGitHubComments

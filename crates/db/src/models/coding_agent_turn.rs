@@ -81,6 +81,34 @@ impl CodingAgentTurn {
         .await
     }
 
+    /// Find coding agent turn by agent session ID (e.g., "session_3n48rqp5lk_0")
+    /// Returns the most recent turn matching this agent_session_id
+    pub async fn find_by_agent_session_id(
+        pool: &SqlitePool,
+        agent_session_id: &str,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            CodingAgentTurn,
+            r#"SELECT
+                id as "id!: Uuid",
+                execution_process_id as "execution_process_id!: Uuid",
+                agent_session_id,
+                agent_message_id,
+                prompt,
+                summary,
+                seen as "seen!: bool",
+                created_at as "created_at!: DateTime<Utc>",
+                updated_at as "updated_at!: DateTime<Utc>"
+               FROM coding_agent_turns
+               WHERE agent_session_id = $1
+               ORDER BY created_at DESC
+               LIMIT 1"#,
+            agent_session_id
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
     /// Create a new coding agent turn
     pub async fn create(
         pool: &SqlitePool,

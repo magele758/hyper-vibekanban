@@ -33,6 +33,7 @@ import { CreateChatBoxContainer } from '@/shared/components/CreateChatBoxContain
 import { PreviewBrowserContainer } from './PreviewBrowserContainer';
 import { WorkspacesGuideDialog } from '@/shared/dialogs/shared/WorkspacesGuideDialog';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { TrajectoryContentContainer } from './TrajectoryContentContainer';
 
 import {
   PERSIST_KEYS,
@@ -307,6 +308,16 @@ export function WorkspacesLayout() {
                 />
               )}
             </div>
+
+            {/* Trajectory tab */}
+            <div
+              className={cn(
+                'flex-1 min-h-0 overflow-hidden',
+                mobileTab !== 'trajectory' && 'hidden'
+              )}
+            >
+              <TrajectoryContentContainer />
+            </div>
           </div>
         </ChangesViewProvider>
       </ReviewProvider>
@@ -398,6 +409,9 @@ export function WorkspacesLayout() {
                       className=""
                     />
                   )}
+                {rightMainPanelMode === RIGHT_MAIN_PANEL_MODES.TRAJECTORY && (
+                  <TrajectoryContentContainer />
+                )}
               </Panel>
             )}
           </Group>
