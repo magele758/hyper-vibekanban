@@ -141,6 +141,7 @@ pub const KNOWN_CODING_AGENTS: &[&str] = &[
     "CLAUDE_CODE",
     "AMP",
     "GEMINI",
+    "ANTIGRAVITY",
     "CODEX",
     "OPENCODE",
     "CURSOR_AGENT",
