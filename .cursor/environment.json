@@ -1,0 +1,16 @@
+{
+  "name": "vibe-kanban",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "SQLX_OFFLINE=true HOST=0.0.0.0 pnpm run dev",
+      "description": "Runs the Rust backend (cargo watch, API on :3001, preview proxy on :3002) and the Vite frontend (:3000) concurrently. Open the frontend on port 3000."
+    }
+  ],
+  "ports": [
+    { "name": "frontend", "port": 3000 },
+    { "name": "backend-api", "port": 3001 },
+    { "name": "preview-proxy", "port": 3002 }
+  ]
+}
