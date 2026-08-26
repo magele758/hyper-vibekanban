@@ -59,6 +59,9 @@ runs:
       if: ${{ inputs.setup-sqlx-cli == 'true' }}
       uses: taiki-e/cache-cargo-install-action@34ce5120836e5f9f1508d8713d7fdea0e8facd6f # v3.0.1
       with:
-        tool: sqlx-cli
+        # Pin to match the `sqlx` 0.8.x dependency. sqlx-cli 0.9.0 (the current
+        # latest) requires rustc >= 1.94, but this repo pins nightly-2025-12-04
+        # (rustc 1.93), so an unpinned install fails at "Setup Rust".
+        tool: sqlx-cli@0.8.6
         no-default-features: true
         features: sqlite,postgres

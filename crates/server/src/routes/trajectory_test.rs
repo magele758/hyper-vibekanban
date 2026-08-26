@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use executors::logs::{
         ActionType, NormalizedEntry, NormalizedEntryType, TokenUsageInfo, ToolStatus,

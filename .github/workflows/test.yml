@@ -240,10 +240,39 @@ jobs:
           setup-node: 'true'
           setup-sqlx-cli: 'true'
 
+      - name: Detect private deploy key
+        id: deploy_key
+        env:
+          VK_PRIVATE_DEPLOY_KEY: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
+        run: |
+          if [ -n "$VK_PRIVATE_DEPLOY_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup SSH Agent for private dependencies
+        if: ${{ steps.deploy_key.outputs.present == 'true' }}
         uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
+
+      - name: Provide billing stub (self-host build strips the private billing crate)
+        run: |
+          # crates/remote/Cargo.toml declares the optional `billing` dep at
+          # /tmp/billing-stub. It is not compiled (vk-billing is off), but cargo
+          # must resolve its manifest for --locked metadata/checks.
+          mkdir -p /tmp/billing-stub/src
+          cat > /tmp/billing-stub/Cargo.toml <<'EOF'
+          [package]
+          name = "billing"
+          version = "0.1.0"
+          edition = "2021"
+
+          [lib]
+          path = "src/lib.rs"
+          EOF
+          echo '// stub billing crate (unused: vk-billing feature is off)' > /tmp/billing-stub/src/lib.rs
 
       - name: Check remote Cargo.lock is consistent
         run: |

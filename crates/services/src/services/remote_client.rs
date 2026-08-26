@@ -1193,10 +1193,10 @@ fn local_login_credentials() -> Option<(String, String)> {
     if let (Ok(email), Ok(password)) = (
         std::env::var("VK_LOCAL_LOGIN_EMAIL"),
         std::env::var("VK_LOCAL_LOGIN_PASSWORD"),
-    ) {
-        if !email.trim().is_empty() && !password.is_empty() {
-            return Some((email, password));
-        }
+    ) && !email.trim().is_empty()
+        && !password.is_empty()
+    {
+        return Some((email, password));
     }
 
     let path = utils::assets::asset_dir().join("local_login.json");
