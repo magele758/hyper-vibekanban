@@ -7,37 +7,34 @@ name: Build & Publish Images
 #   remote: crates/remote/Dockerfile        -> ghcr.io/<owner>/hyper-vibekanban-remote
 #   relay : crates/relay-tunnel/Dockerfile  -> ghcr.io/<owner>/hyper-vibekanban-relay
 #
-# Each architecture is built on its NATIVE runner (amd64 on ubuntu-latest,
-# arm64 on ubuntu-24.04-arm — free for public repos) for speed, then the two
-# per-arch images are merged into one multi-arch manifest. This avoids slow
-# QEMU emulation.
+# Build cadence: at most ONCE PER DAY. This does NOT build on every push.
+# A daily scheduled run builds only when the relevant source changed since the
+# previous day (the `changes` job gates it); release tags and manual runs build
+# on demand. Each architecture is built on its NATIVE runner (amd64 on
+# ubuntu-latest, arm64 on ubuntu-24.04-arm — free for public repos) then merged
+# into one multi-arch manifest, avoiding slow QEMU emulation.
 #
 # FEATURES is intentionally empty for remote: the Dockerfile strips the private
 # `billing` crate in that mode, so no private repo / SSH access is required.
-# GHCR uses the built-in GITHUB_TOKEN — no extra secrets needed. Make the
-# published packages public (package settings) for auth-free pulls.
+# GHCR uses the built-in GITHUB_TOKEN — no extra secrets needed.
 
 on:
+  schedule:
+    # Once per day at 19:00 UTC. Builds only if relevant source changed.
+    - cron: '0 19 * * *'
   push:
-    branches:
-      - main
     tags:
       - 'remote-v*'
       - 'relay-v*'
-    paths:
-      - 'crates/remote/**'
-      - 'crates/relay-tunnel/**'
-      - 'crates/relay-tunnel-core/**'
-      - 'crates/relay-control/**'
-      - 'crates/relay-protocol/**'
-      - 'crates/relay-ws/**'
-      - 'crates/relay-types/**'
-      - 'crates/ws-bridge/**'
-      - 'crates/api-types/**'
-      - 'packages/remote-web/**'
-      - 'packages/web-core/**'
-      - '.github/workflows/remote-image.yml'
+    # TEMP: validate on this feature branch; removed before merge.
+    branches:
+      - cursor/throttle-image-builds-6d19
   workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if there were no relevant changes'
+        type: boolean
+        default: false
 
 concurrency:
   group: images-${{ github.ref }}
@@ -47,7 +44,45 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to build
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          set -euo pipefail
+          paths="crates/remote crates/relay-tunnel crates/relay-tunnel-core crates/relay-control crates/relay-protocol crates/relay-ws crates/relay-types crates/ws-bridge crates/api-types packages/remote-web packages/web-core .github/workflows/remote-image.yml"
+          # Manual force, or a release tag push -> always build.
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$FORCE" = "true" ]; then
+            echo "Reason: manual force"; echo "should_build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            echo "Reason: release tag"; echo "should_build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Scheduled / manual (no force) / temp-branch push -> only if changed in last 25h.
+          if git log --since='25 hours ago' --oneline -- $paths | grep -q .; then
+            echo "Reason: relevant changes in the last 25h"
+            git log --since='25 hours ago' --oneline -- $paths | sed 's/^/  /'
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Reason: no relevant changes in the last 25h — skipping build"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: changes
+    if: needs.changes.outputs.should_build == 'true'
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -104,7 +139,6 @@ jobs:
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          echo -n > "/tmp/digests/${{ matrix.arch }}"
           echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}"
 
       - name: Upload digest
@@ -116,7 +150,8 @@ jobs:
           retention-days: 1
 
   merge:
-    needs: build
+    needs: [changes, build]
+    if: needs.changes.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -169,12 +204,12 @@ jobs:
 
       - name: Inspect manifest
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}"
           ref=$(jq -cr '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
           docker buildx imagetools inspect "$ref"
 
   cleanup:
-    needs: merge
+    needs: [changes, merge]
+    if: needs.changes.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
       packages: write
