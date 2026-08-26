@@ -1,36 +1,47 @@
-name: Build & Publish Remote Image
+name: Build & Publish Images
 
-# Builds the self-hosted Remote server image (crates/remote/Dockerfile) and
-# publishes it to GitHub Container Registry (GHCR). Deployments then only pull
-# the image instead of compiling locally.
+# Builds the self-hosted Remote and Relay server images and publishes them to
+# GitHub Container Registry (GHCR), multi-arch (linux/amd64 + linux/arm64).
+# Deployments then only pull the images instead of compiling locally.
 #
-# FEATURES is intentionally empty: the Dockerfile strips the private `billing`
-# crate in that mode, so no private repo / SSH access is required.
+# - remote: crates/remote/Dockerfile  -> ghcr.io/<owner>/hyper-vibekanban-remote
+# - relay : crates/relay-tunnel/Dockerfile -> ghcr.io/<owner>/hyper-vibekanban-relay
 #
+# FEATURES is intentionally empty for remote: the Dockerfile strips the private
+# `billing` crate in that mode, so no private repo / SSH access is required.
 # GHCR uses the built-in GITHUB_TOKEN — no extra secrets needed. Make the
-# published package public (Packages > package settings) for auth-free pulls.
+# published packages public (package settings) for auth-free pulls.
 
 on:
   push:
     branches:
       - main
+      # TEMP: validate on this feature branch; removed before merge.
+      - cursor/remote-image-ci-6d19
     tags:
       - 'remote-v*'
+      - 'relay-v*'
     paths:
       - 'crates/remote/**'
+      - 'crates/relay-tunnel/**'
+      - 'crates/relay-tunnel-core/**'
+      - 'crates/relay-control/**'
+      - 'crates/relay-protocol/**'
+      - 'crates/relay-ws/**'
+      - 'crates/relay-types/**'
+      - 'crates/ws-bridge/**'
+      - 'crates/api-types/**'
       - 'packages/remote-web/**'
       - 'packages/web-core/**'
-      - 'crates/api-types/**'
-      - 'crates/relay-types/**'
       - '.github/workflows/remote-image.yml'
   workflow_dispatch:
 
 concurrency:
-  group: remote-image-${{ github.ref }}
+  group: images-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/hyper-vibekanban-remote
+  REGISTRY: ghcr.io
 
 jobs:
   build-push:
@@ -38,9 +49,26 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: remote
+            image: hyper-vibekanban-remote
+            dockerfile: crates/remote/Dockerfile
+            build_args: |
+              FEATURES=
+              VITE_RELAY_API_BASE_URL=${{ vars.VITE_RELAY_API_BASE_URL }}
+          - name: relay
+            image: hyper-vibekanban-relay
+            dockerfile: crates/relay-tunnel/Dockerfile
+            build_args: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -56,37 +84,40 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
             type=ref,event=branch
             type=semver,pattern={{version}}
 
-      - name: Build and push
+      - name: Build and push (${{ matrix.name }})
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: crates/remote/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
-          platforms: linux/amd64
-          build-args: |
-            FEATURES=
-            VITE_RELAY_API_BASE_URL=${{ vars.VITE_RELAY_API_BASE_URL }}
+          platforms: linux/amd64,linux/arm64
+          build-args: ${{ matrix.build_args }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   cleanup:
     needs: build-push
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    strategy:
+      matrix:
+        package:
+          - hyper-vibekanban-remote
+          - hyper-vibekanban-relay
     steps:
       - name: Prune old image versions (keep newest 10)
         uses: actions/delete-package-versions@v5
         with:
-          package-name: hyper-vibekanban-remote
+          package-name: ${{ matrix.package }}
           package-type: container
           min-versions-to-keep: 10

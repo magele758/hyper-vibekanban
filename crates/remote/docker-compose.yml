@@ -169,6 +169,9 @@ services:
 
   relay-server:
     profiles: ["relay"]
+    # Pull-based deploy uses the prebuilt GHCR image; override with RELAY_IMAGE.
+    # `build:` is kept as a fallback for local development.
+    image: ${RELAY_IMAGE:-ghcr.io/magele758/hyper-vibekanban-relay:latest}
     build:
       context: ../..
       dockerfile: crates/relay-tunnel/Dockerfile
