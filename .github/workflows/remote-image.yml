@@ -14,8 +14,8 @@ on:
   push:
     branches:
       - main
-      # TEMP: validate the workflow on this feature branch; removed before merge.
-      - cursor/remote-image-ci-6d19
+    tags:
+      - 'remote-v*'
     paths:
       - 'crates/remote/**'
       - 'packages/remote-web/**'
