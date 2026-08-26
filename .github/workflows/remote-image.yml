@@ -26,9 +26,6 @@ on:
     tags:
       - 'remote-v*'
       - 'relay-v*'
-    # TEMP: validate on this feature branch; removed before merge.
-    branches:
-      - cursor/throttle-image-builds-6d19
   workflow_dispatch:
     inputs:
       force:
