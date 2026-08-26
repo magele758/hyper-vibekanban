@@ -240,8 +240,19 @@ jobs:
           setup-node: 'true'
           setup-sqlx-cli: 'true'
 
+      - name: Detect private deploy key
+        id: deploy_key
+        env:
+          VK_PRIVATE_DEPLOY_KEY: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
+        run: |
+          if [ -n "$VK_PRIVATE_DEPLOY_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup SSH Agent for private dependencies
-        if: ${{ secrets.VK_PRIVATE_DEPLOY_KEY != '' }}
+        if: ${{ steps.deploy_key.outputs.present == 'true' }}
         uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
