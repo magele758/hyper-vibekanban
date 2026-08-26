@@ -49,6 +49,7 @@
     "check:npx-cli": "tsc --noEmit -p npx-cli/tsconfig.json",
     "prepack": "pnpm run build:npx && pnpm run build:npx-cli",
     "remote:up": "bash scripts/remote-up.sh",
+    "remote:login": "bash scripts/remote-local-login.sh",
     "vk:start": "bash scripts/vk-start.sh",
     "vk:stop": "bash scripts/vk-stop.sh",
     "vk:status": "bash scripts/vk-status.sh",
