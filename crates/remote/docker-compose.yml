@@ -71,6 +71,11 @@ services:
         condition: service_healthy
 
   remote-server:
+    # Pull-based deploy: `docker compose pull remote-server && docker compose up -d`
+    # uses the prebuilt GHCR image (no local compile). Override the ref with
+    # REMOTE_IMAGE. `build:` is kept as a fallback for local development
+    # (`pnpm run remote:dev` still builds from source).
+    image: ${REMOTE_IMAGE:-ghcr.io/magele758/hyper-vibekanban-remote:latest}
     build:
       context: ../..
       dockerfile: crates/remote/Dockerfile

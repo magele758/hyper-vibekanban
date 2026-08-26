@@ -1,0 +1,92 @@
+name: Build & Publish Remote Image
+
+# Builds the self-hosted Remote server image (crates/remote/Dockerfile) and
+# publishes it to GitHub Container Registry (GHCR). Deployments then only pull
+# the image instead of compiling locally.
+#
+# FEATURES is intentionally empty: the Dockerfile strips the private `billing`
+# crate in that mode, so no private repo / SSH access is required.
+#
+# GHCR uses the built-in GITHUB_TOKEN — no extra secrets needed. Make the
+# published package public (Packages > package settings) for auth-free pulls.
+
+on:
+  push:
+    branches:
+      - main
+      # TEMP: validate the workflow on this feature branch; removed before merge.
+      - cursor/remote-image-ci-6d19
+    paths:
+      - 'crates/remote/**'
+      - 'packages/remote-web/**'
+      - 'packages/web-core/**'
+      - 'crates/api-types/**'
+      - 'crates/relay-types/**'
+      - '.github/workflows/remote-image.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: remote-image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/hyper-vibekanban-remote
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: crates/remote/Dockerfile
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            FEATURES=
+            VITE_RELAY_API_BASE_URL=${{ vars.VITE_RELAY_API_BASE_URL }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  cleanup:
+    needs: build-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Prune old image versions (keep newest 10)
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: hyper-vibekanban-remote
+          package-type: container
+          min-versions-to-keep: 10
