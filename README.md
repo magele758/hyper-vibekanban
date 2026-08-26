@@ -149,6 +149,24 @@ That starts the local server and opens your browser.
 
 After the official cloud shutdown, this repo ships a Docker Remote + Relay + ElectricSQL stack for multi-device sync. Dev helpers live under `scripts/vk-*.sh` (ports in `scripts/vk-ports.sh`). See the [self-hosting guide](docs/self-hosting/deploy-docker.mdx).
 
+#### Prebuilt images (GHCR) — deploy without local compiles
+
+CI publishes **multi-arch** (`linux/amd64` + `linux/arm64`) images to GitHub Container Registry on every push to `main`, so servers can **pull instead of compile** (no giant local `target/` cache):
+
+- `ghcr.io/magele758/hyper-vibekanban-remote` — Remote server
+- `ghcr.io/magele758/hyper-vibekanban-relay` — Relay server
+
+Deploy by pulling the images (from `crates/remote/`, with your `.env.remote` set):
+
+```bash
+export REMOTE_IMAGE=ghcr.io/magele758/hyper-vibekanban-remote:latest
+export RELAY_IMAGE=ghcr.io/magele758/hyper-vibekanban-relay:latest
+docker compose --env-file .env.remote --profile relay pull remote-server relay-server
+docker compose --env-file .env.remote --profile relay up -d   # no --build
+```
+
+Upgrading is just `pull` + `up -d`: the server auto-runs DB migrations on start, and your data lives in the named Postgres volume (`remote_remote-db-data`), independent of the image — **it is preserved across image updates**. Keep the same compose project (run from `crates/remote/`) so the volume re-attaches, and never use `-v` (e.g. `docker compose down -v`, `pnpm run remote:dev:clean`, or `pnpm run remote:dev` which runs `down -v` on exit) unless you intend to wipe the database. `docker compose stop` / `pnpm run remote:down` are the safe stop commands. `latest` tracks `main`; pin a specific `sha-<short>` tag for reproducible deploys.
+
 ---
 
 ## How It Works

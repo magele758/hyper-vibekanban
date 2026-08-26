@@ -51,6 +51,15 @@
 - **服务端与浏览器共享 API base 分离**；启动前清理继承的 `ANTHROPIC_*` provider 环境变量；loopback/OrbStack 走直连绕过代理、共享资产目录、等待 Tailscale 就绪。
 - **Tailscale 移动端 5G direct-vs-DERP 排查文档**。
 
+### Remote 镜像发布 / 容器化部署
+
+- **GHCR 多架构镜像发布** — 新增 `.github/workflows/remote-image.yml`：每次推送 `main`（或 `remote-v*` / `relay-v*` tag、手动触发）自动构建并推送 **Remote** 与 **Relay** 两个镜像到 GitHub Container Registry，双架构 `linux/amd64` + `linux/arm64`。
+  - `ghcr.io/<owner>/hyper-vibekanban-remote`（`crates/remote/Dockerfile`）、`ghcr.io/<owner>/hyper-vibekanban-relay`（`crates/relay-tunnel/Dockerfile`）。
+  - 各架构在**原生 runner** 上分别构建（amd64→`ubuntu-latest`，arm64→`ubuntu-24.04-arm`，public 仓库免费），再用 `docker buildx imagetools` 合并成单个多架构清单，避免 QEMU 模拟（Remote arm64 从约 2h41m 降到约 7.5min）。
+  - 用内置 `GITHUB_TOKEN` 推送，无需额外 secret；`FEATURES=` 空以剥离私有 `billing` 依赖，构建不需要私有仓库/SSH。
+  - Tag：`latest`（默认分支）、短 `sha`、分支名、`*-v*` 语义版本；`cleanup` 步骤只保留每个镜像最新 10 个版本，持续提交也不会无限占用存储。
+- **只拉镜像部署** — `crates/remote/docker-compose.yml` 的 `remote-server` / `relay-server` 增加 `image: ${REMOTE_IMAGE:-...}` / `${RELAY_IMAGE:-...}`（保留 `build:` 作为本地开发回退）。部署侧 `docker compose pull && up -d` 即可，无需本地编译。数据存于命名卷 `remote_remote-db-data`，与镜像分离，升级镜像自动迁移、数据保留（勿用 `-v` 删卷）。
+
 ### CI / 文档 / 其他
 
 - **CI 精简** — 去掉 macOS 与 Tauri 桌面构建，仅发布 npm CLI，消除 GitHub Actions 计费来源（macOS runner），Linux/Windows 后端 + npm CLI 产物不变。

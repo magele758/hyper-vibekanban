@@ -149,6 +149,24 @@ npx vibe-kanban
 
 官方云停服后，本仓库用 Docker Remote + Relay + ElectricSQL 续上「多端同步 / 远程看板」。开发栈一键脚本见仓库根目录 `scripts/vk-*.sh`（端口约定见 `scripts/vk-ports.sh`）。部署说明：[自托管指南](docs/self-hosting/deploy-docker.mdx)。
 
+#### 预构建镜像（GHCR）——部署无需本地编译
+
+CI 会在每次推送到 `main` 时，把 **多架构**（`linux/amd64` + `linux/arm64`）镜像发布到 GitHub Container Registry，因此服务器可以**只拉镜像、不用本地编译**（也就不会再堆出几十 G 的本地 `target/` 缓存）：
+
+- `ghcr.io/magele758/hyper-vibekanban-remote` — Remote 服务
+- `ghcr.io/magele758/hyper-vibekanban-relay` — Relay 服务
+
+部署（在 `crates/remote/` 目录、配好 `.env.remote` 后）直接拉镜像启动：
+
+```bash
+export REMOTE_IMAGE=ghcr.io/magele758/hyper-vibekanban-remote:latest
+export RELAY_IMAGE=ghcr.io/magele758/hyper-vibekanban-relay:latest
+docker compose --env-file .env.remote --profile relay pull remote-server relay-server
+docker compose --env-file .env.remote --profile relay up -d   # 不加 --build
+```
+
+升级只需 `pull` + `up -d`：服务启动会自动跑数据库迁移，数据存在命名卷 `remote_remote-db-data`（Postgres）里，与镜像分离，**换镜像不会丢数据**。请保持同一个 compose 项目（始终在 `crates/remote/` 目录里跑），卷才会自动挂回；除非确实要清库，否则**绝不要带 `-v`**（如 `docker compose down -v`、`pnpm run remote:dev:clean`，以及退出时会自动 `down -v` 的 `pnpm run remote:dev`）。停服务用安全命令 `docker compose stop` / `pnpm run remote:down`。`latest` 跟随 `main`；需要可复现部署时请固定某个 `sha-<短哈希>` tag。
+
 ---
 
 ## 工作原理
