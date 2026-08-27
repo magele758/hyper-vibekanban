@@ -19,6 +19,10 @@ if [[ ! -f "${AUTOSTART_ENV}" ]]; then
 
 # export VK_MOBILE=1
 # export VK_REBUILD=0
+# 默认拉 GHCR + 预编译 Desktop。改 Rust 热更新时才开：
+# export VK_HOT=1
+# 跳过每次 pull（已有镜像时）：
+# export VK_PULL=0
 # OrbStack 容器代理：默认 none（直连）。仅当宿主代理开了 allow-lan 时才设：
 #   1=用 http://host.orb.internal:7897；或直接写 http(s):// 自定义 URL
 # export VK_ORBSTACK_PROXY=1

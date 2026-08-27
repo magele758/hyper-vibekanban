@@ -275,18 +275,22 @@ pnpm i
 
 ### Dev server
 
-```bash
-pnpm run dev
-```
-
-Starts the Rust backend (`cargo-watch`) and Vite. A blank SQLite DB is copied from `dev_assets_seed/` on first run.
-
-Full local stack (Remote Docker + Relay + Desktop):
+Daily local stack (**recommended**): pull GHCR Remote/Relay images and run the prebuilt Desktop binary at `~/.vk-kanban/bin/server` (no `cargo-watch`):
 
 ```bash
 bash scripts/vk-start.sh
 bash scripts/vk-status.sh
 ```
+
+Use `VK_HOT=1 bash scripts/vk-start.sh` only when editing Desktop Rust. Use `VK_REBUILD=1` only to build Remote/Relay images locally.
+
+Source-only hot reload (no Docker):
+
+```bash
+pnpm run dev
+```
+
+This starts `cargo-watch` + Vite and copies a blank SQLite DB from `dev_assets_seed/` on first run. Do not use this for the daily main stack — it rebuilds tens of GB of `target/`.
 
 ### Build npx package from source
 

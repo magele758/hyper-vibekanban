@@ -14,6 +14,28 @@ vk_configure_dev_cargo_target() {
   mkdir -p "${CARGO_TARGET_DIR}"
 }
 
+# Daily-use Desktop API binary (no cargo-watch). Prefer a copied release/debug
+# bin so we can delete cargo-target-main without taking the stack down.
+vk_resolve_server_bin() {
+  if [[ -n "${VK_SERVER_BIN:-}" && -x "${VK_SERVER_BIN}" ]]; then
+    echo "${VK_SERVER_BIN}"
+    return 0
+  fi
+  local state_dir="${VK_STATE_DIR:-${HOME}/.vk-kanban}"
+  local candidates=(
+    "${state_dir}/bin/server"
+    "${state_dir}/cargo-target-main/debug/server"
+  )
+  local c
+  for c in "${candidates[@]}"; do
+    if [[ -x "${c}" ]]; then
+      echo "${c}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 vk_configure_asset_dir() {
   local root="${1:?root required}"
   local state_dir="${VK_STATE_DIR:-${HOME}/.vk-kanban}"
@@ -31,7 +53,7 @@ vk_configure_asset_dir() {
 }
 
 vk_dev_pgrep_pattern() {
-  echo "(hyper-vibekanban|vibe-kanban).*concurrently.*backend:dev:watch"
+  echo "(hyper-vibekanban|vibe-kanban).*concurrently.*(backend:dev:watch|local-web:dev:supervised)|concurrently --names server,web"
 }
 
 vk_kill_port_listeners() {
@@ -281,6 +303,8 @@ vk_stop_local_dev() {
   pkill -f "(hyper-vibekanban|vibe-kanban).*concurrently.*backend:dev:watch" 2>/dev/null || true
   pkill -f "${root}/packages/local-web.*vite" 2>/dev/null || true
   pkill -f "${root}/target/debug/server" 2>/dev/null || true
+  pkill -f "${HOME}/.vk-kanban/bin/server" 2>/dev/null || true
+  pkill -f "${HOME}/.vk-kanban/cargo-target-main/debug/server" 2>/dev/null || true
   vk_stop_agent_sidecar "${root}" "${pid_dir}"
   sleep 2
   node "${root}/scripts/setup-dev-environment.js" clear >/dev/null 2>&1 || true
@@ -408,8 +432,8 @@ vk_local_dev_healthy() {
 
 vk_launch_dev_background() {
   local root="${1:?root required}"
-  local runner="${root}/scripts/vk-run-dev.sh"
   local log_file="${2:?log required}"
+  local runner="${3:-${root}/scripts/vk-run-dev.sh}"
   if command -v setsid >/dev/null 2>&1; then
     setsid bash "${runner}" >> "${log_file}" 2>&1 &
   else

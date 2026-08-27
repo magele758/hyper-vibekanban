@@ -275,18 +275,22 @@ pnpm i
 
 ### 启动开发服务器
 
-```bash
-pnpm run dev
-```
-
-同时启动 Rust 后端（`cargo-watch`）与 Vite。首次会从 `dev_assets_seed/` 复制空白 SQLite。
-
-完整本机栈（Remote Docker + Relay + Desktop）可用：
+日常本机栈（**推荐**）：拉 GHCR 的 Remote/Relay，Desktop 用预编译 `~/.vk-kanban/bin/server`（无 `cargo-watch`）：
 
 ```bash
 bash scripts/vk-start.sh
 bash scripts/vk-status.sh
 ```
+
+改 Desktop Rust 才开热更新：`VK_HOT=1 bash scripts/vk-start.sh`。本机编 Remote/Relay 镜像才：`VK_REBUILD=1`。
+
+只跑源码热更新（不启 Docker）时：
+
+```bash
+pnpm run dev
+```
+
+这会起 `cargo-watch` + Vite，首次从 `dev_assets_seed/` 复制空白 SQLite。日常主栈不要用这条，以免再堆几十 G `target/`。
 
 ### 从源码构建 npx 包
 

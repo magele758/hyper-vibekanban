@@ -48,16 +48,19 @@ Do not manually edit shared/remote-types.ts, instead edit crates/remote/src/bin/
 
 | 改了什么 | 怎么做 |
 |----------|--------|
-| `packages/web-core` / `packages/remote-web` / `packages/local-web`（Remote Docker 前端） | `VK_REBUILD=1 vk-stop && vk-start`（或至少重建 Remote 镜像） |
-| `crates/server` / `crates/relay-*` / relay 代理逻辑 | `vk-stop && vk-start`（Rust backend 由 dev 热重载；Docker Remote/Relay 重建后需重连隧道） |
+| `packages/web-core` / `packages/remote-web`（进 Remote 镜像） | 等 CI 出 GHCR 后 `vk-stop && vk-start`（会 `pull`）；急需才 `VK_REBUILD=1` 本机编镜像 |
+| `crates/server` / Desktop 本机 API | 默认跑 `~/.vk-kanban/bin/server`（无 cargo-watch）。改 Rust 才 `VK_HOT=1 vk-start` |
+| `crates/relay-*` | 等 CI 镜像，或 `VK_REBUILD=1`；容器重建后需重连隧道（`vk-start` 会重启 Desktop） |
 | `scripts/vk-*.sh` / `docker-compose` / `.env.remote` | `vk-stop && vk-start` |
-| 仅本地 Vite（`local-web` dev，不走 Docker） | 通常 `pnpm run dev` 热更新；若端口/代理/env 变了仍要 `vk-start` |
+| 仅本地 Vite（`packages/local-web`） | 热更新；端口/代理/env 变了仍要 `vk-start` |
 
 默认一键命令（仓库根目录）：
 
 ```bash
-bash scripts/vk-stop.sh && VK_REBUILD=1 bash scripts/vk-start.sh
+bash scripts/vk-stop.sh && bash scripts/vk-start.sh   # 拉 GHCR + 预编译 Desktop，不要加 VK_REBUILD
 bash scripts/vk-status.sh   # 必须全 OK 再收工
+# 改 Desktop Rust：VK_HOT=1 bash scripts/vk-start.sh
+# 本机编 Remote/Relay 镜像：VK_REBUILD=1 bash scripts/vk-start.sh
 ```
 
 默认端口见 `scripts/vk-ports.sh`（Desktop **13001**、Remote **13000**、Relay **18082**、API **13002**、桌面 h2 前门 **13443**）。手机经 Tailscale 访问 Remote 时用 **当前页面的 Tailscale IP/主机名** 配 Relay，不要用局域网 IP。

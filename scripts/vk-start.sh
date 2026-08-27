@@ -104,9 +104,17 @@ export VITE_RELAY_API_BASE_URL="${VITE_RELAY_API_BASE_URL:-http://${LAN_IP:-loca
 
 echo "==> 监听 ${VK_BIND_ADDR}（Remote :${VK_REMOTE_PORT}, Relay :${VK_RELAY_PORT}）"
 
+export REMOTE_IMAGE="${REMOTE_IMAGE:-ghcr.io/magele758/hyper-vibekanban-remote:latest}"
+export RELAY_IMAGE="${RELAY_IMAGE:-ghcr.io/magele758/hyper-vibekanban-relay:latest}"
+
 if [[ "${VK_REBUILD:-0}" == "1" ]]; then
+  echo "==> VK_REBUILD=1：本地编 Remote/Relay 镜像"
   docker compose --env-file .env.remote --profile relay up --build -d --force-recreate
 else
+  if [[ "${VK_PULL:-1}" == "1" ]]; then
+    echo "==> Pulling GHCR (${REMOTE_IMAGE}, ${RELAY_IMAGE})..."
+    docker compose --env-file .env.remote --profile relay pull remote-server relay-server
+  fi
   docker compose --env-file .env.remote --profile relay up -d --remove-orphans --force-recreate
 fi
 
@@ -284,9 +292,21 @@ else
         CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_HOST_AUTH_ENV_VAR 2>/dev/null || true
   export VK_ASSET_DIR VK_SHARED_API_BASE VK_SHARED_RELAY_API_BASE VK_BROWSER_SHARED_API_BASE VITE_VK_SHARED_API_BASE VK_ALLOWED_ORIGINS
   export VK_DEV_HOST VITE_RELAY_PORT VITE_RELAY_API_BASE_URL VITE_TAILSCALE_RELAY_HTTPS_PORT
-  vk_configure_dev_cargo_target
-  touch crates/server/build.rs crates/local-deployment/build.rs
-  dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log")"
+  if [[ "${VK_HOT:-0}" == "1" ]]; then
+    echo "==> VK_HOT=1：cargo-watch 热更新"
+    vk_configure_dev_cargo_target
+    touch crates/server/build.rs crates/local-deployment/build.rs
+    dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log")"
+  else
+    VK_SERVER_BIN="$(vk_resolve_server_bin)" || {
+      echo "ERROR: 找不到预编译 server（~/.vk-kanban/bin/server）。先 VK_HOT=1 vk-start 编一次，或拷贝二进制。" >&2
+      exit 1
+    }
+    export VK_SERVER_BIN
+    echo "==> Desktop 用预编译二进制（无 cargo-watch）: ${VK_SERVER_BIN}"
+    echo "    改 Rust 时再 VK_HOT=1 vk-start"
+    dev_pid="$(vk_launch_dev_background "${ROOT}" "${LOG_DIR}/dev.log" "${ROOT}/scripts/vk-run-prebuilt.sh")"
+  fi
   echo "${dev_pid}" > "${PID_DIR}/dev.pid"
 
   web_ok=0

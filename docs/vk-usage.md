@@ -28,15 +28,25 @@ alias vk-logs='tail -f "$HOME/.vk-kanban/logs/dev.log"'
 或在仓库根目录：
 
 ```bash
-pnpm run vk:start    # 启动 Remote Docker + 本地 dev
+pnpm run vk:start    # 启动 Remote/Relay（拉 GHCR）+ 预编译 Desktop
 pnpm run vk:status   # 健康检查
-pnpm run vk:stop     # 停本地 dev（Remote Docker 仍运行）
+pnpm run vk:stop     # 停本地 Desktop（Remote Docker 仍运行）
 ```
+
+**默认不热更新、不本机编镜像：**
+
+- Remote/Relay：`docker compose pull` GHCR（`ghcr.io/magele758/hyper-vibekanban-{remote,relay}`），不要加 `VK_REBUILD=1`
+- Desktop API：跑 `~/.vk-kanban/bin/server`（宿主机进程，仍调用本机 Claude/Cursor 等 CLI）+ Vite
+- 改 Desktop Rust 才：`VK_HOT=1 vk-start`（`cargo-watch`，会再堆 `target/`）
+- 跳过每次 pull：`VK_PULL=0 vk-start`
+- `npx vibe-kanban` 不是这套主栈的启动方式（那是官方 Desktop 安装器，不起 Remote/Relay）
+
+把 `server` 二进制放到 `~/.vk-kanban/bin/server`（可执行）。没有该文件时 `vk-start` 会失败，除非 `VK_HOT=1`。
 
 ### 常用操作
 
 ```bash
-vk-start              # 全栈启动
+vk-start              # 拉镜像 + 预编译 Desktop
 vk-status             # 看各服务是否 OK
 vk-stop               # 只停本地 Vite + Rust backend
 vk-stop --remote      # 再停 Remote Docker（保留数据）
