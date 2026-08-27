@@ -79,18 +79,18 @@ pub async fn update_workspace(
     )
     .await?;
 
-    if needs_setup && let Ok(Some(restored)) = Workspace::find_by_id(pool, workspace.id).await {
-        if let Err(e) = deployment
+    if needs_setup
+        && let Ok(Some(restored)) = Workspace::find_by_id(pool, workspace.id).await
+        && let Err(e) = deployment
             .container()
             .try_start_setup_after_rebuild(&restored)
             .await
-        {
-            tracing::error!(
-                "Failed to re-run setup after unarchiving workspace {}: {}",
-                workspace.id,
-                e
-            );
-        }
+    {
+        tracing::error!(
+            "Failed to re-run setup after unarchiving workspace {}: {}",
+            workspace.id,
+            e
+        );
     }
 
     if is_archiving && let Err(e) = deployment.container().archive_workspace(workspace.id).await {

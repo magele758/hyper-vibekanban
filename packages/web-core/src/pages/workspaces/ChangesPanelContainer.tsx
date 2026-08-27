@@ -602,8 +602,7 @@ export const ChangesPanelContainer = memo(function ChangesPanelContainer({
 }: ChangesPanelContainerProps) {
   const { workspace } = useWorkspaceContext();
   // Don't reconnect a released/archived worktree just because Changes is open.
-  const diffEnabled =
-    !workspace?.archived && !workspace?.worktree_deleted;
+  const diffEnabled = !workspace?.archived && !workspace?.worktree_deleted;
   // Provider keeps stats-only diffs for sidebar/chat; this panel needs full content.
   const { diffs: fullDiffs } = useDiffStream(workspaceId, diffEnabled, {
     statsOnly: false,
