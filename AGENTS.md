@@ -121,6 +121,51 @@ VK_MOBILE=1 vk-start
 
 > 注意：`pnpm run dev` 脚本会保留外部已设置的 `VITE_VK_SHARED_API_BASE`（`${VITE_VK_SHARED_API_BASE:-${VK_SHARED_API_BASE:-}}`），否则浏览器会被强制改回 http LAN，h2 前门形同虚设。
 
+## Remote/Relay 镜像发布与部署（GHCR）
+
+自托管 Remote/Relay **只拉镜像、不本地编译**（避免几十 G 的本地 `target/` 缓存）。CI 由 `.github/workflows/remote-image.yml` 负责，发布两个**多架构（`linux/amd64` + `linux/arm64`）**镜像到 GHCR：
+
+- `ghcr.io/magele758/hyper-vibekanban-remote`（`crates/remote/Dockerfile`）
+- `ghcr.io/magele758/hyper-vibekanban-relay`（`crates/relay-tunnel/Dockerfile`）
+
+### 构建时机（每天最多一次，无更新则跳过）
+
+- **触发器**：每日定时 `schedule`（`cron: '0 19 * * *'` UTC）、`remote-v*` / `relay-v*` tag、手动 `workflow_dispatch`。**不再**在每次 push `main` 时构建。
+- **变更门禁**：定时/手动（非 force）运行时，`changes` job 只有在「相关源码自上次已发布镜像以来有变化」才构建——判据是读取镜像最新 `sha-<short>` tag 对应的 commit，再 `git diff <last> HEAD -- <paths>`（**基于 commit 比对，不用 `--since` 时钟，避免时钟漂移误判**）。tag / `force` 一律构建。
+- 相关 `paths`：`crates/remote`、`crates/relay-*`、`crates/ws-bridge`、`crates/api-types`、`packages/remote-web`、`packages/web-core`、以及该 workflow 自身。
+
+### 架构与加速
+
+- 每个架构在**原生 runner** 上分别构建（amd64→`ubuntu-latest`，arm64→`ubuntu-24.04-arm`，public 仓库免费），再用 `docker buildx imagetools` 合并成一个多架构清单。**不要用 QEMU 模拟**（remote arm64 模拟约 2h41m，原生约 7min）。
+- `FEATURES=` 留空 → Dockerfile 会剥离私有 `billing` 依赖，构建**无需私有仓库/SSH**；GHCR 用内置 `GITHUB_TOKEN`，**无需额外 secret**。
+
+### tag 规则与 `:latest`
+
+- `:latest` 在 **tag 构建 或 默认分支（`main`）构建**时更新；其它分支不动 `:latest`。规则：
+  `type=raw,value=latest,enable=${{ github.ref_type == 'tag' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}`
+- 每次构建还会打 `sha-<short>`（可复现部署时固定它）、分支名、以及 tag 的语义版本。
+- `cleanup` job 每个镜像只保留最新 10 个版本，持续构建不会无限占用存储（GHCR 容器镜像目前免费）。
+
+### 手动出一个最新镜像
+
+- 推荐：GitHub → Actions → “Build & Publish Images” → **Run workflow**（选 `main`）：构建 `main` 最新代码并刷新 `:latest`。
+- 或**打一个 `remote-v*` / `relay-v*` tag**（发版即构建，且现在也会刷新 `:latest`）。
+- 或**等每日定时**（有变更才会重建）。
+- 注意：Cloud Agent 对 GitHub Actions 是**只读**权限，不能触发 `workflow_dispatch`，只能靠 **push tag** 间接触发构建。
+
+### 部署（服务器，需 Docker + compose）
+
+`crates/remote/docker-compose.yml` 的 `remote-server` / `relay-server` 已带 `image: ${REMOTE_IMAGE:-...}` / `${RELAY_IMAGE:-...}`（`build:` 仅作本地开发回退）。配好 `crates/remote/.env.remote` 后：
+
+```bash
+cd crates/remote
+docker compose --env-file .env.remote --profile relay pull remote-server relay-server
+docker compose --env-file .env.remote --profile relay up -d   # 不加 --build
+```
+
+- 首次把两个 GHCR 包设为 **public**（Package settings），部署机 `pull` 免登录。
+- **数据在命名卷 `remote_remote-db-data`（Postgres），与镜像分离**：升级镜像（`pull` + `up -d`）会自动跑迁移、**数据保留**。务必保持同一 compose 项目（在 `crates/remote/` 目录里跑），卷才会自动挂回；**绝不要带 `-v`**（`docker compose down -v`、`pnpm run remote:dev:clean`，以及退出即 `down -v` 的 `pnpm run remote:dev`）除非要清库。停服务用 `docker compose stop` / `pnpm run remote:down`。
+
 ## Coding Style & Naming Conventions
 - Rust: `rustfmt` enforced (`rustfmt.toml`); group imports by crate; snake_case modules, PascalCase types.
 - TypeScript/React: ESLint + Prettier (2 spaces, single quotes, 80 cols). PascalCase components, camelCase vars/functions, kebab-case file names where practical.
