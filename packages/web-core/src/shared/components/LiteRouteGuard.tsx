@@ -16,6 +16,12 @@ export function LiteRouteGuard() {
       return;
     }
 
+    const path = location.pathname.split('?')[0] || '/';
+    if (path === '/projects') {
+      void navigate({ to: '/overview', replace: true });
+      return;
+    }
+
     const canonical = liteCanonicalProjectPath(location.pathname);
     if (canonical) {
       const projectId = canonical.slice('/projects/'.length);
