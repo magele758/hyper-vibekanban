@@ -89,6 +89,8 @@ interface AppBarProps {
   onNavigateInbox?: (projectId: string) => void;
   activeProjectSubNav?: 'board' | 'agents' | 'copilot' | 'inbox' | null;
   hideCloudSections?: boolean;
+  /** Show local SQLite projects without Remote/sign-in chrome. */
+  localProjectsMode?: boolean;
 }
 
 export interface AppBarProject {
@@ -197,6 +199,7 @@ type AppBarSectionItem =
       onProjectClick: (projectId: string) => void;
       onProjectHover?: (projectId: string) => void;
       onProjectsDragEnd: (result: DropResult) => void;
+      isDragDisabled?: boolean;
     };
 
 function getStandardAppBarButtonClassName({
@@ -285,6 +288,7 @@ export function AppBar({
   onNavigateInbox,
   activeProjectSubNav = null,
   hideCloudSections = false,
+  localProjectsMode = false,
 }: AppBarProps) {
   const { t } = useTranslation('common');
   const sections: AppBarSection[] = [];
@@ -342,8 +346,13 @@ export function AppBar({
   }
 
   const projectSectionItems: AppBarSectionItem[] = [];
+  const showRemoteProjects = !hideCloudSections;
+  const showLocalProjects = localProjectsMode;
 
-  if (!hideCloudSections && isSignedIn && onProjectsOverviewClick) {
+  if (
+    (showLocalProjects || (showRemoteProjects && isSignedIn)) &&
+    onProjectsOverviewClick
+  ) {
     projectSectionItems.push({
       key: 'projects-overview',
       kind: 'icon-button',
@@ -355,7 +364,7 @@ export function AppBar({
     });
   }
 
-  if (!hideCloudSections && !isSignedIn) {
+  if (showRemoteProjects && !isSignedIn) {
     projectSectionItems.push({
       key: 'kanban-cta',
       kind: 'kanban-cta',
@@ -364,11 +373,11 @@ export function AppBar({
     });
   }
 
-  if (!hideCloudSections && isLoadingProjects) {
+  if ((showRemoteProjects || showLocalProjects) && isLoadingProjects) {
     projectSectionItems.push({ key: 'projects-loading', kind: 'loading' });
   }
 
-  if (!hideCloudSections && projects.length > 0) {
+  if ((showRemoteProjects || showLocalProjects) && projects.length > 0) {
     projectSectionItems.push({
       key: 'project-list',
       kind: 'project-list',
@@ -378,10 +387,11 @@ export function AppBar({
       onProjectClick,
       onProjectHover,
       onProjectsDragEnd,
+      isDragDisabled: showLocalProjects,
     });
   }
 
-  if (!hideCloudSections && isSignedIn) {
+  if (showLocalProjects || (showRemoteProjects && isSignedIn)) {
     projectSectionItems.push({
       key: 'create-project',
       kind: 'icon-button',
@@ -598,7 +608,7 @@ export function AppBar({
             <Droppable
               droppableId="app-bar-projects"
               direction="vertical"
-              isDropDisabled={item.isSavingProjectOrder}
+              isDropDisabled={item.isSavingProjectOrder || item.isDragDisabled}
             >
               {(dropProvided) => (
                 <div
@@ -615,7 +625,9 @@ export function AppBar({
                       draggableId={project.id}
                       index={index}
                       disableInteractiveElementBlocking
-                      isDragDisabled={item.isSavingProjectOrder}
+                      isDragDisabled={
+                        item.isSavingProjectOrder || item.isDragDisabled
+                      }
                     >
                       {(dragProvided, snapshot) => {
                         const projectButton = (
@@ -629,7 +641,9 @@ export function AppBar({
                             className={cn(
                               appBarItemBaseClassName,
                               getAppBarItemLayoutClassName(expanded),
-                              'cursor-grab',
+                              item.isDragDisabled
+                                ? 'cursor-pointer'
+                                : 'cursor-grab',
                               snapshot.isDragging && 'shadow-lg',
                               item.activeProjectId === project.id
                                 ? ''
@@ -747,7 +761,7 @@ export function AppBar({
         </div>
       ))}
 
-      {activeProjectId && (
+      {activeProjectId && !hideCloudSections && (
         <div
           className={cn(
             'flex flex-col gap-1 border-t border-border pt-base',

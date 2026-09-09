@@ -63,6 +63,7 @@ export function CreateChatBoxContainer({
     setExecutorConfig: setDraftConfig,
     attachments: draftAttachments,
     setAttachments: setDraftAttachments,
+    localProjectId,
   } = useCreateMode();
 
   const isExecutionHostOffline = useMemo(() => {
@@ -296,6 +297,7 @@ export function CreateChatBoxContainer({
         : null,
       attachment_ids: getAttachmentIds(),
       kind: effectiveMode,
+      project_id: localProjectId ?? undefined,
     };
     const linkToIssue = linkedIssue
       ? {
@@ -333,6 +335,7 @@ export function CreateChatBoxContainer({
     clearAttachments,
     clearDraft,
     linkedIssue,
+    localProjectId,
     effectiveMode,
     effectiveConsoleRepoId,
   ]);

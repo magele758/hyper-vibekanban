@@ -23,3 +23,13 @@ export type PresetColor = (typeof PRESET_COLORS)[number];
 export function getRandomPresetColor(): string {
   return PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
 }
+
+/** Stable HSL palette color for a local project id (no Remote color field). */
+export function projectColorFromId(id: string): string {
+  let hash = 0;
+  for (const char of id) {
+    hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  }
+  const index = Math.abs(hash) % PRESET_COLORS.length;
+  return PRESET_COLORS[index];
+}

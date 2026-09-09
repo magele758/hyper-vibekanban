@@ -108,6 +108,13 @@ export function LocalReposOverviewPage() {
           </button>
           <button
             type="button"
+            onClick={() => appNavigation.goToProjectsOverview()}
+            className="inline-flex items-center gap-half rounded border border-border bg-secondary px-base py-half text-sm font-medium text-normal hover:border-high/20 hover:bg-panel"
+          >
+            {t('lite.overview.viewProjects')}
+          </button>
+          <button
+            type="button"
             onClick={() => appNavigation.goToWorkspacesCreate()}
             className="inline-flex items-center gap-half rounded border border-brand/50 bg-secondary px-base py-half text-sm font-medium text-brand hover:border-brand hover:bg-panel"
           >

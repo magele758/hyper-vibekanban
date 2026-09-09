@@ -102,7 +102,7 @@ async fn import_web_export(
         } else if let Some(existing) = Project::find_by_name(pool, &export_project.name).await? {
             (existing, true)
         } else {
-            let created = Project::create(pool, &export_project.name, remote_id).await?;
+            let created = Project::create(pool, &export_project.name, None, remote_id).await?;
             (created, false)
         };
 

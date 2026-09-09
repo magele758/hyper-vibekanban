@@ -67,6 +67,7 @@ export function CreateModeProvider({
       setExecutorConfig: state.setExecutorConfig,
       attachments: state.attachments,
       setAttachments: state.setAttachments,
+      localProjectId: state.localProjectId,
     }),
     [
       state.repos,
@@ -87,6 +88,7 @@ export function CreateModeProvider({
       state.setExecutorConfig,
       state.attachments,
       state.setAttachments,
+      state.localProjectId,
     ]
   );
 

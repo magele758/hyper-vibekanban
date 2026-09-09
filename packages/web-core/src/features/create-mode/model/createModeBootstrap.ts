@@ -21,6 +21,7 @@ export interface CreateModeBootstrapData {
   repos?: BootstrapSelectedRepo[];
   executorConfig?: ExecutorConfig | null;
   attachments?: DraftWorkspaceAttachment[];
+  localProjectId?: string | null;
 }
 
 export interface ResolveCreateModeBootstrapParams {
@@ -90,12 +91,14 @@ export async function resolveCreateModeBootstrap({
   const hasLinkedIssue = !!seedState?.linkedIssue;
   const hasPreferredRepos = (seedState?.preferredRepos?.length ?? 0) > 0;
   const hasExecutorConfig = !!seedState?.executorConfig;
+  const hasLocalProject = !!seedState?.project_id;
 
   if (
     hasInitialPrompt ||
     hasLinkedIssue ||
     hasPreferredRepos ||
-    hasExecutorConfig
+    hasExecutorConfig ||
+    hasLocalProject
   ) {
     const data: CreateModeBootstrapData = {};
     let appliedSeedState = false;
@@ -122,6 +125,11 @@ export async function resolveCreateModeBootstrap({
 
     if (seedState?.executorConfig && isValidProfile(seedState.executorConfig)) {
       data.executorConfig = seedState.executorConfig;
+      appliedSeedState = true;
+    }
+
+    if (hasLocalProject) {
+      data.localProjectId = seedState!.project_id!;
       appliedSeedState = true;
     }
 

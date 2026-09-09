@@ -177,12 +177,14 @@ EOF
         BACKEND_PORT="$BE_PORT" \
         PREVIEW_PROXY_PORT="$PP_PORT" \
         RUST_LOG="${RUST_LOG:-info}" \
+        VK_LITE=1 \
+        VITE_VK_LITE=1 \
         VK_ALLOWED_ORIGINS="http://localhost:${FE_PORT}" \
         VITE_VK_SHARED_API_BASE="${BROWSER_API_BASE}" \
         VK_SHARED_API_BASE="${SHARED_API_BASE}" \
         VK_SHARED_RELAY_API_BASE="${SHARED_RELAY_BASE}" \
         cargo watch -q -w "${ROOT}/crates" \
-            -x "run --bin server" \
+            -x "run --bin server --features lite" \
             >"${LOGS_DIR}/server.log" 2>&1 &
     echo "$!" >"$(_pid_file server)"
 
@@ -197,6 +199,8 @@ EOF
         PREVIEW_PROXY_PORT="$PP_PORT" \
         VK_DEV_HOST="localhost" \
         VITE_OPEN="false" \
+        VK_LITE=1 \
+        VITE_VK_LITE=1 \
         VITE_VK_SHARED_API_BASE="${BROWSER_API_BASE}" \
         VITE_RELAY_API_BASE_URL="${BROWSER_RELAY_BASE}" \
         pnpm --dir "${ROOT}/packages/local-web" run dev \

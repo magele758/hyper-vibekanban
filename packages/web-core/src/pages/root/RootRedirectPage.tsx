@@ -19,7 +19,7 @@ export function RootRedirectPage() {
     let isActive = true;
     void (async () => {
       if (liteMode) {
-        appNavigation.goToWorkspaces({ replace: true });
+        appNavigation.goToProjectsOverview({ replace: true });
         return;
       }
 

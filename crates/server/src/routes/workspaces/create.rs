@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use axum::{Json, extract::State, response::Json as ResponseJson};
 use db::models::{
+    project::Project,
+    project_workspace::ProjectWorkspace,
     requests::{
         CreateAndStartWorkspaceRequest, CreateAndStartWorkspaceResponse, CreateWorkspaceApiRequest,
     },
@@ -223,6 +225,7 @@ pub async fn create_and_start_workspace(
         prompt,
         attachment_ids,
         kind,
+        project_id,
     } = payload;
 
     let mut workspace_prompt = normalize_prompt(&prompt).ok_or_else(|| {
@@ -325,6 +328,13 @@ pub async fn create_and_start_workspace(
 
     let workspace = managed_workspace.workspace.clone();
     tracing::info!("Created workspace {}", workspace.id);
+
+    if let Some(project_id) = project_id {
+        Project::find_by_id(&deployment.db().pool, project_id)
+            .await?
+            .ok_or_else(|| ApiError::BadRequest("Project not found".to_string()))?;
+        ProjectWorkspace::attach(&deployment.db().pool, project_id, workspace.id).await?;
+    }
 
     if let Some(linked_issue) = &linked_issue {
         let client = deployment.remote_client()?;

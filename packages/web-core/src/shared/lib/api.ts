@@ -93,6 +93,13 @@ import {
   CreateFromPrError,
   CreateAndStartWorkspaceRequest,
   CreateAndStartWorkspaceResponse,
+  CreateProjectRequest,
+  UpdateProjectRequest,
+  Project,
+  ProjectSummary,
+  ProjectDetail,
+  AttachProjectRepoRequest,
+  AttachProjectWorkspaceRequest,
   RelayPairedClient,
   ListRelayPairedClientsResponse,
   RemoveRelayPairedClientResponse,
@@ -408,6 +415,74 @@ export const sessionsApi = {
       body: JSON.stringify(data),
     });
     return handleApiResponse<Session>(response);
+  },
+};
+
+export const projectApi = {
+  list: async (): Promise<ProjectSummary[]> => {
+    const response = await makeRequest('/api/projects');
+    return handleApiResponse<ProjectSummary[]>(response);
+  },
+
+  create: async (data: CreateProjectRequest): Promise<Project> => {
+    const response = await makeRequest('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<Project>(response);
+  },
+
+  get: async (id: string): Promise<ProjectDetail> => {
+    const response = await makeRequest(`/api/projects/${id}`);
+    return handleApiResponse<ProjectDetail>(response);
+  },
+
+  update: async (id: string, data: UpdateProjectRequest): Promise<Project> => {
+    const response = await makeRequest(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<Project>(response);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const response = await makeRequest(`/api/projects/${id}`, {
+      method: 'DELETE',
+    });
+    return handleApiResponse<void>(response);
+  },
+
+  attachRepo: async (
+    projectId: string,
+    data: AttachProjectRepoRequest
+  ): Promise<Repo> => {
+    const response = await makeRequest(`/api/projects/${projectId}/repos`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<Repo>(response);
+  },
+
+  detachRepo: async (projectId: string, repoId: string): Promise<void> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/repos/${repoId}`,
+      { method: 'DELETE' }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  attachWorkspace: async (
+    projectId: string,
+    data: AttachProjectWorkspaceRequest
+  ): Promise<Workspace> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/workspaces`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<Workspace>(response);
   },
 };
 

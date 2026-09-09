@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_workspaces (project_id, workspace_id)\n               VALUES ($1, $2)\n               ON CONFLICT(project_id, workspace_id) DO UPDATE SET project_id = excluded.project_id\n               RETURNING project_id as \"project_id!: Uuid\",\n                         workspace_id as \"workspace_id!: Uuid\",\n                         created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9b661a6172bc2c72d61249eed130520874ba0060e9ea7f91588c566950456e76"
+}

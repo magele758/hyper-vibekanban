@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   groupWorkspaceIdsByRepo,
   isLiteAllowedPath,
+  liteCanonicalProjectPath,
   workspaceMatchesRepoFilter,
 } from './liteMode';
 
@@ -16,16 +17,28 @@ describe('isLiteAllowedPath', () => {
     expect(isLiteAllowedPath('/overview')).toBe(true);
     expect(isLiteAllowedPath('/imported')).toBe(true);
     expect(isLiteAllowedPath('/settings')).toBe(true);
+    expect(isLiteAllowedPath('/projects')).toBe(true);
+    expect(isLiteAllowedPath('/projects/p1')).toBe(true);
+    expect(isLiteAllowedPath('/projects/p1/workspaces/create/d1')).toBe(true);
   });
 
-  it('blocks cloud and kanban routes', () => {
-    expect(isLiteAllowedPath('/projects/p1')).toBe(false);
+  it('blocks remaining cloud routes', () => {
     expect(isLiteAllowedPath('/agents')).toBe(false);
     expect(isLiteAllowedPath('/workforce')).toBe(false);
     expect(isLiteAllowedPath('/notifications')).toBe(false);
     expect(isLiteAllowedPath('/export')).toBe(false);
     expect(isLiteAllowedPath('/hosts/h1/workspaces')).toBe(false);
     expect(isLiteAllowedPath('/onboarding')).toBe(false);
+  });
+});
+
+describe('liteCanonicalProjectPath', () => {
+  it('keeps the project root and collapses cloud sub-routes', () => {
+    expect(liteCanonicalProjectPath('/projects/p1')).toBe(null);
+    expect(liteCanonicalProjectPath('/projects/p1/inbox')).toBe('/projects/p1');
+    expect(
+      liteCanonicalProjectPath('/projects/p1/issues/i1/workspaces/w1')
+    ).toBe('/projects/p1');
   });
 });
 

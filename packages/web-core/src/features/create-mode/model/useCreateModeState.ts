@@ -50,6 +50,7 @@ interface DraftState {
   linkedIssue: LinkedIssue | null;
   executorConfig: ExecutorConfig | null;
   attachments: DraftWorkspaceAttachment[];
+  localProjectId: string | null;
 }
 
 type DraftAction =
@@ -86,6 +87,7 @@ const draftInitialState: DraftState = {
   linkedIssue: null,
   executorConfig: null,
   attachments: [],
+  localProjectId: null,
 };
 
 function draftReducer(state: DraftState, action: DraftAction): DraftState {
@@ -170,6 +172,9 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
     case 'SET_ATTACHMENTS':
       return { ...state, attachments: action.attachments };
 
+    case 'SET_PROJECT':
+      return { ...state, localProjectId: action.projectId };
+
     default:
       return state;
   }
@@ -243,6 +248,7 @@ interface UseCreateModeStateResult {
   setExecutorConfig: (config: ExecutorConfig | null) => void;
   attachments: DraftWorkspaceAttachment[];
   setAttachments: (attachments: DraftWorkspaceAttachment[]) => void;
+  localProjectId: string | null;
 }
 
 export function useCreateModeState({
@@ -687,5 +693,6 @@ export function useCreateModeState({
     setExecutorConfig,
     attachments: state.attachments,
     setAttachments,
+    localProjectId: state.localProjectId,
   };
 }
