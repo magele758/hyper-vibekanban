@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@vibe/ui/components/Alert';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { defineModal } from '@/shared/lib/modals';
+import { defineModal, type NoProps } from '@/shared/lib/modals';
 import { projectApi } from '@/shared/lib/api';
 import { localProjectKeys } from '@/shared/hooks/useLocalProjects';
 import type { Project } from 'shared/types';
@@ -24,7 +24,7 @@ export type CreateLocalProjectResult = {
   project?: Project;
 };
 
-const CreateLocalProjectDialogImpl = create(() => {
+const CreateLocalProjectDialogImpl = create<NoProps>(() => {
   const modal = useModal();
   const { t } = useTranslation('common');
   const queryClient = useQueryClient();
@@ -126,7 +126,9 @@ const CreateLocalProjectDialogImpl = create(() => {
             onClick={() => void handleCreate()}
             disabled={isCreating || name.trim().length < 2}
           >
-            {isCreating ? t('lite.projects.creating') : t('lite.projects.create')}
+            {isCreating
+              ? t('lite.projects.creating')
+              : t('lite.projects.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

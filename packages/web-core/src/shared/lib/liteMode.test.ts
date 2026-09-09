@@ -35,9 +35,7 @@ describe('isLiteAllowedPath', () => {
 describe('liteCanonicalProjectPath', () => {
   it('keeps the project root and collapses cloud sub-routes', () => {
     expect(liteCanonicalProjectPath('/projects/p1')).toBe(null);
-    expect(liteCanonicalProjectPath('/projects/p1/inbox')).toBe(
-      '/projects/p1'
-    );
+    expect(liteCanonicalProjectPath('/projects/p1/inbox')).toBe('/projects/p1');
     expect(
       liteCanonicalProjectPath('/projects/p1/issues/i1/workspaces/w1')
     ).toBe('/projects/p1');

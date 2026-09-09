@@ -169,8 +169,8 @@ export function LocalProjectsOverviewPage() {
                       ))}
                       {project.repos.length > 3 && (
                         <li className="flex items-center gap-half text-xs text-low">
-                          <GitBranchIcon className="size-3" />
-                          +{project.repos.length - 3}
+                          <GitBranchIcon className="size-3" />+
+                          {project.repos.length - 3}
                         </li>
                       )}
                     </ul>

@@ -608,9 +608,7 @@ export function AppBar({
             <Droppable
               droppableId="app-bar-projects"
               direction="vertical"
-              isDropDisabled={
-                item.isSavingProjectOrder || item.isDragDisabled
-              }
+              isDropDisabled={item.isSavingProjectOrder || item.isDragDisabled}
             >
               {(dropProvided) => (
                 <div

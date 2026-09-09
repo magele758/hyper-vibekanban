@@ -311,7 +311,9 @@ export function LocalProjectPage() {
               </>
             )}
           </div>
-          <p className="text-sm text-low">{t('lite.projects.detailSubtitle')}</p>
+          <p className="text-sm text-low">
+            {t('lite.projects.detailSubtitle')}
+          </p>
         </header>
 
         {error && (

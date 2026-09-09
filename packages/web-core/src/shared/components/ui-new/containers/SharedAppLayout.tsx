@@ -570,9 +570,7 @@ export function SharedAppLayout() {
               onWorkforceClick={liteMode ? undefined : handleWorkforceClick}
               onExportClick={liteMode ? undefined : handleExportClick}
               onProjectsOverviewClick={
-                liteMode || isSignedIn
-                  ? handleProjectsOverviewClick
-                  : undefined
+                liteMode || isSignedIn ? handleProjectsOverviewClick : undefined
               }
               onWorkspacesClick={handleWorkspacesClick}
               onHostClick={liteMode ? undefined : handleHostClick}
@@ -588,9 +586,7 @@ export function SharedAppLayout() {
               isProjectsOverviewActive={isProjectsOverviewActive}
               activeProjectId={activeProjectId}
               isSignedIn={isSignedIn}
-              isLoadingProjects={
-                liteMode ? isLoadingLocalProjects : isLoading
-              }
+              isLoadingProjects={liteMode ? isLoadingLocalProjects : isLoading}
               onSignIn={liteMode ? undefined : handleSignIn}
               onHoverStart={() => setIsAppBarHovered(true)}
               onHoverEnd={() => setIsAppBarHovered(false)}

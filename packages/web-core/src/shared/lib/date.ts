@@ -14,8 +14,8 @@ export function formatDateShortWithTime(dateString: string): string {
 /**
  * Format a date string as a relative time (e.g., "just now", "5m ago", "2h ago", "3d ago").
  */
-export function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
+export function formatRelativeTime(dateInput: string | Date): string {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSecs = Math.floor(diffMs / 1000);
