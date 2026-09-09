@@ -26,6 +26,18 @@ export type ImportedProjectDetail = { project: Project, tasks: Array<Task>, };
 
 export type CreateWorkspaceFromImportedTaskResponse = { workspace_id: string, };
 
+export type CreateProjectRequest = { name: string, default_agent_working_dir?: string, };
+
+export type UpdateProjectRequest = { name?: string, default_agent_working_dir?: string, };
+
+export type AttachProjectRepoRequest = { repo_id: string, };
+
+export type AttachProjectWorkspaceRequest = { workspace_id: string, };
+
+export type ProjectSummary = { repos: Array<Repo>, workspace_count: number, id: string, name: string, default_agent_working_dir: string | null, remote_project_id: string | null, created_at: Date, updated_at: Date, };
+
+export type ProjectDetail = { repos: Array<Repo>, workspaces: Array<Workspace>, id: string, name: string, default_agent_working_dir: string | null, remote_project_id: string | null, created_at: Date, updated_at: Date, };
+
 export type UpdateRepo = { display_name?: string | null, setup_script?: string | null, cleanup_script?: string | null, archive_script?: string | null, copy_files?: string | null, parallel_setup_script?: boolean | null, dev_server_script?: string | null, default_target_branch?: string | null, default_working_dir?: string | null, };
 
 export type SearchResult = { path: string, is_file: boolean, match_type: SearchMatchType, 
@@ -471,7 +483,12 @@ export type GetPrCommentsError = { "type": "no_pr_attached" } | { "type": "cli_n
 
 export type GetPrCommentsQuery = { repo_id: string, };
 
-export type CreateAndStartWorkspaceRequest = { name: string | null, repos: Array<WorkspaceRepoInput>, linked_issue: LinkedIssueInfo | null, executor_config: ExecutorConfig, prompt: string, attachment_ids: Array<string> | null, kind: WorkspaceKind, };
+export type CreateAndStartWorkspaceRequest = { name: string | null, repos: Array<WorkspaceRepoInput>, linked_issue: LinkedIssueInfo | null, executor_config: ExecutorConfig, prompt: string, attachment_ids: Array<string> | null, kind: WorkspaceKind, 
+/**
+ * Optional local SQLite project to attach this workspace to.
+ * Not a remote/Electric project id.
+ */
+project_id?: string, };
 
 export type CreateAndStartWorkspaceResponse = { workspace: Workspace, execution_process: ExecutionProcess, };
 

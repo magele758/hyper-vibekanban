@@ -1,5 +1,4 @@
 const LITE_BLOCKED_PATH_PREFIXES = [
-  '/projects',
   '/agents',
   '/workforce',
   '/notifications',
@@ -21,6 +20,16 @@ export function isLiteAllowedPath(pathname: string): boolean {
   return !LITE_BLOCKED_PATH_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`)
   );
+}
+
+/** Collapse remote kanban sub-routes onto the local project page. */
+export function liteCanonicalProjectPath(pathname: string): string | null {
+  const path = pathname.split('?')[0] || '/';
+  const match = path.match(/^\/projects\/([^/]+)\/.+/);
+  if (!match) {
+    return null;
+  }
+  return `/projects/${match[1]}`;
 }
 
 export type WorkspaceRepoLink = {

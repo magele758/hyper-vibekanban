@@ -5,6 +5,8 @@ pub mod execution_process_repo_state;
 pub mod file;
 pub mod merge;
 pub mod project;
+pub mod project_repo;
+pub mod project_workspace;
 pub mod pull_request;
 pub mod repo;
 pub mod requests;

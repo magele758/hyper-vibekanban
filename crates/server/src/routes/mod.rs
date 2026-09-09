@@ -21,6 +21,7 @@ pub mod import;
 pub mod oauth;
 pub mod organizations;
 pub mod preview;
+pub mod projects;
 pub mod relay_auth;
 pub mod releases;
 pub mod remote;
@@ -57,6 +58,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(terminal::router())
         .merge(trajectory::router(&deployment))
         .merge(import::router())
+        .merge(projects::router())
         .nest("/attachments", attachments::routes());
 
     if !lite_mode {

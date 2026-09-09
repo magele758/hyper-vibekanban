@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id as \"id!: Uuid\",\n                      name,\n                      default_agent_working_dir,\n                      remote_project_id as \"remote_project_id: Uuid\",\n                      created_at as \"created_at!: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM projects\n               ORDER BY created_at DESC",
+  "query": "INSERT INTO projects (id, name, default_agent_working_dir, remote_project_id)\n               VALUES ($1, $2, $3, NULL)\n               RETURNING id as \"id!: Uuid\",\n                         name,\n                         default_agent_working_dir,\n                         remote_project_id as \"remote_project_id: Uuid\",\n                         created_at as \"created_at!: DateTime<Utc>\",\n                         updated_at as \"updated_at!: DateTime<Utc>\"",
   "describe": {
     "columns": [
       {
@@ -35,7 +35,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 3
     },
     "nullable": [
       true,
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "2c0172d5b2c5bff0914727a57983d5c336f5b2dfa73ca6c2efa4ea23bb526e05"
+  "hash": "6b7e413b064042e28fe77f571f6afcfee2c35bbbfdefe021a0f6f05a1d9978f8"
 }

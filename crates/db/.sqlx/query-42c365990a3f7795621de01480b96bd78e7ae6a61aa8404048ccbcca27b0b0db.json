@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT w.id AS \"id!: Uuid\",\n                      w.task_id AS \"task_id: Uuid\",\n                      w.container_ref,\n                      w.branch,\n                      w.setup_completed_at AS \"setup_completed_at: DateTime<Utc>\",\n                      w.created_at AS \"created_at!: DateTime<Utc>\",\n                      w.updated_at AS \"updated_at!: DateTime<Utc>\",\n                      w.archived AS \"archived!: bool\",\n                      w.pinned AS \"pinned!: bool\",\n                      w.name,\n                      w.worktree_deleted AS \"worktree_deleted!: bool\",\n                      w.kind AS \"kind!: WorkspaceKind\"\n               FROM workspaces w\n               JOIN project_workspaces pw ON pw.workspace_id = w.id\n               WHERE pw.project_id = $1\n               ORDER BY w.updated_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "task_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "container_ref",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "branch",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "setup_completed_at: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "archived!: bool",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "pinned!: bool",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "name",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "worktree_deleted!: bool",
+        "ordinal": 10,
+        "type_info": "Bool"
+      },
+      {
+        "name": "kind!: WorkspaceKind",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "42c365990a3f7795621de01480b96bd78e7ae6a61aa8404048ccbcca27b0b0db"
+}

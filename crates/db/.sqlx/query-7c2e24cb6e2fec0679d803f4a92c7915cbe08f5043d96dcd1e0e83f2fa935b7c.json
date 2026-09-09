@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM project_repos\n               WHERE project_id = $1 AND repo_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7c2e24cb6e2fec0679d803f4a92c7915cbe08f5043d96dcd1e0e83f2fa935b7c"
+}

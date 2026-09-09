@@ -24,7 +24,7 @@ export function AppBarUserPopoverContainer({
 }: AppBarUserPopoverContainerProps) {
   const { executeAction } = useActions();
   const { isSignedIn } = useAuth();
-  const { loginStatus } = useUserSystem();
+  const { loginStatus, liteMode } = useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
   const [open, setOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
@@ -69,6 +69,7 @@ export function AppBarUserPopoverContainer({
       onAvatarError={() => setAvatarError(true)}
       onSettings={handleSettings}
       expanded={expanded}
+      hideAuthActions={liteMode}
     />
   );
 }

@@ -39,6 +39,8 @@ export interface CreateModeContextValue {
   attachments: DraftWorkspaceAttachment[];
   /** Update draft attachments (triggers debounced scratch save) */
   setAttachments: (attachments: DraftWorkspaceAttachment[]) => void;
+  /** Local SQLite project to attach the new workspace to (lite). */
+  localProjectId: string | null;
 }
 
 export const CreateModeContext =

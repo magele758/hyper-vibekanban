@@ -43,6 +43,11 @@ pub struct CreateAndStartWorkspaceRequest {
     pub attachment_ids: Option<Vec<Uuid>>,
     #[serde(default)]
     pub kind: WorkspaceKind,
+    /// Optional local SQLite project to attach this workspace to.
+    /// Not a remote/Electric project id.
+    #[serde(default)]
+    #[ts(optional)]
+    pub project_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]

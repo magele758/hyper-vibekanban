@@ -38,6 +38,8 @@ interface AppBarUserPopoverProps {
   onAvatarError: () => void;
   /** Match AppBar expand/collapse layout (injected by AppBar). */
   expanded?: boolean;
+  /** Hide Sign in / orgs / Sign out (lite local client). */
+  hideAuthActions?: boolean;
 }
 
 export function AppBarUserPopover({
@@ -55,6 +57,7 @@ export function AppBarUserPopover({
   onLogout,
   onAvatarError,
   expanded = false,
+  hideAuthActions = false,
 }: AppBarUserPopoverProps) {
   const { t } = useTranslation();
   const settingsLabel = t('settings:settings.layout.nav.title', {
@@ -74,6 +77,35 @@ export function AppBarUserPopover({
       'bg-panel text-normal font-medium text-sm',
     (!avatarUrl || avatarError || !isSignedIn) && 'hover:bg-panel/70'
   );
+
+  if (hideAuthActions) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={triggerClassName}
+            aria-label={settingsLabel}
+            title={expanded ? settingsLabel : undefined}
+          >
+            <GearIcon className="size-icon-sm shrink-0" weight="bold" />
+            {expanded && (
+              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                {settingsLabel}
+              </span>
+            )}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" align="end" className="min-w-[200px]">
+          {onSettings && (
+            <DropdownMenuItem icon={GearIcon} onClick={onSettings}>
+              {settingsLabel}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
 
   if (!isSignedIn) {
     return (

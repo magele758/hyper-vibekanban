@@ -3,15 +3,17 @@ import { ProjectsGuideDialog } from '@vibe/ui/components/ProjectsGuideDialog';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { ProjectKanban } from '@/pages/kanban/ProjectKanban';
+import { LocalProjectPage } from '@/pages/projects/LocalProjectPage';
 
 const PROJECTS_GUIDE_ID = 'projects-guide';
 
 export function LocalProjectKanban() {
-  const { config, updateAndSaveConfig, loading } = useUserSystem();
+  const { config, updateAndSaveConfig, loading, liteMode } = useUserSystem();
   const { isLoaded, isSignedIn } = useAuth();
   const hasAutoShownProjectsGuide = useRef(false);
 
   useEffect(() => {
+    if (liteMode) return;
     if (hasAutoShownProjectsGuide.current) return;
     if (!isLoaded || !isSignedIn || loading || !config) return;
 
@@ -24,7 +26,11 @@ export function LocalProjectKanban() {
       showcases: { seen_features: [...seenFeatures, PROJECTS_GUIDE_ID] },
     });
     ProjectsGuideDialog.show().finally(() => ProjectsGuideDialog.hide());
-  }, [config, isLoaded, isSignedIn, loading, updateAndSaveConfig]);
+  }, [config, isLoaded, isSignedIn, liteMode, loading, updateAndSaveConfig]);
+
+  if (liteMode) {
+    return <LocalProjectPage />;
+  }
 
   return <ProjectKanban />;
 }
