@@ -1,5 +1,15 @@
 # Unsigned desktop installers for local use.
-# macOS arm64 dmg (Apple Silicon / M4) + Windows x64 NSIS setup.exe
+# Full + lite × macOS arm64, Windows x64, Linux x64, Linux arm64.
+#
+# Artifacts:
+#   vibe-kanban-macos-arm64
+#   vibe-kanban-windows-x64
+#   vibe-kanban-linux-x64
+#   vibe-kanban-linux-arm64
+#   vibe-kanban-lite-macos-arm64
+#   vibe-kanban-lite-windows-x64
+#   vibe-kanban-lite-linux-x64
+#   vibe-kanban-lite-linux-arm64
 #
 # Trigger: Actions → “Desktop artifacts” → Run workflow
 # or open a PR that touches this file. Cloud agents cannot workflow_dispatch;
@@ -14,6 +24,8 @@ on:
       - '.github/workflows/desktop-artifacts.yml'
       - 'crates/tauri-app/**'
       - 'crates/server/**'
+      - 'crates/local-deployment/**'
+      - 'crates/utils/**'
       - 'packages/local-web/**'
       - 'packages/web-core/**'
       - 'packages/ui/**'
@@ -50,10 +62,58 @@ jobs:
             name: macos-arm64
             rust_target: aarch64-apple-darwin
             bundles: dmg
+            tauri_config: tauri.ci.json
+            cargo_features: ''
+            vite_lite: ''
+          - os: macos-15
+            name: lite-macos-arm64
+            rust_target: aarch64-apple-darwin
+            bundles: dmg
+            tauri_config: tauri.ci.lite.json
+            cargo_features: lite
+            vite_lite: '1'
           - os: windows-latest
             name: windows-x64
             rust_target: x86_64-pc-windows-msvc
             bundles: nsis
+            tauri_config: tauri.ci.json
+            cargo_features: ''
+            vite_lite: ''
+          - os: windows-latest
+            name: lite-windows-x64
+            rust_target: x86_64-pc-windows-msvc
+            bundles: nsis
+            tauri_config: tauri.ci.lite.json
+            cargo_features: lite
+            vite_lite: '1'
+          - os: ubuntu-24.04
+            name: linux-x64
+            rust_target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+            tauri_config: tauri.ci.json
+            cargo_features: ''
+            vite_lite: ''
+          - os: ubuntu-24.04
+            name: lite-linux-x64
+            rust_target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+            tauri_config: tauri.ci.lite.json
+            cargo_features: lite
+            vite_lite: '1'
+          - os: ubuntu-24.04-arm
+            name: linux-arm64
+            rust_target: aarch64-unknown-linux-gnu
+            bundles: deb
+            tauri_config: tauri.ci.json
+            cargo_features: ''
+            vite_lite: ''
+          - os: ubuntu-24.04-arm
+            name: lite-linux-arm64
+            rust_target: aarch64-unknown-linux-gnu
+            bundles: deb
+            tauri_config: tauri.ci.lite.json
+            cargo_features: lite
+            vite_lite: '1'
     defaults:
       run:
         shell: bash
@@ -67,7 +127,30 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build local-web (embedded by server)
+        env:
+          VITE_VK_LITE: ${{ matrix.vite_lite }}
         run: pnpm --filter @vibe/local-web run build
+
+      - name: Install Linux package dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libgtk-3-dev \
+            libfuse2 \
+            patchelf \
+            pkg-config \
+            xdg-utils
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -90,11 +173,17 @@ jobs:
           # Skip Apple code signing / notarization (unsigned, local use).
           APPLE_SIGNING_IDENTITY: '-'
           CI: 'true'
+          VK_LITE: ${{ matrix.vite_lite }}
         run: |
+          FEATURES_ARGS=()
+          if [ -n "${{ matrix.cargo_features }}" ]; then
+            FEATURES_ARGS=(--features "${{ matrix.cargo_features }}")
+          fi
           tauri build \
+            "${FEATURES_ARGS[@]}" \
             --target ${{ matrix.rust_target }} \
             --bundles ${{ matrix.bundles }} \
-            --config tauri.ci.json
+            --config ${{ matrix.tauri_config }}
 
       - name: List bundle output
         run: |
@@ -110,5 +199,7 @@ jobs:
             target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
             target/${{ matrix.rust_target }}/release/bundle/macos/*.app
             target/${{ matrix.rust_target }}/release/bundle/nsis/*-setup.exe
+            target/${{ matrix.rust_target }}/release/bundle/appimage/*.AppImage
+            target/${{ matrix.rust_target }}/release/bundle/deb/*.deb
           if-no-files-found: error
           retention-days: 14

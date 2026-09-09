@@ -1,0 +1,17 @@
+{
+  "productName": "Vibe Kanban Lite",
+  "identifier": "ai.bloop.vibe-kanban-lite",
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "macOS": {
+      "bundleName": "Vibe Kanban Lite"
+    },
+    "shortDescription": "Local AI workspace without Remote or kanban",
+    "longDescription": "Vibe Kanban Lite: local sessions, workspaces, and worktrees without Remote or kanban"
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://localhost/disabled"]
+    }
+  }
+}
