@@ -17,6 +17,7 @@ pub mod execution_processes;
 pub mod frontend;
 pub mod health;
 pub mod host_relay;
+pub mod import;
 pub mod oauth;
 pub mod organizations;
 pub mod preview;
@@ -55,6 +56,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(sessions::router(&deployment))
         .merge(terminal::router())
         .merge(trajectory::router(&deployment))
+        .merge(import::router())
         .nest("/attachments", attachments::routes());
 
     if !lite_mode {

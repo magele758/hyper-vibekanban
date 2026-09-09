@@ -3,7 +3,10 @@ use std::{
     io::{Cursor, Write},
 };
 
-use api_types::ExportRequest;
+use api_types::{
+    ExportRequest, WEB_EXPORT_FORMAT, WEB_EXPORT_MANIFEST_FILE, WEB_EXPORT_VERSION, WebExportIssue,
+    WebExportManifest, WebExportProject,
+};
 use axum::{
     Json, Router,
     body::Body,
@@ -278,6 +281,50 @@ async fn export_data(
         zip.start_file("users.csv", options)
             .map_err(|e| zip_error(&e))?;
         zip.write_all(&csv_buf)
+            .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+
+    // -- vk-export.json (machine-readable import for desktop full + lite) --
+    {
+        let export_projects = projects
+            .iter()
+            .map(|project| WebExportProject {
+                id: Some(project.id.to_string()),
+                name: project.name.clone(),
+                color: Some(project.color.clone()),
+                issues: issues
+                    .iter()
+                    .filter(|issue| issue.project_id == project.id)
+                    .map(|issue| {
+                        let status_name = status_map.get(&issue.status_id).copied();
+                        let parent = issue
+                            .parent_issue_id
+                            .and_then(|pid| issue_simple_id_map.get(&pid))
+                            .copied();
+                        let priority = issue.priority.as_ref().map(|p| format!("{p:?}"));
+                        WebExportIssue {
+                            simple_id: issue.simple_id.clone(),
+                            title: issue.title.clone(),
+                            description: issue.description.clone(),
+                            status: status_name.map(str::to_string),
+                            priority,
+                            parent_simple_id: parent.map(str::to_string),
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+        let manifest = WebExportManifest {
+            format: WEB_EXPORT_FORMAT.to_string(),
+            version: WEB_EXPORT_VERSION,
+            exported_at: Utc::now().to_rfc3339(),
+            projects: export_projects,
+        };
+        let manifest_bytes = serde_json::to_vec_pretty(&manifest)
+            .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        zip.start_file(WEB_EXPORT_MANIFEST_FILE, options)
+            .map_err(|e| zip_error(&e))?;
+        zip.write_all(&manifest_bytes)
             .map_err(|e| ErrorResponse::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
