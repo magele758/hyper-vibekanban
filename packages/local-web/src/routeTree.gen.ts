@@ -18,6 +18,7 @@ import { Route as AppWorkforceRouteImport } from './routes/_app.workforce'
 import { Route as AppOverviewRouteImport } from './routes/_app.overview'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppExportRouteImport } from './routes/_app.export'
+import { Route as AppImportedRouteImport } from './routes/_app.imported'
 import { Route as AppAgentsRouteImport } from './routes/_app.agents'
 import { Route as WorkspacesWorkspaceIdVscodeRouteImport } from './routes/workspaces.$workspaceId.vscode'
 import { Route as AppWorkspacesElectricTestRouteImport } from './routes/_app.workspaces_.electric-test'
@@ -82,6 +83,11 @@ const AppNotificationsRoute = AppNotificationsRouteImport.update({
 const AppExportRoute = AppExportRouteImport.update({
   id: '/export',
   path: '/export',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppImportedRoute = AppImportedRouteImport.update({
+  id: '/imported',
+  path: '/imported',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAgentsRoute = AppAgentsRouteImport.update({
@@ -217,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/agents': typeof AppAgentsRoute
   '/export': typeof AppExportRoute
+  '/imported': typeof AppImportedRoute
   '/notifications': typeof AppNotificationsRoute
   '/overview': typeof AppOverviewRoute
   '/workforce': typeof AppWorkforceRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/agents': typeof AppAgentsRoute
   '/export': typeof AppExportRoute
+  '/imported': typeof AppImportedRoute
   '/notifications': typeof AppNotificationsRoute
   '/overview': typeof AppOverviewRoute
   '/workforce': typeof AppWorkforceRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/_app/agents': typeof AppAgentsRoute
   '/_app/export': typeof AppExportRoute
+  '/_app/imported': typeof AppImportedRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/overview': typeof AppOverviewRoute
   '/_app/workforce': typeof AppWorkforceRoute
@@ -314,6 +323,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/agents'
     | '/export'
+    | '/imported'
     | '/notifications'
     | '/overview'
     | '/workforce'
@@ -345,6 +355,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/agents'
     | '/export'
+    | '/imported'
     | '/notifications'
     | '/overview'
     | '/workforce'
@@ -377,6 +388,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/_app/agents'
     | '/_app/export'
+    | '/_app/imported'
     | '/_app/notifications'
     | '/_app/overview'
     | '/_app/workforce'
@@ -476,6 +488,13 @@ declare module '@tanstack/react-router' {
       path: '/export'
       fullPath: '/export'
       preLoaderRoute: typeof AppExportRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/imported': {
+      id: '/_app/imported'
+      path: '/imported'
+      fullPath: '/imported'
+      preLoaderRoute: typeof AppImportedRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/agents': {
@@ -631,6 +650,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAgentsRoute: typeof AppAgentsRoute
   AppExportRoute: typeof AppExportRoute
+  AppImportedRoute: typeof AppImportedRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppOverviewRoute: typeof AppOverviewRoute
   AppWorkforceRoute: typeof AppWorkforceRoute
@@ -658,6 +678,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAgentsRoute: AppAgentsRoute,
   AppExportRoute: AppExportRoute,
+  AppImportedRoute: AppImportedRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppOverviewRoute: AppOverviewRoute,
   AppWorkforceRoute: AppWorkforceRoute,

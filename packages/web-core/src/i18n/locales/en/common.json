@@ -612,11 +612,39 @@
       "emptyBody": "Create a workspace and choose a repo directory to start. History stays on this machine.",
       "workspaceCount": "{{count}} workspace",
       "workspaceCount_other": "{{count}} workspaces",
-      "noWorkspaces": "No workspaces yet"
+      "noWorkspaces": "No workspaces yet",
+      "importedProjects": "Imported projects"
     },
     "chrome": {
       "localLabel": "Local",
       "localWorkspaces": "Local workspaces"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "Import web projects",
+      "description": "Import projects and issues from a previous web export ZIP. Older CSV-only ZIPs still work.",
+      "chooseFile": "Choose export ZIP",
+      "importing": "Importing…",
+      "success": "Imported {{projectsCreated}} new projects ({{projectsReused}} existing) and {{issuesCreated}} issues.",
+      "viewImported": "View imported projects",
+      "error": "Could not import that file."
+    },
+    "page": {
+      "kicker": "Local data",
+      "title": "Imported projects",
+      "navLabel": "Imported projects",
+      "subtitle": "Projects brought over from the web app. Open an issue as a local workspace; the description becomes notes.",
+      "emptyTitle": "No imported projects yet",
+      "emptyBody": "Export data from the previous web version, then import the ZIP here or in Settings.",
+      "issueCount": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "openWorkspace": "Open workspace",
+      "openExisting": "Open workspace",
+      "opening": "Opening…",
+      "noIssues": "No issues in this project",
+      "loadingIssues": "Loading issues…",
+      "openError": "Could not open a workspace for this issue."
     }
   }
 }

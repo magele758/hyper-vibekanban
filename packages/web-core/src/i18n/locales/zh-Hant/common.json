@@ -612,11 +612,39 @@
       "emptyBody": "建立工作區並選擇程式碼目錄即可開始。歷史只保存在本機。",
       "workspaceCount": "{{count}} 個工作區",
       "workspaceCount_other": "{{count}} 個工作區",
-      "noWorkspaces": "尚無工作區"
+      "noWorkspaces": "尚無工作區",
+      "importedProjects": "已匯入的專案"
     },
     "chrome": {
       "localLabel": "本機",
       "localWorkspaces": "本機工作區"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "匯入 Web 專案",
+      "description": "從先前的 Web 匯出 ZIP 匯入專案與議題。舊版僅含 CSV 的 ZIP 仍可匯入。",
+      "chooseFile": "選擇匯出 ZIP",
+      "importing": "正在匯入…",
+      "success": "已匯入 {{projectsCreated}} 個新專案（沿用 {{projectsReused}} 個）與 {{issuesCreated}} 個議題。",
+      "viewImported": "檢視已匯入的專案",
+      "error": "無法匯入該檔案。"
+    },
+    "page": {
+      "kicker": "本機資料",
+      "title": "已匯入的專案",
+      "navLabel": "已匯入的專案",
+      "subtitle": "從 Web 應用帶過來的專案。開啟議題會建立本機工作區，描述會寫入筆記。",
+      "emptyTitle": "尚無匯入的專案",
+      "emptyBody": "先從先前的 Web 版本匯出資料，然後在這裡或設定中匯入 ZIP。",
+      "issueCount": "{{count}} 個議題",
+      "issueCount_other": "{{count}} 個議題",
+      "openWorkspace": "開啟工作區",
+      "openExisting": "開啟工作區",
+      "opening": "正在開啟…",
+      "noIssues": "此專案沒有議題",
+      "loadingIssues": "正在載入議題…",
+      "openError": "無法為此議題開啟工作區。"
     }
   }
 }
