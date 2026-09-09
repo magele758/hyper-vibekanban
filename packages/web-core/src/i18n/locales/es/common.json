@@ -612,11 +612,39 @@
       "emptyBody": "Crea un workspace y elige un directorio. El historial se queda en esta máquina.",
       "workspaceCount": "{{count}} workspace",
       "workspaceCount_other": "{{count}} workspaces",
-      "noWorkspaces": "Aún no hay workspaces"
+      "noWorkspaces": "Aún no hay workspaces",
+      "importedProjects": "Proyectos importados"
     },
     "chrome": {
       "localLabel": "Local",
       "localWorkspaces": "Workspaces locales"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "Importar proyectos web",
+      "description": "Importa proyectos e issues desde un ZIP de exportación web. Los ZIP antiguos solo con CSV siguen funcionando.",
+      "chooseFile": "Elegir ZIP de exportación",
+      "importing": "Importando…",
+      "success": "Se importaron {{projectsCreated}} proyectos nuevos ({{projectsReused}} existentes) y {{issuesCreated}} issues.",
+      "viewImported": "Ver proyectos importados",
+      "error": "No se pudo importar ese archivo."
+    },
+    "page": {
+      "kicker": "Datos locales",
+      "title": "Proyectos importados",
+      "navLabel": "Proyectos importados",
+      "subtitle": "Proyectos traídos de la app web. Abrir un issue crea un workspace local; la descripción pasa a notas.",
+      "emptyTitle": "Aún no hay proyectos importados",
+      "emptyBody": "Exporta los datos de la versión web anterior e importa el ZIP aquí o en Ajustes.",
+      "issueCount": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "openWorkspace": "Abrir workspace",
+      "openExisting": "Abrir workspace",
+      "opening": "Abriendo…",
+      "noIssues": "No hay issues en este proyecto",
+      "loadingIssues": "Cargando issues…",
+      "openError": "No se pudo abrir un workspace para este issue."
     }
   }
 }

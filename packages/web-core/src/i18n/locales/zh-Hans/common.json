@@ -612,11 +612,39 @@
       "emptyBody": "创建一个工作区并选择代码目录即可开始。历史只保存在本机。",
       "workspaceCount": "{{count}} 个工作区",
       "workspaceCount_other": "{{count}} 个工作区",
-      "noWorkspaces": "还没有工作区"
+      "noWorkspaces": "还没有工作区",
+      "importedProjects": "已导入的项目"
     },
     "chrome": {
       "localLabel": "本地",
       "localWorkspaces": "本地工作区"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "导入 Web 项目",
+      "description": "从之前的 Web 导出 ZIP 导入项目和议题。旧版仅含 CSV 的 ZIP 也可以导入。",
+      "chooseFile": "选择导出 ZIP",
+      "importing": "正在导入…",
+      "success": "已导入 {{projectsCreated}} 个新项目（复用 {{projectsReused}} 个）和 {{issuesCreated}} 个议题。",
+      "viewImported": "查看已导入的项目",
+      "error": "无法导入该文件。"
+    },
+    "page": {
+      "kicker": "本地数据",
+      "title": "已导入的项目",
+      "navLabel": "已导入的项目",
+      "subtitle": "从 Web 应用带过来的项目。打开议题会创建本地工作区，描述会写入笔记。",
+      "emptyTitle": "还没有导入的项目",
+      "emptyBody": "先从之前的 Web 版本导出数据，然后在这里或设置中导入 ZIP。",
+      "issueCount": "{{count}} 个议题",
+      "issueCount_other": "{{count}} 个议题",
+      "openWorkspace": "打开工作区",
+      "openExisting": "打开工作区",
+      "opening": "正在打开…",
+      "noIssues": "此项目没有议题",
+      "loadingIssues": "正在加载议题…",
+      "openError": "无法为此议题打开工作区。"
     }
   }
 }

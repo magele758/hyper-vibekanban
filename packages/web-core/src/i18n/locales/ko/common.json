@@ -612,11 +612,39 @@
       "emptyBody": "워크스페이스를 만들고 저장소 디렉터리를 선택하세요. 기록은 이 기기에 남습니다.",
       "workspaceCount": "워크스페이스 {{count}}개",
       "workspaceCount_other": "워크스페이스 {{count}}개",
-      "noWorkspaces": "아직 워크스페이스가 없습니다"
+      "noWorkspaces": "아직 워크스페이스가 없습니다",
+      "importedProjects": "가져온 프로젝트"
     },
     "chrome": {
       "localLabel": "로컬",
       "localWorkspaces": "로컬 워크스페이스"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "웹 프로젝트 가져오기",
+      "description": "이전 웹 내보내기 ZIP에서 프로젝트와 이슈를 가져옵니다. CSV만 있는 이전 ZIP도 가져올 수 있습니다.",
+      "chooseFile": "내보내기 ZIP 선택",
+      "importing": "가져오는 중…",
+      "success": "새 프로젝트 {{projectsCreated}}개(기존 {{projectsReused}}개)와 이슈 {{issuesCreated}}개를 가져왔습니다.",
+      "viewImported": "가져온 프로젝트 보기",
+      "error": "해당 파일을 가져올 수 없습니다."
+    },
+    "page": {
+      "kicker": "로컬 데이터",
+      "title": "가져온 프로젝트",
+      "navLabel": "가져온 프로젝트",
+      "subtitle": "웹 앱에서 가져온 프로젝트입니다. 이슈를 열면 로컬 워크스페이스가 되고 설명이 노트가 됩니다.",
+      "emptyTitle": "가져온 프로젝트가 없습니다",
+      "emptyBody": "이전 웹 버전에서 데이터를 내보낸 뒤, 여기 또는 설정에서 ZIP을 가져오세요.",
+      "issueCount": "이슈 {{count}}개",
+      "issueCount_other": "이슈 {{count}}개",
+      "openWorkspace": "워크스페이스 열기",
+      "openExisting": "워크스페이스 열기",
+      "opening": "여는 중…",
+      "noIssues": "이 프로젝트에 이슈가 없습니다",
+      "loadingIssues": "이슈를 불러오는 중…",
+      "openError": "이 이슈의 워크스페이스를 열 수 없습니다."
     }
   }
 }
