@@ -191,6 +191,7 @@ impl McpServer {
             prompt: workspace_prompt,
             attachment_ids: None,
             kind: Default::default(),
+            project_id: None,
         };
 
         let create_and_start_url = self.url("/api/workspaces/start");
