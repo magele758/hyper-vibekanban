@@ -364,6 +364,11 @@ jobs:
 
       - name: Install Linux dependencies
         run: |
+          # GitHub images ship Google Chrome's apt source. A mid-sync hash
+          # mismatch fails `apt-get update` even though we only need Ubuntu
+          # webkit/gtk packages.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
             libssl-dev libayatana-appindicator3-dev librsvg2-dev \
