@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useParams } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useUserContext } from '@/shared/hooks/useUserContext';
@@ -54,6 +55,10 @@ import {
   XIcon,
 } from '@phosphor-icons/react';
 import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { useWorkspaceRepoLinks } from '@/shared/hooks/useWorkspaceRepoLinks';
+import { workspaceMatchesRepoFilter } from '@/shared/lib/liteMode';
+import { repoApi } from '@/shared/lib/api';
 
 export type WorkspaceLayoutMode = 'flat' | 'accordion';
 
@@ -62,6 +67,7 @@ const DRAFT_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 
 const PAGE_SIZE = 50;
 const NO_PROJECT_ID = '__no_project__';
+const NO_REPO_ID = '__no_repo__';
 const DEFAULT_WORKSPACE_SORT = {
   sortBy: 'updated_at' as WorkspaceSortBy,
   sortOrder: 'desc' as WorkspaceSortOrder,
@@ -159,6 +165,9 @@ interface WorkspacesFilterDialogProps {
   projectIds: string[];
   prFilter: WorkspacePrFilter;
   hasActiveFilters: boolean;
+  projectFilterLabel: string;
+  filterDescription: string;
+  hidePrFilter?: boolean;
   onProjectFilterChange: (projectIds: string[]) => void;
   onPrFilterChange: (prFilter: WorkspacePrFilter) => void;
   onClearFilters: () => void;
@@ -171,6 +180,9 @@ function WorkspacesFilterDialog({
   projectIds,
   prFilter,
   hasActiveFilters,
+  projectFilterLabel,
+  filterDescription,
+  hidePrFilter = false,
   onProjectFilterChange,
   onPrFilterChange,
   onClearFilters,
@@ -185,9 +197,7 @@ function WorkspacesFilterDialog({
             <DialogTitle>
               {t('kanban.workspaceSidebar.filterDialogTitle')}
             </DialogTitle>
-            <DialogDescription>
-              {t('kanban.workspaceSidebar.filterDialogDescription')}
-            </DialogDescription>
+            <DialogDescription>{filterDescription}</DialogDescription>
           </DialogHeader>
         </div>
 
@@ -198,23 +208,25 @@ function WorkspacesFilterDialog({
               options={projectOptions}
               onChange={onProjectFilterChange}
               icon={FolderIcon}
-              label={t('kanban.workspaceSidebar.projectFilterLabel')}
+              label={projectFilterLabel}
             />
-            <PropertyDropdown
-              value={prFilter}
-              options={PR_FILTER_OPTIONS.map((option) => ({
-                value: option,
-                label:
-                  option === 'all'
-                    ? t('kanban.workspaceSidebar.prFilterAll')
-                    : option === 'has_pr'
-                      ? t('kanban.workspaceSidebar.prFilterHasPr')
-                      : t('kanban.workspaceSidebar.prFilterNoPr'),
-              }))}
-              onChange={onPrFilterChange}
-              icon={GitPullRequestIcon}
-              label={t('kanban.workspaceSidebar.prFilterLabel')}
-            />
+            {!hidePrFilter && (
+              <PropertyDropdown
+                value={prFilter}
+                options={PR_FILTER_OPTIONS.map((option) => ({
+                  value: option,
+                  label:
+                    option === 'all'
+                      ? t('kanban.workspaceSidebar.prFilterAll')
+                      : option === 'has_pr'
+                        ? t('kanban.workspaceSidebar.prFilterHasPr')
+                        : t('kanban.workspaceSidebar.prFilterNoPr'),
+                }))}
+                onChange={onPrFilterChange}
+                icon={GitPullRequestIcon}
+                label={t('kanban.workspaceSidebar.prFilterLabel')}
+              />
+            )}
             {hasActiveFilters && (
               <div className="self-end">
                 <PrimaryButton
@@ -312,9 +324,19 @@ export function WorkspacesSidebarContainer({
     (s) => s.setWorkspaceSortOrder
   );
 
+  const { liteMode } = useUserSystem();
+  const { workspaceIdsByRepo } = useWorkspaceRepoLinks(liteMode);
+  const { data: localRepos = [] } = useQuery({
+    queryKey: ['lite-sidebar-repos'],
+    queryFn: () => repoApi.list(),
+    enabled: liteMode,
+  });
+
   // Remote data for project filter (all orgs)
   const { workspaces: remoteWorkspaces } = useUserContext();
-  const { data: allRemoteProjects } = useAllOrganizationProjects();
+  const { data: allRemoteProjects } = useAllOrganizationProjects({
+    enabled: !liteMode,
+  });
   const { data: orgsData } = useUserOrganizations();
   const organizations = useMemo(
     () => orgsData?.organizations ?? [],
@@ -365,8 +387,21 @@ export function WorkspacesSidebarContainer({
   }, [allRemoteProjects, remoteProjectByLocalId, orgNameById]);
 
   // Build flat project options for MultiSelectDropdown
-  const projectOptions = useMemo<MultiSelectDropdownOption<string>[]>(
-    () => [
+  const projectOptions = useMemo<MultiSelectDropdownOption<string>[]>(() => {
+    if (liteMode) {
+      return [
+        {
+          value: NO_REPO_ID,
+          label: t('kanban.workspaceSidebar.noRepo'),
+        },
+        ...localRepos.map((repo) => ({
+          value: repo.id,
+          label: repo.display_name || repo.name,
+        })),
+      ];
+    }
+
+    return [
       {
         value: NO_PROJECT_ID,
         label: t('kanban.workspaceSidebar.noProject'),
@@ -386,13 +421,12 @@ export function WorkspacesSidebarContainer({
           ),
         }))
       ),
-    ],
-    [projectGroups, t]
-  );
+    ];
+  }, [liteMode, localRepos, projectGroups, t]);
 
   const hasActiveFilters =
     workspaceFilters.projectIds.length > 0 ||
-    workspaceFilters.prFilter !== 'all';
+    (!liteMode && workspaceFilters.prFilter !== 'all');
   const hasNonDefaultSort =
     workspaceSort.sortBy !== DEFAULT_WORKSPACE_SORT.sortBy ||
     workspaceSort.sortOrder !== DEFAULT_WORKSPACE_SORT.sortOrder;
@@ -412,24 +446,35 @@ export function WorkspacesSidebarContainer({
   const filteredActiveWorkspaces = useMemo(() => {
     let result = activeWorkspaces;
 
-    // Project filter
+    // Project / local-repo filter
     if (workspaceFilters.projectIds.length > 0) {
-      const includeNoProject =
-        workspaceFilters.projectIds.includes(NO_PROJECT_ID);
-      const realProjectIds = workspaceFilters.projectIds.filter(
-        (id) => id !== NO_PROJECT_ID
-      );
-      result = result.filter((ws) => {
-        const projectId = remoteProjectByLocalId.get(ws.id);
-        if (!projectId) return includeNoProject;
-        return realProjectIds.includes(projectId);
-      });
+      if (liteMode) {
+        result = result.filter((ws) =>
+          workspaceMatchesRepoFilter(
+            ws.id,
+            workspaceFilters.projectIds,
+            workspaceIdsByRepo,
+            NO_REPO_ID
+          )
+        );
+      } else {
+        const includeNoProject =
+          workspaceFilters.projectIds.includes(NO_PROJECT_ID);
+        const realProjectIds = workspaceFilters.projectIds.filter(
+          (id) => id !== NO_PROJECT_ID
+        );
+        result = result.filter((ws) => {
+          const projectId = remoteProjectByLocalId.get(ws.id);
+          if (!projectId) return includeNoProject;
+          return realProjectIds.includes(projectId);
+        });
+      }
     }
 
     // PR filter
-    if (workspaceFilters.prFilter === 'has_pr') {
+    if (!liteMode && workspaceFilters.prFilter === 'has_pr') {
       result = result.filter((ws) => !!ws.prStatus);
-    } else if (workspaceFilters.prFilter === 'no_pr') {
+    } else if (!liteMode && workspaceFilters.prFilter === 'no_pr') {
       result = result.filter((ws) => !ws.prStatus);
     }
 
@@ -443,27 +488,45 @@ export function WorkspacesSidebarContainer({
     }
 
     return result;
-  }, [activeWorkspaces, workspaceFilters, remoteProjectByLocalId, searchLower]);
+  }, [
+    activeWorkspaces,
+    workspaceFilters,
+    remoteProjectByLocalId,
+    searchLower,
+    liteMode,
+    workspaceIdsByRepo,
+  ]);
 
   const filteredArchivedWorkspaces = useMemo(() => {
     let result = archivedWorkspaces;
 
     if (workspaceFilters.projectIds.length > 0) {
-      const includeNoProject =
-        workspaceFilters.projectIds.includes(NO_PROJECT_ID);
-      const realProjectIds = workspaceFilters.projectIds.filter(
-        (id) => id !== NO_PROJECT_ID
-      );
-      result = result.filter((ws) => {
-        const projectId = remoteProjectByLocalId.get(ws.id);
-        if (!projectId) return includeNoProject;
-        return realProjectIds.includes(projectId);
-      });
+      if (liteMode) {
+        result = result.filter((ws) =>
+          workspaceMatchesRepoFilter(
+            ws.id,
+            workspaceFilters.projectIds,
+            workspaceIdsByRepo,
+            NO_REPO_ID
+          )
+        );
+      } else {
+        const includeNoProject =
+          workspaceFilters.projectIds.includes(NO_PROJECT_ID);
+        const realProjectIds = workspaceFilters.projectIds.filter(
+          (id) => id !== NO_PROJECT_ID
+        );
+        result = result.filter((ws) => {
+          const projectId = remoteProjectByLocalId.get(ws.id);
+          if (!projectId) return includeNoProject;
+          return realProjectIds.includes(projectId);
+        });
+      }
     }
 
-    if (workspaceFilters.prFilter === 'has_pr') {
+    if (!liteMode && workspaceFilters.prFilter === 'has_pr') {
       result = result.filter((ws) => !!ws.prStatus);
-    } else if (workspaceFilters.prFilter === 'no_pr') {
+    } else if (!liteMode && workspaceFilters.prFilter === 'no_pr') {
       result = result.filter((ws) => !ws.prStatus);
     }
 
@@ -481,6 +544,8 @@ export function WorkspacesSidebarContainer({
     workspaceFilters,
     remoteProjectByLocalId,
     searchLower,
+    liteMode,
+    workspaceIdsByRepo,
   ]);
 
   const sortWorkspaces = useCallback(
@@ -662,6 +727,17 @@ export function WorkspacesSidebarContainer({
         projectIds={workspaceFilters.projectIds}
         prFilter={workspaceFilters.prFilter}
         hasActiveFilters={hasActiveFilters}
+        projectFilterLabel={
+          liteMode
+            ? t('kanban.workspaceSidebar.repoFilterLabel')
+            : t('kanban.workspaceSidebar.projectFilterLabel')
+        }
+        filterDescription={
+          liteMode
+            ? t('kanban.workspaceSidebar.filterDialogDescriptionLite')
+            : t('kanban.workspaceSidebar.filterDialogDescription')
+        }
+        hidePrFilter={liteMode}
         onProjectFilterChange={setWorkspaceProjectFilter}
         onPrFilterChange={setWorkspacePrFilter}
         onClearFilters={clearWorkspaceFilters}
@@ -707,8 +783,10 @@ export function WorkspacesSidebarContainer({
       searchControls={searchControls}
       onOpenWorkspaceActions={handleOpenWorkspaceActions}
       persistKeys={sidebarPersistKeys}
-      activeRemoteHost={activeRemoteHost}
-      onOpenRemoteHostSettings={handleOpenRemoteHostSettings}
+      activeRemoteHost={liteMode ? null : activeRemoteHost}
+      onOpenRemoteHostSettings={
+        liteMode ? undefined : handleOpenRemoteHostSettings
+      }
     />
   );
 }

@@ -35,15 +35,15 @@ pub mod webrtc;
 pub mod workspaces;
 
 pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
-    let relay_signed_routes = Router::new()
+    let lite_mode = utils::lite::is_lite_mode();
+
+    let mut relay_signed_routes = Router::new()
         .route("/health", get(health::health_check))
         .merge(config::router())
         .merge(containers::router(&deployment))
         .merge(workspaces::router(&deployment))
         .merge(execution_processes::router(&deployment))
         .merge(tags::router(&deployment))
-        .merge(oauth::router())
-        .merge(organizations::router())
         .merge(filesystem::router())
         .merge(repo::router())
         .merge(events::router(&deployment))
@@ -55,10 +55,18 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(sessions::router(&deployment))
         .merge(terminal::router())
         .merge(trajectory::router(&deployment))
-        .route("/ssh-session", get(ssh_session::ssh_session_ws))
-        .nest("/remote", remote::router())
-        .merge(webrtc::router())
-        .nest("/attachments", attachments::routes())
+        .nest("/attachments", attachments::routes());
+
+    if !lite_mode {
+        relay_signed_routes = relay_signed_routes
+            .merge(oauth::router())
+            .merge(organizations::router())
+            .route("/ssh-session", get(ssh_session::ssh_session_ws))
+            .nest("/remote", remote::router())
+            .merge(webrtc::router());
+    }
+
+    let relay_signed_routes = relay_signed_routes
         .layer(axum::middleware::from_fn_with_state(
             deployment.clone(),
             middleware::sign_relay_response,
@@ -69,9 +77,13 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         ))
         .with_state(deployment.clone());
 
-    let api_routes = Router::new()
-        .merge(relay_auth::router())
-        .merge(host_relay::router(&deployment))
+    let mut api_routes = Router::new();
+    if !lite_mode {
+        api_routes = api_routes
+            .merge(relay_auth::router())
+            .merge(host_relay::router(&deployment));
+    }
+    let api_routes = api_routes
         .merge(relay_signed_routes)
         .layer(ValidateRequestHeaderLayer::custom(
             middleware::validate_origin,

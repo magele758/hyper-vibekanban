@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_API_BASE_URL?: string;
   readonly VITE_RELAY_PORT?: string;
   readonly VITE_TAILSCALE_RELAY_HTTPS_PORT?: string;
+  readonly VITE_VK_LITE?: string;
 }
 
 declare const __APP_VERSION__: string;

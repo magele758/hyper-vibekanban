@@ -100,6 +100,9 @@ pub struct UserSystemInfo {
     pub capabilities: HashMap<String, Vec<BaseAgentCapability>>,
     pub shared_api_base: Option<String>,
     pub preview_proxy_port: Option<u16>,
+    /// True when this Desktop is running the local-only lite flavor.
+    #[serde(default)]
+    pub lite_mode: bool,
 }
 
 // TODO: update frontend, BE schema has changed, this replaces GET /config and /config/constants
@@ -171,11 +174,16 @@ async fn get_user_system_info(
             }
             caps
         },
-        shared_api_base: std::env::var("VK_BROWSER_SHARED_API_BASE")
-            .ok()
-            .filter(|value| !value.is_empty())
-            .or_else(|| deployment.remote_info().get_api_base()),
+        shared_api_base: if utils::lite::is_lite_mode() {
+            None
+        } else {
+            std::env::var("VK_BROWSER_SHARED_API_BASE")
+                .ok()
+                .filter(|value| !value.is_empty())
+                .or_else(|| deployment.remote_info().get_api_base())
+        },
         preview_proxy_port: deployment.client_info().get_preview_proxy_port(),
+        lite_mode: utils::lite::is_lite_mode(),
     };
 
     ResponseJson(ApiResponse::success(user_system_info))

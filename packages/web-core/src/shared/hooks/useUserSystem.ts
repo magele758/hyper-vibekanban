@@ -19,6 +19,7 @@ export interface UserSystemState {
   loginStatus: LoginStatus | null;
   remoteAuthDegraded: string | null;
   remoteApiBase: string | null;
+  liteMode: boolean;
 }
 
 export interface UserSystemContextType {
@@ -41,6 +42,7 @@ export interface UserSystemContextType {
   loginStatus: LoginStatus | null;
   remoteAuthDegraded: string | null;
   remoteApiBase: string | null;
+  liteMode: boolean;
   setEnvironment: (env: Environment | null) => void;
   setProfiles: (profiles: Record<string, ExecutorProfile> | null) => void;
   setCapabilities: (caps: Record<string, BaseAgentCapability[]> | null) => void;

@@ -14,8 +14,10 @@ import type {
 } from './settings/SettingsSection';
 import {
   SETTINGS_SECTION_DEFINITIONS,
+  getVisibleSettingsSections,
   isHostSpecificSettingsSection,
 } from './settings/settingsRegistry';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import {
   SettingsDirtyProvider,
   useSettingsDirty,
@@ -47,6 +49,7 @@ function SettingsDialogNavigation({
   onSectionSelect: (sectionId: SettingsSectionType) => void;
 }) {
   const { t } = useTranslation('settings');
+  const { liteMode } = useUserSystem();
   const {
     availableHosts,
     hostsResolved,
@@ -54,10 +57,11 @@ function SettingsDialogNavigation({
     selectedHostId,
     setSelectedHostId,
   } = useSettingsHost();
-  const hostSections = SETTINGS_SECTION_DEFINITIONS.filter(
+  const visibleSections = getVisibleSettingsSections(liteMode);
+  const hostSections = visibleSections.filter(
     (section) => section.group === 'host'
   );
-  const universalSections = SETTINGS_SECTION_DEFINITIONS.filter(
+  const universalSections = visibleSections.filter(
     (section) => section.group === 'universal'
   );
   const hostOptions = availableHosts.map((host) => ({
@@ -116,38 +120,44 @@ function SettingsDialogNavigation({
             {t('settings.layout.nav.machineSettings')}
           </div>
         </div>
-        <div className="px-2">
-          <SettingsSelect
-            value={selectedHostId ?? undefined}
-            options={hostOptions}
-            actions={[
-              {
-                label: t('settings.layout.nav.pairOtherMachines'),
-                icon: PlusIcon,
-                onClick: handlePairOtherMachines,
-              },
-            ]}
-            onChange={setSelectedHostId}
-            placeholder={t('settings.layout.nav.selectHost')}
-          />
-          {hostSettingsDisabled && (
-            <p className="mt-2 px-1 text-xs text-low">{hostHint}</p>
-          )}
-        </div>
+        {!liteMode && (
+          <div className="px-2">
+            <SettingsSelect
+              value={selectedHostId ?? undefined}
+              options={hostOptions}
+              actions={[
+                {
+                  label: t('settings.layout.nav.pairOtherMachines'),
+                  icon: PlusIcon,
+                  onClick: handlePairOtherMachines,
+                },
+              ]}
+              onChange={setSelectedHostId}
+              placeholder={t('settings.layout.nav.selectHost')}
+            />
+            {hostSettingsDisabled && (
+              <p className="mt-2 px-1 text-xs text-low">{hostHint}</p>
+            )}
+          </div>
+        )}
         <div className="flex flex-col gap-1">
           {hostSections.map((section) => renderSectionButton(section.id))}
         </div>
       </div>
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.accountSettings')}
+      {universalSections.length > 0 && (
+        <div className="space-y-2">
+          <div className="px-3 pt-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
+              {t('settings.layout.nav.accountSettings')}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            {universalSections.map((section) =>
+              renderSectionButton(section.id)
+            )}
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          {universalSections.map((section) => renderSectionButton(section.id))}
-        </div>
-      </div>
+      )}
     </nav>
   );
 }
@@ -158,25 +168,26 @@ function SettingsDialogContent({
   onClose,
 }: SettingsDialogContentProps) {
   const { t } = useTranslation('settings');
+  const { liteMode } = useUserSystem();
   const { isDirty } = useSettingsDirty();
   const { availableHosts, hostsResolved, selectedHost } = useSettingsHost();
 
   const resolvedInitialSection = useMemo<SettingsSectionType>(() => {
     if (
       initialSection &&
-      SETTINGS_SECTION_DEFINITIONS.some(
+      getVisibleSettingsSections(liteMode).some(
         (section) => section.id === initialSection
       )
     ) {
       return initialSection;
     }
 
-    if (hostsResolved && availableHosts.length === 0) {
+    if (!liteMode && hostsResolved && availableHosts.length === 0) {
       return 'organizations';
     }
 
     return 'general';
-  }, [availableHosts.length, hostsResolved, initialSection]);
+  }, [availableHosts.length, hostsResolved, initialSection, liteMode]);
 
   const [activeSection, setActiveSection] = useState<SettingsSectionType>(
     resolvedInitialSection
@@ -218,13 +229,14 @@ function SettingsDialogContent({
 
   useEffect(() => {
     if (
+      !liteMode &&
       hostsResolved &&
       isHostSpecificSettingsSection(activeSection) &&
       availableHosts.length === 0
     ) {
       setActiveSection('organizations');
     }
-  }, [activeSection, availableHosts.length, hostsResolved]);
+  }, [activeSection, availableHosts.length, hostsResolved, liteMode]);
 
   const handleMobileBack = () => {
     setMobileShowContent(false);

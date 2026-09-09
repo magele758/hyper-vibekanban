@@ -44,3 +44,7 @@ dotenv = "0.15"
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[features]
+default = []
+lite = ["utils/lite"]

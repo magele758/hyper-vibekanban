@@ -8,6 +8,7 @@ use db::models::{
     coding_agent_turn::CodingAgentTurn,
     execution_process::{ExecutionProcess, ExecutionProcessStatus},
     workspace::{Workspace, WorkspaceError},
+    workspace_repo::WorkspaceRepo,
 };
 use deployment::Deployment;
 use serde::Deserialize;
@@ -44,6 +45,13 @@ pub async fn get_workspaces(
     let pool = &deployment.db().pool;
     let workspaces = Workspace::fetch_all(pool).await?;
     Ok(ResponseJson(ApiResponse::success(workspaces)))
+}
+
+pub async fn get_workspace_repo_links(
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<WorkspaceRepo>>>, ApiError> {
+    let links = WorkspaceRepo::list_all(&deployment.db().pool).await?;
+    Ok(ResponseJson(ApiResponse::success(links)))
 }
 
 pub async fn get_workspace(

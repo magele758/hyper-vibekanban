@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
 import { Outlet, useNavigate } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import { siGithub } from 'simple-icons';
 import {
   XIcon,
@@ -83,7 +84,8 @@ export function SharedAppLayout() {
     (s) => s.isLeftSidebarVisible
   );
   const { isSignedIn } = useAuth();
-  const { appVersion } = useUserSystem();
+  const { appVersion, liteMode } = useUserSystem();
+  const { t } = useTranslation('common');
   const updateVersion = useAppUpdateStore((s) => s.updateVersion);
   const restartForUpdate = useAppUpdateStore((s) => s.restart);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -149,7 +151,7 @@ export function SharedAppLayout() {
     isLoading,
     updateMany: updateManyProjects,
   } = useShape(PROJECTS_SHAPE, projectParams, {
-    enabled: isSignedIn && !!selectedOrgId,
+    enabled: !liteMode && isSignedIn && !!selectedOrgId,
     mutation: PROJECT_MUTATION,
   });
   const sortedProjects = useMemo(
@@ -170,6 +172,9 @@ export function SharedAppLayout() {
   // Navigate to the first ordered project when org changes, unless the user is
   // already on the projects overview (which should just refresh in place).
   useEffect(() => {
+    if (liteMode) {
+      return;
+    }
     if (
       prevOrgIdRef.current !== null &&
       prevOrgIdRef.current !== selectedOrgId &&
@@ -193,6 +198,7 @@ export function SharedAppLayout() {
     isLoading,
     appNavigation,
     currentDestination?.kind,
+    liteMode,
   ]);
 
   // Navigation state for AppBar active indicators
@@ -524,21 +530,24 @@ export function SharedAppLayout() {
             />
             {/* Desktop AppBar sidebar. */}
             <AppBar
-              projects={orderedProjects}
-              hosts={remoteCloudHosts}
-              activeHostId={activeHostId}
+              hideCloudSections={liteMode}
+              projects={liteMode ? [] : orderedProjects}
+              hosts={liteMode ? [] : remoteCloudHosts}
+              activeHostId={liteMode ? null : activeHostId}
               onCreateProject={handleCreateProject}
-              onAgentsClick={handleAgentsClick}
-              onWorkforceClick={handleWorkforceClick}
-              onExportClick={handleExportClick}
+              onAgentsClick={liteMode ? undefined : handleAgentsClick}
+              onWorkforceClick={liteMode ? undefined : handleWorkforceClick}
+              onExportClick={liteMode ? undefined : handleExportClick}
               onProjectsOverviewClick={
-                isSignedIn ? handleProjectsOverviewClick : undefined
+                liteMode || !isSignedIn
+                  ? undefined
+                  : handleProjectsOverviewClick
               }
               onWorkspacesClick={handleWorkspacesClick}
-              onHostClick={handleHostClick}
-              onPairHostClick={handlePairHostClick}
+              onHostClick={liteMode ? undefined : handleHostClick}
+              onPairHostClick={liteMode ? undefined : handlePairHostClick}
               onProjectClick={handleProjectClick}
-              onProjectHover={handleProjectHover}
+              onProjectHover={liteMode ? undefined : handleProjectHover}
               onProjectsDragEnd={handleProjectsDragEnd}
               isSavingProjectOrder={isSavingProjectOrder}
               isAgentsActive={isAgentsActive}
@@ -546,10 +555,10 @@ export function SharedAppLayout() {
               isWorkspacesActive={isLocalWorkspacesActive}
               isExportActive={isExportActive}
               isProjectsOverviewActive={isProjectsOverviewActive}
-              activeProjectId={activeProjectId}
+              activeProjectId={liteMode ? null : activeProjectId}
               isSignedIn={isSignedIn}
-              isLoadingProjects={isLoading}
-              onSignIn={handleSignIn}
+              isLoadingProjects={liteMode ? false : isLoading}
+              onSignIn={liteMode ? undefined : handleSignIn}
               onHoverStart={() => setIsAppBarHovered(true)}
               onHoverEnd={() => setIsAppBarHovered(false)}
               expanded={isAppBarExpanded}
@@ -569,7 +578,9 @@ export function SharedAppLayout() {
               onNavigateCopilot={handleNavigateCopilot}
               onNavigateInbox={handleNavigateInbox}
               notificationBell={
-                isSignedIn ? <AppBarNotificationBellContainer /> : undefined
+                !liteMode && isSignedIn ? (
+                  <AppBarNotificationBellContainer />
+                ) : undefined
               }
               userPopover={
                 <AppBarUserPopoverContainer
@@ -640,8 +651,10 @@ export function SharedAppLayout() {
             {/* Header: org name + close button */}
             <div className="flex items-center justify-between p-4 border-b border-border">
               <span className="text-sm font-medium text-high truncate">
-                {organizations.find((o) => o.id === selectedOrgId)?.name ??
-                  'Organization'}
+                {liteMode
+                  ? t('lite.chrome.localLabel')
+                  : (organizations.find((o) => o.id === selectedOrgId)?.name ??
+                    'Organization')}
               </span>
               <button
                 type="button"
@@ -667,10 +680,10 @@ export function SharedAppLayout() {
               )}
             >
               <LayoutIcon className="h-4 w-4" />
-              Local workspaces
+              {t('lite.chrome.localWorkspaces')}
             </button>
 
-            {isSignedIn && (
+            {!liteMode && isSignedIn && (
               <button
                 type="button"
                 onClick={() => {
@@ -690,7 +703,7 @@ export function SharedAppLayout() {
             )}
 
             {/* Remote hosts — mirrors desktop AppBar Remote section */}
-            {(remoteCloudHosts.length > 0 || isSignedIn) && (
+            {!liteMode && (remoteCloudHosts.length > 0 || isSignedIn) && (
               <>
                 <div className="border-t border-border mx-4" />
                 <p className="px-4 pt-3 pb-1 text-xs font-medium uppercase tracking-wide text-low">
@@ -757,10 +770,10 @@ export function SharedAppLayout() {
             )}
 
             {/* Divider */}
-            <div className="border-t border-border mx-4" />
+            {!liteMode && <div className="border-t border-border mx-4" />}
 
             {/* Export link */}
-            {isSignedIn && (
+            {!liteMode && isSignedIn && (
               <div className="px-4 py-3">
                 <p className="mb-2 text-xs font-medium text-low">Export</p>
                 <button
@@ -778,97 +791,101 @@ export function SharedAppLayout() {
             )}
 
             {/* Divider */}
-            {isSignedIn && <div className="border-t border-border mx-4" />}
+            {!liteMode && isSignedIn && (
+              <div className="border-t border-border mx-4" />
+            )}
 
             {/* Project list */}
-            <div className="flex-1 overflow-y-auto p-2">
-              {isSignedIn ? (
-                <>
-                  {orderedProjects.map((project) => (
-                    <div key={project.id}>
+            {!liteMode && (
+              <div className="flex-1 overflow-y-auto p-2">
+                {isSignedIn ? (
+                  <>
+                    {orderedProjects.map((project) => (
+                      <div key={project.id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const switchingProject =
+                              project.id !== activeProjectId;
+                            handleProjectClick(project.id);
+                            // Keep drawer open when switching projects so the
+                            // Board/Agents/Copilot/Inbox entries stay reachable.
+                            if (!switchingProject) {
+                              setIsDrawerOpen(false);
+                            }
+                          }}
+                          className={cn(
+                            'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left cursor-pointer',
+                            'transition-colors',
+                            project.id === activeProjectId
+                              ? 'bg-brand/10 text-high'
+                              : 'text-normal hover:bg-secondary'
+                          )}
+                        >
+                          <span
+                            className="h-2.5 w-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: `hsl(${project.color})` }}
+                          />
+                          <span className="truncate">{project.name}</span>
+                        </button>
+                        {project.id === activeProjectId &&
+                          mobileProjectSubNavItems.length > 0 && (
+                            <div className="mb-1 ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+                              {mobileProjectSubNavItems.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => {
+                                    item.onClick();
+                                    setIsDrawerOpen(false);
+                                  }}
+                                  className={cn(
+                                    'flex items-center gap-2 w-full rounded-md px-2.5 py-2 text-sm text-left cursor-pointer transition-colors',
+                                    activeProjectSubNav === item.id
+                                      ? 'bg-brand/15 text-high'
+                                      : 'text-normal hover:bg-secondary'
+                                  )}
+                                >
+                                  <item.icon className="h-4 w-4 shrink-0" />
+                                  <span>{item.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <div className="px-4 py-6 text-center">
+                    <KanbanIcon
+                      className="h-8 w-8 mx-auto text-low"
+                      weight="bold"
+                    />
+                    <p className="mt-3 text-sm font-medium text-high">
+                      Kanban Boards
+                    </p>
+                    <p className="mt-1 text-xs text-low">
+                      Sign in to organise your coding agents with kanban boards.
+                    </p>
+                    <div className="mt-4">
                       <button
                         type="button"
                         onClick={() => {
-                          const switchingProject =
-                            project.id !== activeProjectId;
-                          handleProjectClick(project.id);
-                          // Keep drawer open when switching projects so the
-                          // Board/Agents/Copilot/Inbox entries stay reachable.
-                          if (!switchingProject) {
-                            setIsDrawerOpen(false);
-                          }
+                          handleSignIn();
+                          setIsDrawerOpen(false);
                         }}
-                        className={cn(
-                          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm text-left cursor-pointer',
-                          'transition-colors',
-                          project.id === activeProjectId
-                            ? 'bg-brand/10 text-high'
-                            : 'text-normal hover:bg-secondary'
-                        )}
+                        className="w-full px-3 py-2 rounded-md text-sm font-medium bg-brand text-on-brand hover:bg-brand-hover cursor-pointer"
                       >
-                        <span
-                          className="h-2.5 w-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: `hsl(${project.color})` }}
-                        />
-                        <span className="truncate">{project.name}</span>
+                        Sign in
                       </button>
-                      {project.id === activeProjectId &&
-                        mobileProjectSubNavItems.length > 0 && (
-                          <div className="mb-1 ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
-                            {mobileProjectSubNavItems.map((item) => (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => {
-                                  item.onClick();
-                                  setIsDrawerOpen(false);
-                                }}
-                                className={cn(
-                                  'flex items-center gap-2 w-full rounded-md px-2.5 py-2 text-sm text-left cursor-pointer transition-colors',
-                                  activeProjectSubNav === item.id
-                                    ? 'bg-brand/15 text-high'
-                                    : 'text-normal hover:bg-secondary'
-                                )}
-                              >
-                                <item.icon className="h-4 w-4 shrink-0" />
-                                <span>{item.label}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
                     </div>
-                  ))}
-                </>
-              ) : (
-                <div className="px-4 py-6 text-center">
-                  <KanbanIcon
-                    className="h-8 w-8 mx-auto text-low"
-                    weight="bold"
-                  />
-                  <p className="mt-3 text-sm font-medium text-high">
-                    Kanban Boards
-                  </p>
-                  <p className="mt-1 text-xs text-low">
-                    Sign in to organise your coding agents with kanban boards.
-                  </p>
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleSignIn();
-                        setIsDrawerOpen(false);
-                      }}
-                      className="w-full px-3 py-2 rounded-md text-sm font-medium bg-brand text-on-brand hover:bg-brand-hover cursor-pointer"
-                    >
-                      Sign in
-                    </button>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Create Project button */}
-            {isSignedIn && (
+            {!liteMode && isSignedIn && (
               <div className="p-3 border-t border-border">
                 <button
                   type="button"
