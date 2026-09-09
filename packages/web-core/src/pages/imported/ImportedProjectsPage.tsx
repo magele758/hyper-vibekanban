@@ -146,9 +146,7 @@ function ImportedIssueRow({ task }: { task: Task }) {
       const result = await importApi.createWorkspaceFromTask(task.id);
       appNavigation.goToWorkspace(result.workspace_id);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t('import.page.openError')
-      );
+      setError(err instanceof Error ? err.message : t('import.page.openError'));
     } finally {
       setOpening(false);
     }
