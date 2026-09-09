@@ -9,6 +9,7 @@ import type {
 } from 'shared/types';
 import type { UserSystemContextType } from './useUserSystem';
 import { resolveSharedRemoteApiBase } from '@/shared/lib/remoteApi';
+import { resolveLiteMode } from '@/shared/lib/liteMode';
 
 interface UseUserSystemControllerOptions {
   queryKey: readonly unknown[];
@@ -48,6 +49,7 @@ export function useUserSystemController({
   const remoteApiBase = resolveSharedRemoteApiBase(
     userSystemInfo?.shared_api_base ?? null
   );
+  const liteMode = resolveLiteMode(userSystemInfo?.lite_mode);
   const profiles =
     (userSystemInfo?.executors as Record<string, ExecutorProfile> | null) ||
     null;
@@ -158,6 +160,7 @@ export function useUserSystemController({
         loginStatus,
         remoteAuthDegraded,
         remoteApiBase,
+        liteMode,
       },
       appVersion,
       previewProxyPort,
@@ -169,6 +172,7 @@ export function useUserSystemController({
       loginStatus,
       remoteAuthDegraded,
       remoteApiBase,
+      liteMode,
       updateConfig,
       saveConfig,
       updateAndSaveConfig,
@@ -189,6 +193,7 @@ export function useUserSystemController({
       loginStatus,
       remoteAuthDegraded,
       remoteApiBase,
+      liteMode,
       profiles,
       reloadSystem,
       saveConfig,

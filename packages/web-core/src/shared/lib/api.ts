@@ -79,6 +79,7 @@ import {
   ContinueRebaseRequest,
   Session,
   Workspace,
+  WorkspaceRepo,
   StartReviewRequest,
   ReviewError,
   GitRemote,
@@ -427,6 +428,11 @@ export const workspacesApi = {
   getAllWorkspaces: async (): Promise<Workspace[]> => {
     const response = await makeRequest('/api/workspaces');
     return handleApiResponse<Workspace[]>(response);
+  },
+
+  listRepoLinks: async (): Promise<WorkspaceRepo[]> => {
+    const response = await makeRequest('/api/workspaces/repo-links');
+    return handleApiResponse<WorkspaceRepo[]>(response);
   },
 
   get: async (workspaceId: string): Promise<Workspace> => {

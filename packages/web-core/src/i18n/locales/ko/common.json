@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "저장소",
+      "noRepo": "저장소 없음",
+      "filterDialogDescriptionLite": "로컬 저장소로 워크스페이스를 필터링합니다."
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "답변 제출 중...",
     "answeredCount": "{{count}}개의 질문에 답변함",
     "answeredCount_other": "{{count}}개의 질문에 답변함"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "로컬 클라이언트",
+      "title": "저장소",
+      "subtitle": "로컬 저장소별로 워크스페이스와 대화 기록을 봅니다.",
+      "searchPlaceholder": "저장소 또는 워크스페이스 검색...",
+      "newWorkspace": "새 워크스페이스",
+      "emptyTitle": "로컬 저장소가 없습니다",
+      "emptyBody": "워크스페이스를 만들고 저장소 디렉터리를 선택하세요. 기록은 이 기기에 남습니다.",
+      "workspaceCount": "워크스페이스 {{count}}개",
+      "workspaceCount_other": "워크스페이스 {{count}}개",
+      "noWorkspaces": "아직 워크스페이스가 없습니다"
+    },
+    "chrome": {
+      "localLabel": "로컬",
+      "localWorkspaces": "로컬 워크스페이스"
+    }
   }
 }

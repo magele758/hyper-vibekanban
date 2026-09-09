@@ -101,11 +101,15 @@ pnpm run remote:up
 # 然后浏览器打开 http://localhost:13000
 ```
 
-## 纯本地 Lite（无 Docker、无云）
+## 纯本地 Lite（无 Docker、无云、无看板）
+
+`pnpm run dev:lite` 起的是本仓瘦客户端：SQLite + worktree + executor 对话 UI。
+按本地仓库看 Workspace/Session 历史，不挂 Remote、组织、看板、Relay。
 
 ```bash
 pnpm run dev:lite
 # 端口同样走 vk-ports / setup-dev-environment，默认 13001/13002
+# 后端：cargo run --bin server --features lite，并设置 VK_LITE=1 / VITE_VK_LITE=1
 ```
 
 ## 架构速记

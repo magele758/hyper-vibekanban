@@ -6,7 +6,8 @@ import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 
 export function RootRedirectPage() {
-  const { config, loading, loginStatus, remoteApiBase } = useUserSystem();
+  const { config, loading, loginStatus, remoteApiBase, liteMode } =
+    useUserSystem();
   const setSelectedOrgId = useOrganizationStore((s) => s.setSelectedOrgId);
   const appNavigation = useAppNavigation();
 
@@ -17,6 +18,11 @@ export function RootRedirectPage() {
 
     let isActive = true;
     void (async () => {
+      if (liteMode) {
+        appNavigation.goToWorkspaces({ replace: true });
+        return;
+      }
+
       if (!config.remote_onboarding_acknowledged) {
         if (!remoteApiBase) {
           if (!config.onboarding_acknowledged) {
@@ -67,6 +73,7 @@ export function RootRedirectPage() {
     loading,
     loginStatus?.status,
     remoteApiBase,
+    liteMode,
     setSelectedOrgId,
   ]);
 

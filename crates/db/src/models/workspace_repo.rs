@@ -84,6 +84,22 @@ impl WorkspaceRepo {
         Ok(results)
     }
 
+    pub async fn list_all(pool: &SqlitePool) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            WorkspaceRepo,
+            r#"SELECT id as "id!: Uuid",
+                      workspace_id as "workspace_id!: Uuid",
+                      repo_id as "repo_id!: Uuid",
+                      target_branch,
+                      created_at as "created_at!: DateTime<Utc>",
+                      updated_at as "updated_at!: DateTime<Utc>"
+               FROM workspace_repos
+               ORDER BY updated_at DESC"#
+        )
+        .fetch_all(pool)
+        .await
+    }
+
     pub async fn find_by_workspace_id(
         pool: &SqlitePool,
         workspace_id: Uuid,
