@@ -197,6 +197,8 @@ function destinationToRemoteTarget(
       return { to: "/workforce" } as const;
     case "export":
       return { to: "/export" } as const;
+    case "imported":
+      return { to: "/" } as const;
     case "project":
       return {
         to: "/projects/$projectId",
@@ -308,6 +310,7 @@ export function createRemoteHostAppNavigation(hostId: string): AppNavigation {
     goToWorkforce: (transition) =>
       navigateTo({ kind: "workforce" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
+    goToImported: (transition) => navigateTo({ kind: "imported" }, transition),
     goToProjectsOverview: (transition) =>
       navigateTo({ kind: "projects-overview" }, transition),
     goToProject: (projectId, transition) =>
@@ -394,6 +397,7 @@ function createRemoteFallbackAppNavigation(): AppNavigation {
     goToWorkforce: (transition) =>
       navigateTo({ kind: "workforce" }, transition),
     goToExport: (transition) => navigateTo({ kind: "export" }, transition),
+    goToImported: (transition) => navigateTo({ kind: "imported" }, transition),
     goToProjectsOverview: (transition) =>
       navigateTo({ kind: "projects-overview" }, transition),
     goToProject: (projectId, transition) =>
