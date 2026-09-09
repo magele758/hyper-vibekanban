@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://localhost/disabled"]
+    }
+  }
+}

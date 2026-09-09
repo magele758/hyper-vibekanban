@@ -1,0 +1,114 @@
+# Unsigned desktop installers for local use.
+# macOS arm64 dmg (Apple Silicon / M4) + Windows x64 NSIS setup.exe
+#
+# Trigger: Actions → “Desktop artifacts” → Run workflow
+# or open a PR that touches this file. Cloud agents cannot workflow_dispatch;
+# they can push a desktop-v* tag instead.
+
+name: Desktop artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/desktop-artifacts.yml'
+      - 'crates/tauri-app/**'
+      - 'crates/server/**'
+      - 'packages/local-web/**'
+      - 'packages/web-core/**'
+      - 'packages/ui/**'
+  push:
+    tags:
+      - 'desktop-v*'
+
+concurrency:
+  group: desktop-artifacts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  NODE_VERSION: 22
+  PNPM_VERSION: 10.13.1
+  RUST_TOOLCHAIN: nightly-2025-12-04
+  SQLX_OFFLINE: 'true'
+  CARGO_PROFILE_RELEASE_DEBUG: '0'
+  VITE_VK_SHARED_API_BASE: ''
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            name: macos-arm64
+            rust_target: aarch64-apple-darwin
+            bundles: dmg
+          - os: windows-latest
+            name: windows-x64
+            rust_target: x86_64-pc-windows-msvc
+            bundles: nsis
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build local-web (embedded by server)
+        run: pnpm --filter @vibe/local-web run build
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.rust_target }}
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          shared-key: desktop-${{ matrix.name }}
+          cache-on-failure: true
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@2
+
+      - name: Build desktop bundle
+        working-directory: crates/tauri-app
+        env:
+          # Skip Apple code signing / notarization (unsigned, local use).
+          APPLE_SIGNING_IDENTITY: '-'
+          CI: 'true'
+        run: |
+          tauri build \
+            --target ${{ matrix.rust_target }} \
+            --bundles ${{ matrix.bundles }} \
+            --config tauri.ci.json
+
+      - name: List bundle output
+        run: |
+          echo "Bundle tree:"
+          find target/${{ matrix.rust_target }}/release/bundle -type f 2>/dev/null || true
+          find target/release/bundle -type f 2>/dev/null || true
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: vibe-kanban-${{ matrix.name }}
+          path: |
+            target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg
+            target/${{ matrix.rust_target }}/release/bundle/macos/*.app
+            target/${{ matrix.rust_target }}/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
