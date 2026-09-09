@@ -48,6 +48,8 @@ env:
   SQLX_OFFLINE: 'true'
   CARGO_PROFILE_RELEASE_DEBUG: '0'
   VITE_VK_SHARED_API_BASE: ''
+  # macos-15 default Node heap (~2GB) OOMs during vite minify of local-web.
+  NODE_OPTIONS: --max-old-space-size=8192
 
 jobs:
   build:
