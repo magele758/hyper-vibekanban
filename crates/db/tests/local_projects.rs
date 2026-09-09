@@ -39,7 +39,7 @@ async fn fresh_migrated_pool() -> Pool<Sqlite> {
 async fn local_project_crud_attach_repo_and_workspace() {
     let pool = fresh_migrated_pool().await;
 
-    let project = Project::create(&pool, "Lite Demo", None)
+    let project = Project::create(&pool, "Lite Demo", None, None)
         .await
         .expect("create project");
     assert_eq!(project.name, "Lite Demo");
