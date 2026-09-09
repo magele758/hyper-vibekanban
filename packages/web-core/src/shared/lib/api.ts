@@ -104,6 +104,10 @@ import {
   OpenRemoteWorkspaceInEditorRequest,
   OpenRemoteEditorResponse,
   ProfileResponse,
+  ImportWebExportResult,
+  ImportedProjectSummary,
+  ImportedProjectDetail,
+  CreateWorkspaceFromImportedTaskResponse,
 } from 'shared/types';
 import type { Project as RemoteProject } from 'shared/remote-types';
 import type { WorkspaceWithSession } from '@/shared/types/attempt';
@@ -1801,5 +1805,40 @@ export const searchApi = {
       options
     );
     return handleApiResponse<SearchResult[]>(response);
+  },
+};
+
+export const importApi = {
+  importWebExport: async (file: File): Promise<ImportWebExportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    // Do not set Content-Type: the browser must send the multipart boundary.
+    const response = await makeLocalApiRequest('/api/import/web-export', {
+      method: 'POST',
+      body: formData,
+    });
+    return handleApiResponse<ImportWebExportResult>(response);
+  },
+
+  listImportedProjects: async (): Promise<ImportedProjectSummary[]> => {
+    const response = await makeLocalApiRequest('/api/imported/projects');
+    return handleApiResponse<ImportedProjectSummary[]>(response);
+  },
+
+  getImportedProject: async (id: string): Promise<ImportedProjectDetail> => {
+    const response = await makeLocalApiRequest(`/api/imported/projects/${id}`);
+    return handleApiResponse<ImportedProjectDetail>(response);
+  },
+
+  createWorkspaceFromTask: async (
+    taskId: string
+  ): Promise<CreateWorkspaceFromImportedTaskResponse> => {
+    const response = await makeLocalApiRequest(
+      `/api/imported/tasks/${taskId}/workspace`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<CreateWorkspaceFromImportedTaskResponse>(response);
   },
 };

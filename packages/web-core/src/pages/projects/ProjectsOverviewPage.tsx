@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   FolderSimpleIcon,
   GitBranchIcon,
@@ -81,6 +82,9 @@ export function ProjectsOverviewPage({
   onCreateProject,
   onOpenProject,
 }: ProjectsOverviewPageProps) {
+  const { t } = useTranslation('common');
+  const appNavigation = useAppNavigation();
+
   return (
     <div className="h-full overflow-auto bg-primary">
       <div className="mx-auto w-full max-w-6xl px-base py-base sm:px-double sm:py-double">
@@ -125,6 +129,13 @@ export function ProjectsOverviewPage({
                 <option value="workspaces">Workspaces</option>
               </select>
             </label>
+            <button
+              type="button"
+              onClick={() => appNavigation.goToImported()}
+              className="inline-flex items-center gap-half rounded border border-border bg-secondary px-base py-half text-sm font-medium text-normal hover:border-brand hover:bg-panel"
+            >
+              {t('import.page.navLabel')}
+            </button>
             <button
               type="button"
               onClick={onCreateProject}
