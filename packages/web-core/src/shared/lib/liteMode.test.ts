@@ -14,6 +14,8 @@ describe('isLiteAllowedPath', () => {
     expect(isLiteAllowedPath('/workspaces/create')).toBe(true);
     expect(isLiteAllowedPath('/workspaces/abc')).toBe(true);
     expect(isLiteAllowedPath('/overview')).toBe(true);
+    expect(isLiteAllowedPath('/imported')).toBe(true);
+    expect(isLiteAllowedPath('/settings')).toBe(true);
   });
 
   it('blocks cloud and kanban routes', () => {

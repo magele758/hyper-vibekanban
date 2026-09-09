@@ -14,6 +14,18 @@ is_git: boolean, created_at: Date, updated_at: Date, };
 
 export type Project = { id: string, name: string, default_agent_working_dir: string | null, remote_project_id: string | null, created_at: Date, updated_at: Date, };
 
+export type Task = { id: string, project_id: string, title: string, description: string | null, status: TaskStatus, parent_workspace_id: string | null, created_at: Date, updated_at: Date, };
+
+export type TaskStatus = "todo" | "inprogress" | "inreview" | "done" | "cancelled";
+
+export type ImportWebExportResult = { projects_created: number, projects_reused: number, issues_created: number, issues_skipped: number, projects: Array<ImportedProjectSummary>, };
+
+export type ImportedProjectSummary = { id: string, name: string, issue_count: number, reused: boolean, };
+
+export type ImportedProjectDetail = { project: Project, tasks: Array<Task>, };
+
+export type CreateWorkspaceFromImportedTaskResponse = { workspace_id: string, };
+
 export type UpdateRepo = { display_name?: string | null, setup_script?: string | null, cleanup_script?: string | null, archive_script?: string | null, copy_files?: string | null, parallel_setup_script?: boolean | null, dev_server_script?: string | null, default_target_branch?: string | null, default_working_dir?: string | null, };
 
 export type SearchResult = { path: string, is_file: boolean, match_type: SearchMatchType, 

@@ -27,6 +27,7 @@ import {
 } from '@/shared/lib/executor';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { ImportWebExportCard } from '@/shared/components/ImportWebExportCard';
 import { TagManager } from '@/shared/components/TagManager';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
 import {
@@ -262,6 +263,13 @@ export function GeneralSettingsSection() {
           {t('settings.general.save.success')}
         </div>
       )}
+
+      <SettingsCard
+        title={t('import.settings.title', { ns: 'common' })}
+        description={t('import.settings.description', { ns: 'common' })}
+      >
+        <ImportWebExportCard />
+      </SettingsCard>
 
       {/* Appearance */}
       <SettingsCard

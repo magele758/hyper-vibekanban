@@ -612,11 +612,39 @@
       "emptyBody": "ワークスペースを作成してリポジトリを選べば開始できます。履歴はこのマシンに残ります。",
       "workspaceCount": "{{count}} 件のワークスペース",
       "workspaceCount_other": "{{count}} 件のワークスペース",
-      "noWorkspaces": "ワークスペースはまだありません"
+      "noWorkspaces": "ワークスペースはまだありません",
+      "importedProjects": "インポートしたプロジェクト"
     },
     "chrome": {
       "localLabel": "ローカル",
       "localWorkspaces": "ローカルワークスペース"
+    }
+  },
+  "import": {
+    "settings": {
+      "title": "Web プロジェクトをインポート",
+      "description": "以前の Web エクスポート ZIP からプロジェクトと Issue を取り込みます。CSV のみの古い ZIP も利用できます。",
+      "chooseFile": "エクスポート ZIP を選択",
+      "importing": "インポート中…",
+      "success": "新規 {{projectsCreated}} 件のプロジェクト（既存 {{projectsReused}} 件）と {{issuesCreated}} 件の Issue を取り込みました。",
+      "viewImported": "インポートしたプロジェクトを表示",
+      "error": "このファイルをインポートできませんでした。"
+    },
+    "page": {
+      "kicker": "ローカルデータ",
+      "title": "インポートしたプロジェクト",
+      "navLabel": "インポートしたプロジェクト",
+      "subtitle": "Web アプリから取り込んだプロジェクトです。Issue を開くとローカルワークスペースになり、説明がノートになります。",
+      "emptyTitle": "インポートしたプロジェクトはありません",
+      "emptyBody": "以前の Web 版からデータを書き出し、ここで、または設定から ZIP をインポートしてください。",
+      "issueCount": "{{count}} 件の Issue",
+      "issueCount_other": "{{count}} 件の Issue",
+      "openWorkspace": "ワークスペースを開く",
+      "openExisting": "ワークスペースを開く",
+      "opening": "開いています…",
+      "noIssues": "このプロジェクトに Issue はありません",
+      "loadingIssues": "Issue を読み込み中…",
+      "openError": "この Issue のワークスペースを開けませんでした。"
     }
   }
 }
