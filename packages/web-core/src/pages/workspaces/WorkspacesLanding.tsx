@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect } from 'react';
 import { SpinnerIcon } from '@phosphor-icons/react';
 import { MobileWorkspacesList } from '@/pages/workspaces/MobileWorkspacesList';
+import { LocalReposOverviewPage } from '@/pages/workspaces/LocalReposOverviewPage';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { getDestinationHostId } from '@/shared/lib/routes/appNavigation';
 
 export function WorkspacesLanding() {
@@ -13,6 +15,7 @@ export function WorkspacesLanding() {
   const runtime = useAppRuntime();
   const destination = useCurrentAppDestination();
   const isMobile = useIsMobile();
+  const { liteMode } = useUserSystem();
   const { setExecutionHostId } = useExecutionHostId();
   const destinationHostId = getDestinationHostId(destination);
 
@@ -30,16 +33,20 @@ export function WorkspacesLanding() {
   // users can open remote-host workspaces from the drawer (desktop AppBar
   // already exposes hosts; mobile previously had no list surface).
   useEffect(() => {
-    if (isMobile) {
+    if (isMobile || liteMode) {
       return;
     }
     appNavigation.goToWorkspacesCreate({
       replace: true,
     });
-  }, [appNavigation, isMobile]);
+  }, [appNavigation, isMobile, liteMode]);
 
   if (isMobile) {
     return <MobileWorkspacesList />;
+  }
+
+  if (liteMode) {
+    return <LocalReposOverviewPage />;
   }
 
   return (

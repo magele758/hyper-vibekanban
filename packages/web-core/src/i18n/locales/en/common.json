@@ -473,7 +473,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "Repo",
+      "noRepo": "No repo",
+      "filterDialogDescriptionLite": "Narrow down workspaces by local repo."
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "Submitting answers...",
     "answeredCount": "Answered {{count}} question",
     "answeredCount_other": "Answered {{count}} questions"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "Local client",
+      "title": "Repositories",
+      "subtitle": "Browse workspaces and conversation history by local repo.",
+      "searchPlaceholder": "Search repos or workspaces...",
+      "newWorkspace": "New workspace",
+      "emptyTitle": "No local repositories yet",
+      "emptyBody": "Create a workspace and choose a repo directory to start. History stays on this machine.",
+      "workspaceCount": "{{count}} workspace",
+      "workspaceCount_other": "{{count}} workspaces",
+      "noWorkspaces": "No workspaces yet"
+    },
+    "chrome": {
+      "localLabel": "Local",
+      "localWorkspaces": "Local workspaces"
+    }
   }
 }

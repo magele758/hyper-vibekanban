@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "リポジトリ",
+      "noRepo": "リポジトリなし",
+      "filterDialogDescriptionLite": "ローカルリポジトリでワークスペースを絞り込みます。"
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "回答を送信中...",
     "answeredCount": "{{count}}件の質問に回答済み",
     "answeredCount_other": "{{count}}件の質問に回答済み"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "ローカルクライアント",
+      "title": "リポジトリ",
+      "subtitle": "ローカルリポジトリごとにワークスペースと会話履歴を表示します。",
+      "searchPlaceholder": "リポジトリまたはワークスペースを検索...",
+      "newWorkspace": "新しいワークスペース",
+      "emptyTitle": "ローカルリポジトリがありません",
+      "emptyBody": "ワークスペースを作成してリポジトリを選べば開始できます。履歴はこのマシンに残ります。",
+      "workspaceCount": "{{count}} 件のワークスペース",
+      "workspaceCount_other": "{{count}} 件のワークスペース",
+      "noWorkspaces": "ワークスペースはまだありません"
+    },
+    "chrome": {
+      "localLabel": "ローカル",
+      "localWorkspaces": "ローカルワークスペース"
+    }
   }
 }

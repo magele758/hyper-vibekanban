@@ -45,6 +45,23 @@ export interface SettingsSectionDefinition {
   group: SettingsSectionGroup;
 }
 
+const LITE_HIDDEN_SECTIONS = new Set<SettingsSectionType>([
+  'organizations',
+  'remote-projects',
+  'relay',
+]);
+
+export function getVisibleSettingsSections(
+  liteMode: boolean
+): SettingsSectionDefinition[] {
+  if (!liteMode) {
+    return SETTINGS_SECTION_DEFINITIONS;
+  }
+  return SETTINGS_SECTION_DEFINITIONS.filter(
+    (section) => !LITE_HIDDEN_SECTIONS.has(section.id)
+  );
+}
+
 export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'general', icon: GearIcon, group: 'host' },
   { id: 'repos', icon: GitBranchIcon, group: 'host' },

@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "仓库",
+      "noRepo": "未关联仓库",
+      "filterDialogDescriptionLite": "按本机仓库筛选工作区。"
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "正在提交回答...",
     "answeredCount": "已回答{{count}}个问题",
     "answeredCount_other": "已回答{{count}}个问题"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "本地客户端",
+      "title": "仓库",
+      "subtitle": "按本机仓库查看工作区和对话历史。",
+      "searchPlaceholder": "搜索仓库或工作区...",
+      "newWorkspace": "新建工作区",
+      "emptyTitle": "还没有本地仓库",
+      "emptyBody": "创建一个工作区并选择代码目录即可开始。历史只保存在本机。",
+      "workspaceCount": "{{count}} 个工作区",
+      "workspaceCount_other": "{{count}} 个工作区",
+      "noWorkspaces": "还没有工作区"
+    },
+    "chrome": {
+      "localLabel": "本地",
+      "localWorkspaces": "本地工作区"
+    }
   }
 }

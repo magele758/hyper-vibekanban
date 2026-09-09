@@ -9,6 +9,8 @@ unset VK_SHARED_API_BASE
 unset VK_SHARED_RELAY_API_BASE
 unset VK_TUNNEL
 export VITE_VK_SHARED_API_BASE=
+export VK_LITE=1
+export VITE_VK_LITE=1
 
 export RUST_LOG="${RUST_LOG:-info}"
 export DISABLE_WORKTREE_CLEANUP=1
@@ -28,7 +30,7 @@ node scripts/apply-local-lite-mode.js
 # Invalidate compile-time remote API embedding from any prior build with VK_SHARED_API_BASE set.
 touch crates/server/build.rs crates/local-deployment/build.rs
 
-echo "Starting dev (frontend + backend, no cloud login)..."
+echo "Starting lite Desktop (workspaces + local repos, no Remote/kanban)..."
 exec env -u VK_SHARED_API_BASE -u VK_SHARED_RELAY_API_BASE -u VK_TUNNEL \
-  VITE_VK_SHARED_API_BASE= \
+  VK_LITE=1 VITE_VK_LITE=1 VITE_VK_SHARED_API_BASE= \
   pnpm run dev:lite:run

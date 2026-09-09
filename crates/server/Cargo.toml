@@ -79,3 +79,4 @@ strum = "0.27.2"
 [features]
 default = []
 qa-mode = ["services/qa-mode", "executors/qa-mode"]
+lite = ["local-deployment/lite", "utils/lite"]

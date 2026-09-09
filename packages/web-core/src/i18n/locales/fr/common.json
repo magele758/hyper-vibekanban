@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "Dépôt",
+      "noRepo": "Sans dépôt",
+      "filterDialogDescriptionLite": "Filtrer les workspaces par dépôt local."
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "Envoi des réponses...",
     "answeredCount": "Répondu à {{count}} question",
     "answeredCount_other": "Répondu à {{count}} questions"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "Client local",
+      "title": "Dépôts",
+      "subtitle": "Parcourez les workspaces et l'historique de conversation par dépôt local.",
+      "searchPlaceholder": "Rechercher des dépôts ou workspaces...",
+      "newWorkspace": "Nouveau workspace",
+      "emptyTitle": "Aucun dépôt local",
+      "emptyBody": "Créez un workspace et choisissez un dossier de dépôt. L'historique reste sur cette machine.",
+      "workspaceCount": "{{count}} workspace",
+      "workspaceCount_other": "{{count}} workspaces",
+      "noWorkspaces": "Aucun workspace"
+    },
+    "chrome": {
+      "localLabel": "Local",
+      "localWorkspaces": "Workspaces locaux"
+    }
   }
 }

@@ -43,6 +43,7 @@ use workspace_manager::WorkspaceManager;
 use worktree_manager::WorktreeManager;
 
 use crate::{container::LocalContainerService, pty::PtyService};
+#[cfg(not(feature = "lite"))]
 mod agent_task_watcher;
 mod command;
 pub mod container;
@@ -169,12 +170,27 @@ impl Deployment for LocalDeployment {
         let profile_cache = Arc::new(RwLock::new(None));
         let auth_context = AuthContext::new(oauth_credentials.clone(), profile_cache.clone());
 
-        let api_base = std::env::var("VK_SHARED_API_BASE")
-            .ok()
-            .or_else(|| option_env!("VK_SHARED_API_BASE").map(|s| s.to_string()));
-        let relay_api_base = std::env::var("VK_SHARED_RELAY_API_BASE")
-            .ok()
-            .or_else(|| option_env!("VK_SHARED_RELAY_API_BASE").map(|s| s.to_string()));
+        let lite_mode = utils::lite::is_lite_mode();
+        if lite_mode {
+            tracing::info!(
+                "VK lite mode: remote client, relay hosts, and agent-task watcher disabled"
+            );
+        }
+
+        let api_base = if lite_mode {
+            None
+        } else {
+            std::env::var("VK_SHARED_API_BASE")
+                .ok()
+                .or_else(|| option_env!("VK_SHARED_API_BASE").map(|s| s.to_string()))
+        };
+        let relay_api_base = if lite_mode {
+            None
+        } else {
+            std::env::var("VK_SHARED_RELAY_API_BASE")
+                .ok()
+                .or_else(|| option_env!("VK_SHARED_RELAY_API_BASE").map(|s| s.to_string()))
+        };
         let remote_info = RemoteInfo::new();
         if let Some(api_base) = api_base.clone() {
             remote_info
@@ -199,7 +215,11 @@ impl Deployment for LocalDeployment {
                 }
             },
             None => {
-                tracing::info!("VK_SHARED_API_BASE not set; remote features disabled");
+                if lite_mode {
+                    tracing::info!("lite mode: remote client not initialized");
+                } else {
+                    tracing::info!("VK_SHARED_API_BASE not set; remote features disabled");
+                }
                 Err(RemoteClientNotConfigured)
             }
         };
@@ -240,17 +260,21 @@ impl Deployment for LocalDeployment {
         let file_search_cache = Arc::new(FileSearchCache::new());
 
         let pty = PtyService::new();
-        let relay_hosts = match remote_client.clone().ok() {
-            Some(remote_client) => Some(Arc::new(
-                RelayHosts::load(
-                    remote_client,
-                    remote_info.clone(),
-                    relay_signing.clone(),
-                    shutdown.child_token(),
-                )
-                .await,
-            )),
-            None => None,
+        let relay_hosts = if lite_mode {
+            None
+        } else {
+            match remote_client.clone().ok() {
+                Some(remote_client) => Some(Arc::new(
+                    RelayHosts::load(
+                        remote_client,
+                        remote_info.clone(),
+                        relay_signing.clone(),
+                        shutdown.child_token(),
+                    )
+                    .await,
+                )),
+                None => None,
+            }
         };
         let pr_sync_notify = Arc::new(Notify::new());
         {
@@ -264,7 +288,8 @@ impl Deployment for LocalDeployment {
             PrMonitorService::spawn(db, analytics, container, rc, pr_sync_notify.clone()).await;
         }
 
-        if let Ok(remote_client) = remote_client.clone() {
+        #[cfg(not(feature = "lite"))]
+        if !lite_mode && let Ok(remote_client) = remote_client.clone() {
             let host_id = std::env::var("HOSTNAME")
                 .or_else(|_| std::env::var("HOST"))
                 .unwrap_or_else(|_| user_id.clone());

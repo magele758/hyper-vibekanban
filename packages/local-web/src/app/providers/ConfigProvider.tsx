@@ -46,12 +46,12 @@ export function UserSystemProvider({ children }: UserSystemProviderProps) {
   }, [value.loginStatus?.status, value.remoteAuthDegraded]);
 
   useEffect(() => {
-    if (value.loginStatus?.status !== 'loggedin') {
+    if (value.liteMode || value.loginStatus?.status !== 'loggedin') {
       void refreshLocalRelayHostId(null);
       return;
     }
     void refreshLocalRelayHostId(value.machineId);
-  }, [value.loginStatus?.status, value.machineId]);
+  }, [value.liteMode, value.loginStatus?.status, value.machineId]);
 
   return (
     <UserSystemContext.Provider value={value}>

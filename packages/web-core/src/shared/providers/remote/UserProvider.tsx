@@ -2,6 +2,7 @@ import { useMemo, useCallback, type ReactNode } from 'react';
 import { useShape } from '@/shared/integrations/electric/hooks';
 import { USER_WORKSPACES_SHAPE, USER_INBOX_SHAPE } from 'shared/remote-types';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import {
   UserContext,
   type UserContextValue,
@@ -13,10 +14,11 @@ interface UserProviderProps {
 
 export function UserProvider({ children }: UserProviderProps) {
   const { isSignedIn } = useAuth();
+  const { liteMode } = useUserSystem();
 
   // No params needed - backend gets user from auth context
   const params = useMemo(() => ({}), []);
-  const enabled = isSignedIn;
+  const enabled = isSignedIn && !liteMode;
 
   // Shape subscriptions
   const workspacesResult = useShape(USER_WORKSPACES_SHAPE, params, { enabled });

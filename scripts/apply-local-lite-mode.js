@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Plan A: local-only dev — no Remote API, no cloud login.
+ * Lite Desktop: no Remote API, no cloud login, no kanban.
  * Patches dev_assets/config.json and removes stale OAuth credentials.
  */
 const fs = require('fs');

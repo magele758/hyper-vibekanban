@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "Repo",
+      "noRepo": "Sin repo",
+      "filterDialogDescriptionLite": "Filtra workspaces por repo local."
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "Enviando respuestas...",
     "answeredCount": "Respondió {{count}} pregunta",
     "answeredCount_other": "Respondió {{count}} preguntas"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "Cliente local",
+      "title": "Repositorios",
+      "subtitle": "Consulta workspaces e historial de conversación por repo local.",
+      "searchPlaceholder": "Buscar repos o workspaces...",
+      "newWorkspace": "Nuevo workspace",
+      "emptyTitle": "Aún no hay repositorios locales",
+      "emptyBody": "Crea un workspace y elige un directorio. El historial se queda en esta máquina.",
+      "workspaceCount": "{{count}} workspace",
+      "workspaceCount_other": "{{count}} workspaces",
+      "noWorkspaces": "Aún no hay workspaces"
+    },
+    "chrome": {
+      "localLabel": "Local",
+      "localWorkspaces": "Workspaces locales"
+    }
   }
 }

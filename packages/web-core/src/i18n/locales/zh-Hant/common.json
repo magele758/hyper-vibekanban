@@ -459,7 +459,10 @@
       "prFilterNoPr": "No PR",
       "noProject": "No project",
       "sortButtonTitle": "Sort workspaces",
-      "filterButtonTitle": "Filter workspaces"
+      "filterButtonTitle": "Filter workspaces",
+      "repoFilterLabel": "倉庫",
+      "noRepo": "未關聯倉庫",
+      "filterDialogDescriptionLite": "依本機倉庫篩選工作區。"
     },
     "sortAscending": "Ascending",
     "sortDescending": "Descending",
@@ -597,5 +600,23 @@
     "submitting": "正在提交回答...",
     "answeredCount": "已回答{{count}}個問題",
     "answeredCount_other": "已回答{{count}}個問題"
+  },
+  "lite": {
+    "overview": {
+      "kicker": "本機用戶端",
+      "title": "倉庫",
+      "subtitle": "依本機倉庫檢視工作區與對話歷史。",
+      "searchPlaceholder": "搜尋倉庫或工作區...",
+      "newWorkspace": "新增工作區",
+      "emptyTitle": "尚無本機倉庫",
+      "emptyBody": "建立工作區並選擇程式碼目錄即可開始。歷史只保存在本機。",
+      "workspaceCount": "{{count}} 個工作區",
+      "workspaceCount_other": "{{count}} 個工作區",
+      "noWorkspaces": "尚無工作區"
+    },
+    "chrome": {
+      "localLabel": "本機",
+      "localWorkspaces": "本機工作區"
+    }
   }
 }

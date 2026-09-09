@@ -88,6 +88,7 @@ interface AppBarProps {
   onNavigateCopilot?: (projectId: string) => void;
   onNavigateInbox?: (projectId: string) => void;
   activeProjectSubNav?: 'board' | 'agents' | 'copilot' | 'inbox' | null;
+  hideCloudSections?: boolean;
 }
 
 export interface AppBarProject {
@@ -283,6 +284,7 @@ export function AppBar({
   onNavigateCopilot,
   onNavigateInbox,
   activeProjectSubNav = null,
+  hideCloudSections = false,
 }: AppBarProps) {
   const { t } = useTranslation('common');
   const sections: AppBarSection[] = [];
@@ -304,7 +306,7 @@ export function AppBar({
     });
   }
 
-  if (hosts.length > 0 || onPairHostClick) {
+  if (!hideCloudSections && (hosts.length > 0 || onPairHostClick)) {
     sections.push({
       key: 'remote',
       label: 'Remote',
@@ -341,7 +343,7 @@ export function AppBar({
 
   const projectSectionItems: AppBarSectionItem[] = [];
 
-  if (isSignedIn && onProjectsOverviewClick) {
+  if (!hideCloudSections && isSignedIn && onProjectsOverviewClick) {
     projectSectionItems.push({
       key: 'projects-overview',
       kind: 'icon-button',
@@ -353,7 +355,7 @@ export function AppBar({
     });
   }
 
-  if (!isSignedIn) {
+  if (!hideCloudSections && !isSignedIn) {
     projectSectionItems.push({
       key: 'kanban-cta',
       kind: 'kanban-cta',
@@ -362,11 +364,11 @@ export function AppBar({
     });
   }
 
-  if (isLoadingProjects) {
+  if (!hideCloudSections && isLoadingProjects) {
     projectSectionItems.push({ key: 'projects-loading', kind: 'loading' });
   }
 
-  if (projects.length > 0) {
+  if (!hideCloudSections && projects.length > 0) {
     projectSectionItems.push({
       key: 'project-list',
       kind: 'project-list',
@@ -379,7 +381,7 @@ export function AppBar({
     });
   }
 
-  if (isSignedIn) {
+  if (!hideCloudSections && isSignedIn) {
     projectSectionItems.push({
       key: 'create-project',
       kind: 'icon-button',
@@ -399,7 +401,7 @@ export function AppBar({
     });
   }
 
-  if (isSignedIn && onAgentsClick) {
+  if (!hideCloudSections && isSignedIn && onAgentsClick) {
     const agentsItems: AppBarSectionItem[] = [
       {
         key: 'global-agents',
@@ -431,7 +433,7 @@ export function AppBar({
     });
   }
 
-  if (isSignedIn && onExportClick) {
+  if (!hideCloudSections && isSignedIn && onExportClick) {
     sections.push({
       key: 'export',
       label: 'Export',
