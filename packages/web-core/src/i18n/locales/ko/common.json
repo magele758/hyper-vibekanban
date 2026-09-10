@@ -679,6 +679,7 @@
       "chooseFile": "내보내기 ZIP 선택",
       "importing": "가져오는 중…",
       "success": "새 프로젝트 {{projectsCreated}}개(기존 {{projectsReused}}개)와 이슈 {{issuesCreated}}개를 가져왔습니다.",
+      "viewImported": "가져온 프로젝트 보기",
       "viewInProjects": "프로젝트에서 보기",
       "error": "해당 파일을 가져올 수 없습니다."
     },

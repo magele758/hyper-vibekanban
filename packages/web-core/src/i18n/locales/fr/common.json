@@ -679,6 +679,7 @@
       "chooseFile": "Choisir un ZIP d'export",
       "importing": "Import en cours…",
       "success": "{{projectsCreated}} nouveaux projets importés ({{projectsReused}} existants) et {{issuesCreated}} issues.",
+      "viewImported": "Voir les projets importés",
       "viewInProjects": "Voir dans Projets",
       "error": "Impossible d'importer ce fichier."
     },

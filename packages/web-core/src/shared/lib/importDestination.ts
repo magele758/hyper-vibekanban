@@ -4,6 +4,7 @@ export type ImportDestination =
   | { kind: 'project'; projectId: string }
   | { kind: 'overview' };
 
+/** Lite-only: full clients keep imported rows on `/imported`. */
 export function destinationAfterWebImport(
   result: ImportWebExportResult
 ): ImportDestination {

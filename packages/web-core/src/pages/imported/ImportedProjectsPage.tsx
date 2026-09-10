@@ -13,6 +13,7 @@ import {
 } from '@/shared/components/ImportWebExportCard';
 import { ImportedIssueList } from '@/shared/components/ImportedIssueList';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { importApi } from '@/shared/lib/api';
 import type { ImportedProjectSummary } from 'shared/types';
 
@@ -81,6 +82,7 @@ export function ImportedProjectsPage() {
 
 function ImportedProjectCard({ project }: { project: ImportedProjectSummary }) {
   const { t } = useTranslation('common');
+  const { liteMode } = useUserSystem();
   const appNavigation = useAppNavigation();
   const [open, setOpen] = useState(false);
   const { data, isFetching } = useQuery({
@@ -111,14 +113,16 @@ function ImportedProjectCard({ project }: { project: ImportedProjectSummary }) {
             <CaretRightIcon className="size-icon-base text-low" />
           )}
         </button>
-        <button
-          type="button"
-          onClick={() => appNavigation.goToProject(project.id)}
-          className="inline-flex shrink-0 items-center gap-half rounded border border-border px-half py-half text-xs font-medium text-normal hover:border-brand hover:bg-panel"
-        >
-          <SquaresFourIcon className="size-3" />
-          {t('import.page.openProject')}
-        </button>
+        {liteMode && (
+          <button
+            type="button"
+            onClick={() => appNavigation.goToProject(project.id)}
+            className="inline-flex shrink-0 items-center gap-half rounded border border-border px-half py-half text-xs font-medium text-normal hover:border-brand hover:bg-panel"
+          >
+            <SquaresFourIcon className="size-3" />
+            {t('import.page.openProject')}
+          </button>
+        )}
       </div>
 
       {open && (

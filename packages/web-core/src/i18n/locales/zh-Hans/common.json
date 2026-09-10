@@ -679,6 +679,7 @@
       "chooseFile": "选择导出 ZIP",
       "importing": "正在导入…",
       "success": "已导入 {{projectsCreated}} 个新项目（复用 {{projectsReused}} 个）和 {{issuesCreated}} 个议题。",
+      "viewImported": "查看已导入的项目",
       "viewInProjects": "在项目中查看",
       "error": "无法导入该文件。"
     },

@@ -679,6 +679,7 @@
       "chooseFile": "エクスポート ZIP を選択",
       "importing": "インポート中…",
       "success": "新規 {{projectsCreated}} 件のプロジェクト（既存 {{projectsReused}} 件）と {{issuesCreated}} 件の Issue を取り込みました。",
+      "viewImported": "インポートしたプロジェクトを表示",
       "viewInProjects": "プロジェクトで表示",
       "error": "このファイルをインポートできませんでした。"
     },

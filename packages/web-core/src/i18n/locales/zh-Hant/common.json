@@ -679,6 +679,7 @@
       "chooseFile": "選擇匯出 ZIP",
       "importing": "正在匯入…",
       "success": "已匯入 {{projectsCreated}} 個新專案（沿用 {{projectsReused}} 個）與 {{issuesCreated}} 個議題。",
+      "viewImported": "檢視已匯入的專案",
       "viewInProjects": "在專案中檢視",
       "error": "無法匯入該檔案。"
     },
