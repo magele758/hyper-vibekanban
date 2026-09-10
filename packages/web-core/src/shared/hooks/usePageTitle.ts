@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { isViteLiteMode, productDisplayName } from '@/shared/lib/liteMode';
 
-const BASE_TITLE = 'Vibe Kanban';
+const BASE_TITLE = productDisplayName(isViteLiteMode());
 
 /**
  * Sets the document title based on the given parts.

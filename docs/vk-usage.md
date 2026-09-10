@@ -101,9 +101,9 @@ pnpm run remote:up
 # 然后浏览器打开 http://localhost:13000
 ```
 
-## 纯本地 Lite（无 Docker、无云、无看板）
+## 纯本地 Maestro（无 Docker、无云、无看板）
 
-`pnpm run dev:lite` 起的是本仓瘦客户端：SQLite + worktree + executor 对话 UI。
+`pnpm run dev:lite` 起的是本仓 Maestro 瘦客户端：SQLite + worktree + executor 对话 UI。
 按本地仓库看 Workspace/Session 历史，不挂 Remote、组织、看板、Relay。
 
 ```bash

@@ -25,6 +25,11 @@ use uuid::Uuid;
 
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 
+#[cfg(feature = "lite")]
+const WINDOW_TITLE: &str = "Maestro";
+#[cfg(not(feature = "lite"))]
+const WINDOW_TITLE: &str = "Vibe Kanban";
+
 #[cfg(target_os = "linux")]
 mod linux_notifications;
 #[cfg(target_os = "macos")]
@@ -380,7 +385,7 @@ fn create_window<R: tauri::Runtime, M: tauri::Manager<R>>(
 ) -> Result<tauri::WebviewWindow<R>, tauri::Error> {
     let handle = manager.app_handle().clone();
     let builder = tauri::WebviewWindowBuilder::new(manager, "main", url)
-        .title("Vibe Kanban")
+        .title(WINDOW_TITLE)
         .inner_size(1280.0, 800.0)
         .min_inner_size(800.0, 600.0)
         .resizable(true)

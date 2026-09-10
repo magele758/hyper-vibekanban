@@ -1,13 +1,13 @@
 {
-  "productName": "Vibe Kanban Lite",
+  "productName": "Maestro",
   "identifier": "ai.bloop.vibe-kanban-lite",
   "bundle": {
     "createUpdaterArtifacts": false,
     "macOS": {
-      "bundleName": "Vibe Kanban Lite"
+      "bundleName": "Maestro"
     },
     "shortDescription": "Local AI workspace without Remote or kanban",
-    "longDescription": "Vibe Kanban Lite: local sessions, workspaces, and worktrees without Remote or kanban"
+    "longDescription": "Maestro: local sessions, workspaces, and worktrees without Remote or kanban"
   },
   "plugins": {
     "updater": {
