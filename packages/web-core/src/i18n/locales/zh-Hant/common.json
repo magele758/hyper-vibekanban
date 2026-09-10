@@ -666,7 +666,10 @@
       "deleteMessage": "只會刪除「{{name}}」這個分組。倉庫與工作區仍留在本機。",
       "deleteConfirm": "刪除",
       "deleteError": "無法刪除專案",
-      "notFound": "找不到專案"
+      "notFound": "找不到專案",
+      "issueCount": "{{count}} 個議題",
+      "issueCount_other": "{{count}} 個議題",
+      "issuesHeading": "已匯入的議題"
     }
   },
   "import": {
@@ -677,6 +680,7 @@
       "importing": "正在匯入…",
       "success": "已匯入 {{projectsCreated}} 個新專案（沿用 {{projectsReused}} 個）與 {{issuesCreated}} 個議題。",
       "viewImported": "檢視已匯入的專案",
+      "viewInProjects": "在專案中檢視",
       "error": "無法匯入該檔案。"
     },
     "page": {
@@ -693,7 +697,8 @@
       "opening": "正在開啟…",
       "noIssues": "此專案沒有議題",
       "loadingIssues": "正在載入議題…",
-      "openError": "無法為此議題開啟工作區。"
+      "openError": "無法為此議題開啟工作區。",
+      "openProject": "開啟專案"
     }
   }
 }

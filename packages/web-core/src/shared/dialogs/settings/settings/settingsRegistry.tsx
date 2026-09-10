@@ -88,7 +88,7 @@ export function renderSettingsSection(
 ) {
   switch (type) {
     case 'general':
-      return <GeneralSettingsSection />;
+      return <GeneralSettingsSection onClose={onClose} />;
     case 'repos':
       return (
         <ReposSettingsSection
@@ -117,6 +117,6 @@ export function renderSettingsSection(
         />
       );
     default:
-      return <GeneralSettingsSection />;
+      return <GeneralSettingsSection onClose={onClose} />;
   }
 }

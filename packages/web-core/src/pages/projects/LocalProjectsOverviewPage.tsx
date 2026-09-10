@@ -6,9 +6,12 @@ import {
   PlusIcon,
   SquaresFourIcon,
 } from '@phosphor-icons/react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useLocalProjects } from '@/shared/hooks/useLocalProjects';
+import { IMPORTED_PROJECTS_QUERY_KEY } from '@/shared/components/ImportWebExportCard';
+import { importApi } from '@/shared/lib/api';
 import {
   CreateLocalProjectDialog,
   type CreateLocalProjectResult,
@@ -21,6 +24,17 @@ export function LocalProjectsOverviewPage() {
   const appNavigation = useAppNavigation();
   const [search, setSearch] = useState('');
   const { data: projects = [], isLoading } = useLocalProjects();
+  const { data: importedProjects = [] } = useQuery({
+    queryKey: IMPORTED_PROJECTS_QUERY_KEY,
+    queryFn: () => importApi.listImportedProjects(),
+  });
+  const issueCountById = useMemo(
+    () =>
+      new Map(
+        importedProjects.map((project) => [project.id, project.issue_count])
+      ),
+    [importedProjects]
+  );
 
   const cards = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -144,6 +158,14 @@ export function LocalProjectsOverviewPage() {
                         {t('lite.projects.workspaceCount', {
                           count: project.workspace_count,
                         })}
+                        {(issueCountById.get(project.id) ?? 0) > 0 && (
+                          <>
+                            {' · '}
+                            {t('lite.projects.issueCount', {
+                              count: issueCountById.get(project.id) ?? 0,
+                            })}
+                          </>
+                        )}
                       </p>
                     </div>
                     <span className="shrink-0 text-xs text-low">

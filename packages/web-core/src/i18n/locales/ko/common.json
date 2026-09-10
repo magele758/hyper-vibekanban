@@ -666,7 +666,10 @@
       "deleteMessage": "\"{{name}}\" 그룹만 삭제됩니다. 저장소와 워크스페이스는 이 기기에 남습니다.",
       "deleteConfirm": "삭제",
       "deleteError": "프로젝트를 삭제할 수 없습니다",
-      "notFound": "프로젝트를 찾을 수 없습니다"
+      "notFound": "프로젝트를 찾을 수 없습니다",
+      "issueCount": "이슈 {{count}}개",
+      "issueCount_other": "이슈 {{count}}개",
+      "issuesHeading": "가져온 이슈"
     }
   },
   "import": {
@@ -677,6 +680,7 @@
       "importing": "가져오는 중…",
       "success": "새 프로젝트 {{projectsCreated}}개(기존 {{projectsReused}}개)와 이슈 {{issuesCreated}}개를 가져왔습니다.",
       "viewImported": "가져온 프로젝트 보기",
+      "viewInProjects": "프로젝트에서 보기",
       "error": "해당 파일을 가져올 수 없습니다."
     },
     "page": {
@@ -693,7 +697,8 @@
       "opening": "여는 중…",
       "noIssues": "이 프로젝트에 이슈가 없습니다",
       "loadingIssues": "이슈를 불러오는 중…",
-      "openError": "이 이슈의 워크스페이스를 열 수 없습니다."
+      "openError": "이 이슈의 워크스페이스를 열 수 없습니다.",
+      "openProject": "프로젝트 열기"
     }
   }
 }

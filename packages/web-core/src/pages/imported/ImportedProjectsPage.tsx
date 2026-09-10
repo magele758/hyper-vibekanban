@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import {
-  ArrowSquareOutIcon,
   CaretDownIcon,
   CaretRightIcon,
-  SpinnerIcon,
+  SquaresFourIcon,
   TrayArrowDownIcon,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,10 +11,11 @@ import {
   IMPORTED_PROJECTS_QUERY_KEY,
   ImportWebExportCard,
 } from '@/shared/components/ImportWebExportCard';
+import { ImportedIssueList } from '@/shared/components/ImportedIssueList';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { importApi } from '@/shared/lib/api';
-import { cn } from '@/shared/lib/utils';
-import type { ImportedProjectSummary, Task } from 'shared/types';
+import type { ImportedProjectSummary } from 'shared/types';
 
 export function ImportedProjectsPage() {
   const { t } = useTranslation('common');
@@ -82,6 +82,8 @@ export function ImportedProjectsPage() {
 
 function ImportedProjectCard({ project }: { project: ImportedProjectSummary }) {
   const { t } = useTranslation('common');
+  const { liteMode } = useUserSystem();
+  const appNavigation = useAppNavigation();
   const [open, setOpen] = useState(false);
   const { data, isFetching } = useQuery({
     queryKey: [...IMPORTED_PROJECTS_QUERY_KEY, project.id],
@@ -91,106 +93,46 @@ function ImportedProjectCard({ project }: { project: ImportedProjectSummary }) {
 
   return (
     <li className="rounded-md border border-border bg-secondary">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-base px-base py-base text-left"
-      >
-        <span className="min-w-0">
-          <span className="block truncate text-base font-medium text-high">
-            {project.name}
+      <div className="flex items-center gap-half px-base py-base">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center justify-between gap-base text-left"
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-base font-medium text-high">
+              {project.name}
+            </span>
+            <span className="text-sm text-low">
+              {t('import.page.issueCount', { count: project.issue_count })}
+            </span>
           </span>
-          <span className="text-sm text-low">
-            {t('import.page.issueCount', { count: project.issue_count })}
-          </span>
-        </span>
-        {open ? (
-          <CaretDownIcon className="size-icon-base text-low" />
-        ) : (
-          <CaretRightIcon className="size-icon-base text-low" />
+          {open ? (
+            <CaretDownIcon className="size-icon-base text-low" />
+          ) : (
+            <CaretRightIcon className="size-icon-base text-low" />
+          )}
+        </button>
+        {liteMode && (
+          <button
+            type="button"
+            onClick={() => appNavigation.goToProject(project.id)}
+            className="inline-flex shrink-0 items-center gap-half rounded border border-border px-half py-half text-xs font-medium text-normal hover:border-brand hover:bg-panel"
+          >
+            <SquaresFourIcon className="size-3" />
+            {t('import.page.openProject')}
+          </button>
         )}
-      </button>
+      </div>
 
       {open && (
         <div className="border-t border-border px-base py-base">
-          {isFetching && !data ? (
-            <div className="flex items-center gap-half text-sm text-low">
-              <SpinnerIcon className="size-icon-sm animate-spin" />
-              {t('import.page.loadingIssues')}
-            </div>
-          ) : !data || data.tasks.length === 0 ? (
-            <p className="text-sm text-low">{t('import.page.noIssues')}</p>
-          ) : (
-            <ul className="space-y-half">
-              {data.tasks.map((task) => (
-                <ImportedIssueRow key={task.id} task={task} />
-              ))}
-            </ul>
-          )}
+          <ImportedIssueList
+            tasks={data?.tasks ?? []}
+            isLoading={isFetching && !data}
+          />
         </div>
       )}
-    </li>
-  );
-}
-
-function ImportedIssueRow({ task }: { task: Task }) {
-  const { t } = useTranslation('common');
-  const appNavigation = useAppNavigation();
-  const [opening, setOpening] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleOpen = async () => {
-    setOpening(true);
-    setError(null);
-    try {
-      const result = await importApi.createWorkspaceFromTask(task.id);
-      appNavigation.goToWorkspace(result.workspace_id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('import.page.openError'));
-    } finally {
-      setOpening(false);
-    }
-  };
-
-  return (
-    <li className="rounded border border-transparent px-half py-half hover:border-border hover:bg-panel">
-      <div className="flex items-start justify-between gap-base">
-        <div className="min-w-0">
-          <p className="truncate text-sm text-normal">{task.title}</p>
-          <p className="text-xs text-low">{task.status}</p>
-          {task.description && (
-            <p className="mt-half line-clamp-2 text-xs text-low">
-              {task.description}
-            </p>
-          )}
-          {error && (
-            <p className="mt-half text-xs text-error" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          disabled={opening}
-          onClick={() => {
-            void handleOpen();
-          }}
-          className={cn(
-            'inline-flex shrink-0 items-center gap-half rounded border border-brand/50 px-half py-half text-xs font-medium text-brand hover:border-brand disabled:opacity-60'
-          )}
-        >
-          {opening ? (
-            <SpinnerIcon className="size-3 animate-spin" />
-          ) : (
-            <ArrowSquareOutIcon className="size-3" />
-          )}
-          {opening
-            ? t('import.page.opening')
-            : task.parent_workspace_id
-              ? t('import.page.openExisting')
-              : t('import.page.openWorkspace')}
-        </button>
-      </div>
     </li>
   );
 }

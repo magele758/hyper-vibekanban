@@ -4,18 +4,24 @@ import { useTranslation } from 'react-i18next';
 import { FileArrowUpIcon, SpinnerIcon } from '@phosphor-icons/react';
 import { ApiError, importApi } from '@/shared/lib/api';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { localProjectKeys } from '@/shared/hooks/useLocalProjects';
+import { destinationAfterWebImport } from '@/shared/lib/importDestination';
 import type { ImportWebExportResult } from 'shared/types';
 
 export const IMPORTED_PROJECTS_QUERY_KEY = ['imported-projects'] as const;
 
 type ImportWebExportCardProps = {
   showViewLink?: boolean;
+  onImported?: () => void;
 };
 
 export function ImportWebExportCard({
   showViewLink = true,
+  onImported,
 }: ImportWebExportCardProps) {
   const { t } = useTranslation('common');
+  const { liteMode } = useUserSystem();
   const appNavigation = useAppNavigation();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +42,23 @@ export function ImportWebExportCard({
       await queryClient.invalidateQueries({
         queryKey: IMPORTED_PROJECTS_QUERY_KEY,
       });
+      if (liteMode) {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: localProjectKeys.all }),
+          ...imported.projects.map((project) =>
+            queryClient.invalidateQueries({
+              queryKey: localProjectKeys.detail(project.id),
+            })
+          ),
+        ]);
+        onImported?.();
+        const destination = destinationAfterWebImport(imported);
+        if (destination.kind === 'project') {
+          appNavigation.goToProject(destination.projectId);
+        } else {
+          appNavigation.goToProjectsOverview();
+        }
+      }
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : t('import.settings.error');
@@ -94,10 +117,16 @@ export function ImportWebExportCard({
       {showViewLink && (
         <button
           type="button"
-          onClick={() => appNavigation.goToImported()}
+          onClick={() =>
+            liteMode
+              ? appNavigation.goToProjectsOverview()
+              : appNavigation.goToImported()
+          }
           className="text-sm font-medium text-brand hover:underline"
         >
-          {t('import.settings.viewImported')}
+          {liteMode
+            ? t('import.settings.viewInProjects')
+            : t('import.settings.viewImported')}
         </button>
       )}
     </div>

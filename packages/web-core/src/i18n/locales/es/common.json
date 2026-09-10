@@ -666,7 +666,10 @@
       "deleteMessage": "Esto quita el agrupamiento \"{{name}}\". Los repos y workspaces siguen en esta máquina.",
       "deleteConfirm": "Eliminar",
       "deleteError": "No se pudo eliminar el proyecto",
-      "notFound": "Proyecto no encontrado"
+      "notFound": "Proyecto no encontrado",
+      "issueCount": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "issuesHeading": "Issues importados"
     }
   },
   "import": {
@@ -677,6 +680,7 @@
       "importing": "Importando…",
       "success": "Se importaron {{projectsCreated}} proyectos nuevos ({{projectsReused}} existentes) y {{issuesCreated}} issues.",
       "viewImported": "Ver proyectos importados",
+      "viewInProjects": "Ver en Proyectos",
       "error": "No se pudo importar ese archivo."
     },
     "page": {
@@ -693,7 +697,8 @@
       "opening": "Abriendo…",
       "noIssues": "No hay issues en este proyecto",
       "loadingIssues": "Cargando issues…",
-      "openError": "No se pudo abrir un workspace para este issue."
+      "openError": "No se pudo abrir un workspace para este issue.",
+      "openProject": "Abrir proyecto"
     }
   }
 }
