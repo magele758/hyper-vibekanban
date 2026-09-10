@@ -7,8 +7,15 @@ const LITE_BLOCKED_PATH_PREFIXES = [
   '/onboarding',
 ] as const;
 
+/** User-visible lite desktop product name (installer / window title). */
+export const LITE_PRODUCT_NAME = 'Maestro';
+
 export function isViteLiteMode(): boolean {
   return import.meta.env.VITE_VK_LITE === '1';
+}
+
+export function productDisplayName(lite: boolean): string {
+  return lite ? LITE_PRODUCT_NAME : 'Vibe Kanban';
 }
 
 export function resolveLiteMode(serverLiteMode?: boolean | null): boolean {

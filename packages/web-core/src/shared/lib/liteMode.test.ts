@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LITE_PRODUCT_NAME,
   groupWorkspaceIdsByRepo,
   isLiteAllowedPath,
   liteCanonicalProjectPath,
+  productDisplayName,
   workspaceMatchesRepoFilter,
 } from './liteMode';
 
 const NO_REPO = '__no_repo__';
+
+describe('productDisplayName', () => {
+  it('uses Maestro for the lite desktop product', () => {
+    expect(LITE_PRODUCT_NAME).toBe('Maestro');
+    expect(productDisplayName(true)).toBe('Maestro');
+    expect(productDisplayName(false)).toBe('Vibe Kanban');
+  });
+});
 
 describe('isLiteAllowedPath', () => {
   it('allows workspace and overview routes', () => {
