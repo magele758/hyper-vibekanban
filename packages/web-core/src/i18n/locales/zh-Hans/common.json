@@ -666,7 +666,10 @@
       "deleteMessage": "只会删除「{{name}}」这个分组。仓库和工作区仍留在本机。",
       "deleteConfirm": "删除",
       "deleteError": "无法删除项目",
-      "notFound": "未找到项目"
+      "notFound": "未找到项目",
+      "issueCount": "{{count}} 个议题",
+      "issueCount_other": "{{count}} 个议题",
+      "issuesHeading": "已导入的议题"
     }
   },
   "import": {
@@ -676,7 +679,7 @@
       "chooseFile": "选择导出 ZIP",
       "importing": "正在导入…",
       "success": "已导入 {{projectsCreated}} 个新项目（复用 {{projectsReused}} 个）和 {{issuesCreated}} 个议题。",
-      "viewImported": "查看已导入的项目",
+      "viewInProjects": "在项目中查看",
       "error": "无法导入该文件。"
     },
     "page": {
@@ -693,7 +696,8 @@
       "opening": "正在打开…",
       "noIssues": "此项目没有议题",
       "loadingIssues": "正在加载议题…",
-      "openError": "无法为此议题打开工作区。"
+      "openError": "无法为此议题打开工作区。",
+      "openProject": "打开项目"
     }
   }
 }

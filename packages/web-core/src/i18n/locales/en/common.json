@@ -666,7 +666,10 @@
       "deleteMessage": "This removes the \"{{name}}\" grouping. Repos and workspaces stay on this machine.",
       "deleteConfirm": "Delete",
       "deleteError": "Could not delete project",
-      "notFound": "Project not found"
+      "notFound": "Project not found",
+      "issueCount": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "issuesHeading": "Imported issues"
     }
   },
   "import": {
@@ -676,7 +679,7 @@
       "chooseFile": "Choose export ZIP",
       "importing": "Importing…",
       "success": "Imported {{projectsCreated}} new projects ({{projectsReused}} existing) and {{issuesCreated}} issues.",
-      "viewImported": "View imported projects",
+      "viewInProjects": "View in Projects",
       "error": "Could not import that file."
     },
     "page": {
@@ -693,7 +696,8 @@
       "opening": "Opening…",
       "noIssues": "No issues in this project",
       "loadingIssues": "Loading issues…",
-      "openError": "Could not open a workspace for this issue."
+      "openError": "Could not open a workspace for this issue.",
+      "openProject": "Open project"
     }
   }
 }

@@ -6,7 +6,7 @@ import {
   SquaresFourIcon,
   TrashIcon,
 } from '@phosphor-icons/react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type { Repo } from 'shared/types';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
@@ -15,7 +15,9 @@ import {
   localProjectKeys,
   useLocalProject,
 } from '@/shared/hooks/useLocalProjects';
-import { projectApi, repoApi } from '@/shared/lib/api';
+import { importApi, projectApi, repoApi } from '@/shared/lib/api';
+import { IMPORTED_PROJECTS_QUERY_KEY } from '@/shared/components/ImportWebExportCard';
+import { ImportedIssueList } from '@/shared/components/ImportedIssueList';
 import { formatRelativeTime } from '@/shared/lib/date';
 import { projectColorFromId } from '@/shared/lib/colors';
 import { getProjectDestination } from '@/shared/lib/routes/appNavigation';
@@ -43,6 +45,11 @@ export function LocalProjectPage() {
   const projectId = getProjectDestination(destination)?.projectId ?? null;
   const queryClient = useQueryClient();
   const { data: project, isLoading, isError } = useLocalProject(projectId);
+  const { data: importedDetail } = useQuery({
+    queryKey: [...IMPORTED_PROJECTS_QUERY_KEY, projectId],
+    queryFn: () => importApi.getImportedProject(projectId as string),
+    enabled: !!projectId,
+  });
   const [error, setError] = useState<string | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftName, setDraftName] = useState('');
@@ -320,6 +327,15 @@ export function LocalProjectPage() {
           <p className="mt-base rounded border border-error/40 bg-error/10 px-base py-half text-sm text-error">
             {error}
           </p>
+        )}
+
+        {(importedDetail?.tasks.length ?? 0) > 0 && (
+          <section className="mt-double space-y-base">
+            <h2 className="text-lg font-medium text-high">
+              {t('lite.projects.issuesHeading')}
+            </h2>
+            <ImportedIssueList tasks={importedDetail?.tasks ?? []} />
+          </section>
         )}
 
         <section className="mt-double space-y-base">

@@ -666,7 +666,10 @@
       "deleteMessage": "Cela retire uniquement le regroupement « {{name}} ». Les dépôts et workspaces restent sur cette machine.",
       "deleteConfirm": "Supprimer",
       "deleteError": "Impossible de supprimer le projet",
-      "notFound": "Projet introuvable"
+      "notFound": "Projet introuvable",
+      "issueCount": "{{count}} issue",
+      "issueCount_other": "{{count}} issues",
+      "issuesHeading": "Issues importées"
     }
   },
   "import": {
@@ -676,7 +679,7 @@
       "chooseFile": "Choisir un ZIP d'export",
       "importing": "Import en cours…",
       "success": "{{projectsCreated}} nouveaux projets importés ({{projectsReused}} existants) et {{issuesCreated}} issues.",
-      "viewImported": "Voir les projets importés",
+      "viewInProjects": "Voir dans Projets",
       "error": "Impossible d'importer ce fichier."
     },
     "page": {
@@ -693,7 +696,8 @@
       "opening": "Ouverture…",
       "noIssues": "Aucune issue dans ce projet",
       "loadingIssues": "Chargement des issues…",
-      "openError": "Impossible d'ouvrir un workspace pour cette issue."
+      "openError": "Impossible d'ouvrir un workspace pour cette issue.",
+      "openProject": "Ouvrir le projet"
     }
   }
 }

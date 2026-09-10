@@ -55,7 +55,7 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 
-export function GeneralSettingsSection() {
+export function GeneralSettingsSection({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation(['settings', 'common']);
   const { setDirty: setContextDirty } = useSettingsDirty();
 
@@ -268,7 +268,7 @@ export function GeneralSettingsSection() {
         title={t('import.settings.title', { ns: 'common' })}
         description={t('import.settings.description', { ns: 'common' })}
       >
-        <ImportWebExportCard />
+        <ImportWebExportCard onImported={onClose} />
       </SettingsCard>
 
       {/* Appearance */}
