@@ -617,7 +617,6 @@
       "viewProjects": "Ver proyectos"
     },
     "chrome": {
-      "localLabel": "Local",
       "localWorkspaces": "Workspaces locales"
     },
     "projects": {
