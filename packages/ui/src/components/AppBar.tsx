@@ -91,6 +91,8 @@ interface AppBarProps {
   hideCloudSections?: boolean;
   /** Show local SQLite projects without Remote/sign-in chrome. */
   localProjectsMode?: boolean;
+  /** Optional product mark (lite / Maestro). */
+  brandMark?: ReactNode;
 }
 
 export interface AppBarProject {
@@ -289,6 +291,7 @@ export function AppBar({
   activeProjectSubNav = null,
   hideCloudSections = false,
   localProjectsMode = false,
+  brandMark,
 }: AppBarProps) {
   const { t } = useTranslation('common');
   const sections: AppBarSection[] = [];
@@ -723,6 +726,17 @@ export function AppBar({
         expanded ? 'w-[220px] items-stretch' : 'w-auto items-center'
       )}
     >
+      {brandMark && (
+        <div
+          className={cn(
+            'flex items-center',
+            expanded ? 'justify-start px-2.5' : 'justify-center'
+          )}
+        >
+          {brandMark}
+        </div>
+      )}
+
       {onToggleExpanded && (
         <button
           type="button"

@@ -13,6 +13,7 @@ import { useWorkspaces } from '@/shared/hooks/useWorkspaces';
 import { repoApi } from '@/shared/lib/api';
 import { formatRelativeTime } from '@/shared/lib/date';
 import { cn } from '@/shared/lib/utils';
+import { MaestroBrandMark } from '@/shared/components/MaestroBrandMark';
 import type { Repo } from 'shared/types';
 
 function repoLabel(repo: Repo): string {
@@ -82,7 +83,8 @@ export function LocalReposOverviewPage() {
             <FolderSimpleIcon className="size-icon-base" weight="bold" />
             <span className="text-sm">{t('lite.overview.kicker')}</span>
           </div>
-          <h1 className="text-2xl font-semibold text-high">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-high">
+            <MaestroBrandMark className="h-8 w-8" />
             {t('lite.overview.title')}
           </h1>
           <p className="text-sm text-low">{t('lite.overview.subtitle')}</p>
@@ -134,6 +136,7 @@ export function LocalReposOverviewPage() {
           </div>
         ) : cards.length === 0 ? (
           <section className="mt-double rounded-sm border border-border bg-secondary p-base sm:p-double">
+            <MaestroBrandMark className="mb-base h-8 w-8" />
             <h2 className="text-base font-medium text-high">
               {t('lite.overview.emptyTitle')}
             </h2>

@@ -65,6 +65,8 @@ import { AppBarNotificationBellContainer } from '@/pages/workspaces/AppBarNotifi
 import { WorkspacesSidebarContainer } from '@/pages/workspaces/WorkspacesSidebarContainer';
 import { WorkspacesSidebarReopenTag } from '@vibe/ui/components/WorkspacesSidebar';
 import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
+import { MaestroBrandMark } from '@/shared/components/MaestroBrandMark';
+import { LITE_PRODUCT_NAME } from '@/shared/lib/liteMode';
 import {
   prefetchProjectKanbanShapes,
   prefetchProjectKanbanShapesOnHover,
@@ -622,6 +624,20 @@ export function SharedAppLayout() {
               updateVersion={updateVersion}
               onUpdateClick={restartForUpdate ?? undefined}
               githubIconPath={siGithub.path}
+              brandMark={
+                liteMode ? (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MaestroBrandMark
+                      className={isAppBarExpanded ? 'h-7 w-7' : 'h-6 w-6'}
+                    />
+                    {isAppBarExpanded && (
+                      <span className="text-sm font-medium text-high truncate">
+                        {LITE_PRODUCT_NAME}
+                      </span>
+                    )}
+                  </div>
+                ) : undefined
+              }
             />
             {/* Desktop content. */}
             <div className="relative min-h-0 overflow-hidden">
@@ -679,9 +695,10 @@ export function SharedAppLayout() {
           <div className="flex flex-col h-full">
             {/* Header: org name + close button */}
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <span className="text-sm font-medium text-high truncate">
+              <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-high truncate">
+                {liteMode && <MaestroBrandMark className="h-5 w-5" />}
                 {liteMode
-                  ? t('lite.chrome.localLabel')
+                  ? LITE_PRODUCT_NAME
                   : (organizations.find((o) => o.id === selectedOrgId)?.name ??
                     'Organization')}
               </span>

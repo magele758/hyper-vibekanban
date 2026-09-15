@@ -1,6 +1,6 @@
 {
-  "name": "Hyper Vibe Kanban",
-  "short_name": "Hyper VK",
+  "name": "Maestro",
+  "short_name": "Maestro",
   "icons": [
     {
       "src": "/favicon-maestro.svg",
@@ -9,14 +9,9 @@
       "type": "image/svg+xml"
     },
     {
-      "src": "/favicon-vk-light-maskable.svg",
-      "sizes": "any",
-      "purpose": "maskable",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
+      "src": "/maestro-icon.png",
+      "sizes": "1024x1024",
+      "purpose": "any maskable",
       "type": "image/png"
     }
   ],

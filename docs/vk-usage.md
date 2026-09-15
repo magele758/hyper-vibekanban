@@ -103,6 +103,13 @@ pnpm run remote:up
 
 ## 纯本地 Maestro（无 Docker、无云、无看板）
 
+<p align="center">
+  <picture>
+    <source srcset="images/maestro-logo-dark.png" media="(prefers-color-scheme: dark)">
+    <img src="images/maestro-logo.png" alt="Maestro" width="360">
+  </picture>
+</p>
+
 `pnpm run dev:lite` 起的是本仓 Maestro 瘦客户端：SQLite + worktree + executor 对话 UI。
 按本地仓库看 Workspace/Session 历史，不挂 Remote、组织、看板、Relay。
 

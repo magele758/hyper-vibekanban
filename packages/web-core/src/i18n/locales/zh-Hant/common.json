@@ -617,7 +617,6 @@
       "viewProjects": "檢視專案"
     },
     "chrome": {
-      "localLabel": "本機",
       "localWorkspaces": "本機工作區"
     },
     "projects": {
