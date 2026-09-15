@@ -1,9 +1,9 @@
 <p align="center">
   <a href="https://github.com/magele758/hyper-vibekanban">
     <picture>
-      <source srcset="packages/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/public/vibe-kanban-logo.svg" alt="Vibe Kanban Logo">
+      <source srcset="packages/public/maestro-logo-dark.png" media="(prefers-color-scheme: dark)">
+      <source srcset="packages/public/maestro-logo.png" media="(prefers-color-scheme: light)">
+      <img src="packages/public/maestro-logo.png" alt="Maestro" width="360">
     </picture>
   </a>
 </p>

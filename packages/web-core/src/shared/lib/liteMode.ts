@@ -10,7 +10,7 @@ const LITE_BLOCKED_PATH_PREFIXES = [
 /** User-visible lite desktop product name (installer / window title). */
 export const LITE_PRODUCT_NAME = 'Maestro';
 
-/** Lite-only brand assets. Full Vibe Kanban keeps `/vibe-kanban-logo*`. */
+/** Maestro brand assets. Legacy `/vibe-kanban-logo*` paths now serve the same wordmark. */
 export const MAESTRO_ICON_SRC = '/maestro-icon.png';
 export const MAESTRO_LOGO_SRC = '/maestro-logo.png';
 export const MAESTRO_LOGO_DARK_SRC = '/maestro-logo-dark.png';
