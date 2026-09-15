@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { applyMaestroLiteHtml } from './maestroLiteHtml';
 import {
   LITE_PRODUCT_NAME,
+  MAESTRO_FAVICON_DARK_SRC,
+  MAESTRO_FAVICON_SRC,
+  MAESTRO_ICON_SRC,
+  MAESTRO_LOGO_DARK_SRC,
+  MAESTRO_LOGO_SRC,
   groupWorkspaceIdsByRepo,
   isLiteAllowedPath,
   liteCanonicalProjectPath,
@@ -15,6 +21,40 @@ describe('productDisplayName', () => {
     expect(LITE_PRODUCT_NAME).toBe('Maestro');
     expect(productDisplayName(true)).toBe('Maestro');
     expect(productDisplayName(false)).toBe('Vibe Kanban');
+  });
+
+  it('keeps Maestro brand assets off the full-product logo paths', () => {
+    expect(MAESTRO_ICON_SRC).toBe('/maestro-icon.png');
+    expect(MAESTRO_LOGO_SRC).toBe('/maestro-logo.png');
+    expect(MAESTRO_LOGO_DARK_SRC).toBe('/maestro-logo-dark.png');
+    expect(MAESTRO_FAVICON_SRC).toBe('/favicon-maestro.svg');
+    expect(MAESTRO_FAVICON_DARK_SRC).toBe('/favicon-maestro-dark.svg');
+    expect(MAESTRO_ICON_SRC).not.toContain('vibe-kanban');
+    expect(MAESTRO_LOGO_SRC).not.toContain('vibe-kanban');
+  });
+});
+
+describe('applyMaestroLiteHtml', () => {
+  it('rewrites lite favicons, manifest, and title', () => {
+    const html = applyMaestroLiteHtml(`<!DOCTYPE html>
+<html>
+<head>
+    <link rel="icon" href="/favicon-vk-light.svg" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="/favicon-vk-dark.svg" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest" />
+    <title>Vibe Kanban</title>
+</head>
+</html>`);
+
+    expect(html).toContain('/favicon-maestro.svg');
+    expect(html).toContain('/favicon-maestro-dark.svg');
+    expect(html).toContain('/maestro-icon.png');
+    expect(html).toContain('/site-maestro.webmanifest');
+    expect(html).toContain('<title>Maestro</title>');
+    expect(html).not.toContain('favicon-vk');
+    expect(html).not.toContain('Vibe Kanban');
+    expect(html).not.toContain('/apple-touch-icon.png');
   });
 });
 

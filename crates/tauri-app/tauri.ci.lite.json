@@ -3,6 +3,13 @@
   "identifier": "ai.bloop.vibe-kanban-lite",
   "bundle": {
     "createUpdaterArtifacts": false,
+    "icon": [
+      "icons-lite/32x32.png",
+      "icons-lite/128x128.png",
+      "icons-lite/128x128@2x.png",
+      "icons-lite/icon.icns",
+      "icons-lite/icon.ico"
+    ],
     "macOS": {
       "bundleName": "Maestro"
     },

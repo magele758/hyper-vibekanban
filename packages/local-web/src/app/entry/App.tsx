@@ -11,6 +11,7 @@ import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useTauriNotificationNavigation } from '@web/app/hooks/useTauriNotificationNavigation';
 import { useTauriUpdateReady } from '@web/app/hooks/useTauriUpdateReady';
 import { AppSystemNotifications } from '@web/app/notifications/AppSystemNotifications';
+import { MaestroFavicon } from '@/shared/components/MaestroBrandMark';
 import { router } from '@web/app/router';
 
 function TauriListeners() {
@@ -40,6 +41,7 @@ function App() {
       <AppNavigationProvider value={localAppNavigation}>
         <TauriListeners />
         <UserSystemProvider>
+          <MaestroFavicon />
           <LocalAuthProvider>
             <AppSystemNotifications />
             <ClickedElementsProvider>

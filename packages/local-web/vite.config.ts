@@ -6,6 +6,7 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import path from "path";
 import fs from "fs";
 import pkg from "./package.json";
+import { applyMaestroLiteHtml } from "../web-core/src/shared/lib/maestroLiteHtml";
 
 function createFilteredLogger() {
   const logger = createLogger();
@@ -32,6 +33,19 @@ function createFilteredLogger() {
   };
 
   return logger;
+}
+
+function maestroLiteHtmlPlugin(): Plugin {
+  const lite = process.env.VITE_VK_LITE === '1';
+  return {
+    name: 'maestro-lite-html',
+    transformIndexHtml(html) {
+      if (!lite) {
+        return html;
+      }
+      return applyMaestroLiteHtml(html);
+    },
+  };
 }
 
 function executorSchemasPlugin(): Plugin {
@@ -110,6 +124,7 @@ export default defineConfig({
     }),
     sentryVitePlugin({ org: 'bloop-ai', project: 'vibe-kanban' }),
     executorSchemasPlugin(),
+    maestroLiteHtmlPlugin(),
   ],
   resolve: {
     alias: [

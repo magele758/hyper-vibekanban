@@ -1,0 +1,21 @@
+{
+  "name": "Maestro",
+  "short_name": "Maestro",
+  "icons": [
+    {
+      "src": "/favicon-maestro.svg",
+      "sizes": "any",
+      "purpose": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/maestro-icon.png",
+      "sizes": "1024x1024",
+      "purpose": "any maskable",
+      "type": "image/png"
+    }
+  ],
+  "theme_color": "#091839",
+  "background_color": "#091839",
+  "display": "standalone"
+}

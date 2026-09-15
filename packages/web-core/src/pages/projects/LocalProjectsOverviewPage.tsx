@@ -18,6 +18,7 @@ import {
 } from '@/shared/dialogs/org/CreateLocalProjectDialog';
 import { formatRelativeTime } from '@/shared/lib/date';
 import { projectColorFromId } from '@/shared/lib/colors';
+import { MaestroBrandMark } from '@/shared/components/MaestroBrandMark';
 
 export function LocalProjectsOverviewPage() {
   const { t } = useTranslation('common');
@@ -68,7 +69,8 @@ export function LocalProjectsOverviewPage() {
             <SquaresFourIcon className="size-icon-base" weight="bold" />
             <span className="text-sm">{t('lite.projects.kicker')}</span>
           </div>
-          <h1 className="text-2xl font-semibold text-high">
+          <h1 className="flex items-center gap-2 text-2xl font-semibold text-high">
+            <MaestroBrandMark className="h-8 w-8" />
             {t('lite.projects.title')}
           </h1>
           <p className="text-sm text-low">{t('lite.projects.subtitle')}</p>
@@ -113,6 +115,7 @@ export function LocalProjectsOverviewPage() {
           </div>
         ) : cards.length === 0 ? (
           <section className="mt-double rounded-sm border border-border bg-secondary p-base sm:p-double">
+            <MaestroBrandMark className="mb-base h-8 w-8" />
             <h2 className="text-base font-medium text-high">
               {t('lite.projects.emptyTitle')}
             </h2>
