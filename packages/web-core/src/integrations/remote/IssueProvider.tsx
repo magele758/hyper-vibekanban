@@ -12,6 +12,7 @@ import {
   IssueContext,
   type IssueContextValue,
 } from '@/shared/hooks/useIssueContext';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 interface IssueProviderProps {
   issueId: string;
@@ -22,14 +23,18 @@ export function IssueProvider({ issueId, children }: IssueProviderProps) {
   const params = useMemo(() => ({ issue_id: issueId }), [issueId]);
   const enabled = Boolean(issueId);
 
+  const liveSync = getElectricShapeSyncOptions('live');
+
   // Shape subscriptions
   const commentsResult = useShape(ISSUE_COMMENTS_SHAPE, params, {
     enabled,
     mutation: ISSUE_COMMENT_MUTATION,
+    ...liveSync,
   });
   const reactionsResult = useShape(ISSUE_REACTIONS_SHAPE, params, {
     enabled,
     mutation: ISSUE_COMMENT_REACTION_MUTATION,
+    ...liveSync,
   });
 
   // Combined loading state

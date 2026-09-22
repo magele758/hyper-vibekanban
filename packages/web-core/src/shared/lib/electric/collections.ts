@@ -5,6 +5,10 @@ import { getAuthRuntime } from '@/shared/lib/auth/runtime';
 import { getRemoteApiUrl, makeRequest } from '@/shared/lib/remoteApi';
 import type { MutationDefinition, ShapeDefinition } from 'shared/remote-types';
 import type { CollectionConfig, SyncError } from '@/shared/lib/electric/types';
+import {
+  CONSTRAINED_COLLECTION_GC_TIME_MS,
+  isConstrainedElectricSync,
+} from '@/shared/lib/electric/syncPolicy';
 
 type ElectricRow = Record<string, unknown> & { [key: string]: unknown };
 
@@ -141,7 +145,8 @@ function buildFallbackRequestPath(
 function buildCollectionId(
   table: string,
   params: Record<string, string>,
-  hasMutations: boolean
+  hasMutations: boolean,
+  subscribe: boolean
 ): string {
   const sortedParams = Object.keys(params)
     .sort()
@@ -149,7 +154,8 @@ function buildCollectionId(
     .join('-');
 
   const base = sortedParams ? `${table}-${sortedParams}` : table;
-  return hasMutations ? `${base}-mut` : base;
+  const withMutations = hasMutations ? `${base}-mut` : base;
+  return subscribe ? withMutations : `${withMutations}-snap`;
 }
 
 function buildSourceKey(table: string, params: Record<string, string>): string {
@@ -334,6 +340,7 @@ function createElectricShapeOptions(args: {
   params: Record<string, string>;
   reportError: (error: SyncError) => void;
   onElectricUnavailable: () => void;
+  subscribe: boolean;
 }) {
   const authRuntime = getAuthRuntime();
   let isPaused = false;
@@ -365,6 +372,7 @@ function createElectricShapeOptions(args: {
     parser: {
       timestamptz: (value: string) => value,
     },
+    subscribe: args.subscribe,
     fetchClient: createErrorHandlingFetch({
       onError: args.reportError,
       onElectricUnavailable: args.onElectricUnavailable,
@@ -622,6 +630,13 @@ function isSourceFallbackLocked(sourceKey: string): boolean {
   return runtime.fallbackLocked;
 }
 
+function shouldAwaitElectricTxid(
+  sourceKey: string,
+  subscribe: boolean
+): boolean {
+  return subscribe && !isSourceFallbackLocked(sourceKey);
+}
+
 function maybeRefreshFallbackAfterMutation(sourceKey: string): void {
   if (!isSourceFallbackLocked(sourceKey)) return;
   invalidateFallbackCache(sourceKey);
@@ -630,7 +645,8 @@ function maybeRefreshFallbackAfterMutation(sourceKey: string): void {
 
 function buildMutationHandlers(
   mutation: MutationDefinition<unknown, unknown, unknown>,
-  sourceKey: string
+  sourceKey: string,
+  subscribe: boolean
 ) {
   return {
     onInsert: async ({
@@ -659,7 +675,7 @@ function buildMutationHandlers(
 
       maybeRefreshFallbackAfterMutation(sourceKey);
 
-      if (isSourceFallbackLocked(sourceKey)) {
+      if (!shouldAwaitElectricTxid(sourceKey, subscribe)) {
         return;
       }
 
@@ -726,7 +742,7 @@ function buildMutationHandlers(
 
       maybeRefreshFallbackAfterMutation(sourceKey);
 
-      if (isSourceFallbackLocked(sourceKey)) {
+      if (!shouldAwaitElectricTxid(sourceKey, subscribe)) {
         return;
       }
 
@@ -760,7 +776,7 @@ function buildMutationHandlers(
 
       maybeRefreshFallbackAfterMutation(sourceKey);
 
-      if (isSourceFallbackLocked(sourceKey)) {
+      if (!shouldAwaitElectricTxid(sourceKey, subscribe)) {
         return;
       }
 
@@ -776,7 +792,13 @@ export function createShapeCollection<TRow extends ElectricRow>(
   mutation?: MutationDefinition<unknown, unknown, unknown>
 ) {
   const hasMutations = Boolean(mutation);
-  const collectionId = buildCollectionId(shape.table, params, hasMutations);
+  const subscribe = config?.subscribe ?? true;
+  const collectionId = buildCollectionId(
+    shape.table,
+    params,
+    hasMutations,
+    subscribe
+  );
   const sourceKey = buildSourceKey(shape.table, params);
 
   const cached = collectionCache.get(collectionId);
@@ -792,17 +814,22 @@ export function createShapeCollection<TRow extends ElectricRow>(
     params,
     reportError,
     onElectricUnavailable,
+    subscribe,
   });
 
   const mutationHandlers = mutation
-    ? buildMutationHandlers(mutation, sourceKey)
+    ? buildMutationHandlers(mutation, sourceKey, subscribe)
     : {};
+
+  const gcTime = isConstrainedElectricSync()
+    ? CONSTRAINED_COLLECTION_GC_TIME_MS
+    : DEFAULT_GC_TIME_MS;
 
   const electricOptions = electricCollectionOptions({
     id: collectionId,
     shapeOptions: shapeOptions as never,
     getKey: (item: ElectricRow) => getRowKey(item),
-    gcTime: DEFAULT_GC_TIME_MS,
+    gcTime,
     ...mutationHandlers,
   } as never);
 

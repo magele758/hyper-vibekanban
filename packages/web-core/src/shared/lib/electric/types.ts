@@ -17,6 +17,12 @@ export interface CollectionConfig {
   onError?: (error: SyncError) => void;
   /** Time to wait for Electric before falling back to REST */
   readyTimeoutMs?: number;
+  /**
+   * When false, fetch a snapshot and close the stream instead of holding a
+   * live long-poll. Used on HTTP/1.1 to keep the ~6 connection slots free.
+   * @default true
+   */
+  subscribe?: boolean;
 }
 
 /**

@@ -10,6 +10,7 @@ import type { OrganizationMemberWithProfile } from 'shared/types';
 import { organizationsApi } from '@/shared/lib/api';
 import { organizationKeys } from '@/shared/hooks/organizationKeys';
 import { OrgContext, type OrgContextValue } from '@/shared/hooks/useOrgContext';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 interface OrgProviderProps {
   organizationId: string;
@@ -27,6 +28,7 @@ export function OrgProvider({ organizationId, children }: OrgProviderProps) {
   const projectsResult = useShape(PROJECTS_SHAPE, params, {
     enabled,
     mutation: PROJECT_MUTATION,
+    ...getElectricShapeSyncOptions('live'),
   });
 
   // Members data from API

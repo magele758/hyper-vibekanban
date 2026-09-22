@@ -40,6 +40,10 @@ import {
   ProjectContext,
   type ProjectContextValue,
 } from '@/shared/hooks/useProjectContext';
+import {
+  getElectricShapeSyncOptions,
+  isConstrainedElectricSync,
+} from '@/shared/lib/electric/syncPolicy';
 
 interface ProjectProviderProps {
   projectId: string;
@@ -50,26 +54,32 @@ const CORE_SHAPE_READY_TIMEOUT_MS = 5_000;
 
 export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
   const params = useMemo(() => ({ project_id: projectId }), [projectId]);
-  const enabled = Boolean(projectId);
+  const constrained = isConstrainedElectricSync();
+  const coreEnabled = Boolean(projectId);
+  const liveSync = getElectricShapeSyncOptions(
+    'live',
+    CORE_SHAPE_READY_TIMEOUT_MS
+  );
+  const snapshotSync = getElectricShapeSyncOptions('snapshot');
+  const workspaceSync = getElectricShapeSyncOptions(
+    'snapshot',
+    CORE_SHAPE_READY_TIMEOUT_MS
+  );
 
   // Shape subscriptions (with mutations where needed)
   const issuesResult = useShape(PROJECT_ISSUES_SHAPE, params, {
-    enabled,
+    enabled: coreEnabled,
     mutation: ISSUE_MUTATION,
-    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
+    ...liveSync,
   });
   const statusesResult = useShape(PROJECT_PROJECT_STATUSES_SHAPE, params, {
-    enabled,
+    enabled: coreEnabled,
     mutation: PROJECT_STATUS_MUTATION,
-    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
-  });
-  const workspacesResult = useShape(PROJECT_WORKSPACES_SHAPE, params, {
-    enabled,
-    readyTimeoutMs: CORE_SHAPE_READY_TIMEOUT_MS,
+    ...liveSync,
   });
 
   const coreReady =
-    enabled && !issuesResult.isLoading && !statusesResult.isLoading;
+    coreEnabled && !issuesResult.isLoading && !statusesResult.isLoading;
 
   const [hydrateSecondary, setHydrateSecondary] = useState(false);
   useEffect(() => {
@@ -81,61 +91,89 @@ export function ProjectProvider({ projectId, children }: ProjectProviderProps) {
     return () => globalThis.clearTimeout(timer);
   }, [coreReady]);
 
+  // HTTP/1.1: wait for issues/statuses before opening more snapshots so they
+  // do not compete with the board's first paint. Desktop HTTP/2 can overlap.
+  const immediateEnabled = constrained ? coreReady : coreEnabled;
   const secondaryEnabled = coreReady && hydrateSecondary;
+
+  const workspacesResult = useShape(PROJECT_WORKSPACES_SHAPE, params, {
+    enabled: immediateEnabled,
+    ...workspaceSync,
+  });
 
   const tagsResult = useShape(PROJECT_TAGS_SHAPE, params, {
     enabled: secondaryEnabled,
     mutation: TAG_MUTATION,
+    ...snapshotSync,
   });
   // Agents + assignees must be available immediately — deferred secondary
   // hydration can make insertIssueAssignee silently no-op (same class of bug
   // as agents create "假成功").
   const agentsResult = useShape(PROJECT_AGENTS_SHAPE, params, {
-    enabled,
+    enabled: immediateEnabled,
     mutation: AGENT_MUTATION,
+    ...snapshotSync,
   });
   const agentTasksResult = useShape(PROJECT_AGENT_TASKS_SHAPE, params, {
-    enabled,
+    enabled: immediateEnabled,
+    ...snapshotSync,
   });
   const autopilotsResult = useShape(PROJECT_AUTOPILOTS_SHAPE, params, {
     enabled: secondaryEnabled,
+    ...snapshotSync,
   });
   const squadsResult = useShape(PROJECT_SQUADS_SHAPE, params, {
     enabled: secondaryEnabled,
+    ...snapshotSync,
   });
   const squadMembersResult = useShape(PROJECT_SQUAD_MEMBERS_SHAPE, params, {
     enabled: secondaryEnabled,
+    ...snapshotSync,
   });
   const squadRunsResult = useShape(PROJECT_SQUAD_RUNS_SHAPE, params, {
     enabled: secondaryEnabled,
+    ...snapshotSync,
   });
   const issueAssigneesResult = useShape(PROJECT_ISSUE_ASSIGNEES_SHAPE, params, {
-    enabled,
+    enabled: immediateEnabled,
     mutation: ISSUE_ASSIGNEE_MUTATION,
+    ...snapshotSync,
   });
   const issueFollowersResult = useShape(PROJECT_ISSUE_FOLLOWERS_SHAPE, params, {
     enabled: secondaryEnabled,
     mutation: ISSUE_FOLLOWER_MUTATION,
+    ...snapshotSync,
   });
   const issueTagsResult = useShape(PROJECT_ISSUE_TAGS_SHAPE, params, {
     enabled: secondaryEnabled,
     mutation: ISSUE_TAG_MUTATION,
+    ...snapshotSync,
   });
   const issueRelationshipsResult = useShape(
     PROJECT_ISSUE_RELATIONSHIPS_SHAPE,
     params,
-    { enabled: secondaryEnabled, mutation: ISSUE_RELATIONSHIP_MUTATION }
+    {
+      enabled: secondaryEnabled,
+      mutation: ISSUE_RELATIONSHIP_MUTATION,
+      ...snapshotSync,
+    }
   );
   const pullRequestsResult = useShape(PROJECT_PULL_REQUESTS_SHAPE, params, {
     enabled: secondaryEnabled,
+    ...snapshotSync,
   });
   const pullRequestIssuesResult = useShape(
     PROJECT_PULL_REQUEST_ISSUES_SHAPE,
     params,
-    { enabled: secondaryEnabled, mutation: PULL_REQUEST_ISSUE_MUTATION }
+    {
+      enabled: secondaryEnabled,
+      mutation: PULL_REQUEST_ISSUE_MUTATION,
+      ...snapshotSync,
+    }
   );
 
-  const isWorkspacesLoading = enabled && workspacesResult.isLoading;
+  const isWorkspacesLoading =
+    coreEnabled && (!immediateEnabled || workspacesResult.isLoading);
 
   // Board readiness depends on core kanban data only.
   // Other project-scoped shapes hydrate opportunistically after render.

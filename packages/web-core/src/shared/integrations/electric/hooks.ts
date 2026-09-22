@@ -64,6 +64,11 @@ export interface UseShapeOptions<
   mutation?: M;
   /** Time to wait for Electric before falling back to REST */
   readyTimeoutMs?: number;
+  /**
+   * When false, snapshot once and do not keep a live Electric connection.
+   * @default true
+   */
+  subscribe?: boolean;
 }
 
 /**
@@ -97,7 +102,7 @@ export function useShape<
 ): M extends MutationDefinition<unknown, unknown, unknown>
   ? UseShapeMutationResult<T, MutationCreateType<M>, MutationUpdateType<M>>
   : UseShapeResult<T> {
-  const { enabled = true, mutation, readyTimeoutMs } = options;
+  const { enabled = true, mutation, readyTimeoutMs, subscribe } = options;
 
   const [error, setError] = useState<SyncError | null>(null);
   const [retryKey, setRetryKey] = useState(0);
@@ -138,7 +143,7 @@ export function useShape<
 
   const collection = useMemo(() => {
     if (!enabled) return null;
-    const config = { onError: handleError, readyTimeoutMs };
+    const config = { onError: handleError, readyTimeoutMs, subscribe };
     void retryKey;
     return createShapeCollection(shape, stableParams, config, mutation);
   }, [
@@ -149,6 +154,7 @@ export function useShape<
     retryKey,
     stableParams,
     readyTimeoutMs,
+    subscribe,
   ]);
 
   const { data, isLoading: queryLoading } = useLiveQuery(

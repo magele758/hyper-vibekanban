@@ -78,7 +78,7 @@ export function useRemoteCloudHostsState() {
     queryKey: REMOTE_CLOUD_HOSTS_STATE_QUERY_KEY,
     queryFn: fetchRemoteCloudHostsState,
     enabled: !liteMode,
-    staleTime: 0,
+    staleTime: 30 * 1000,
   });
 }
 

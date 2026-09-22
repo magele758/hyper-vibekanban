@@ -1,6 +1,7 @@
 import { useShape } from '@/shared/integrations/electric/hooks';
 import { PROJECTS_SHAPE, PROJECT_MUTATION } from 'shared/remote-types';
 import { useAuth } from '@/shared/hooks/auth/useAuth';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 export function useOrganizationProjects(organizationId: string | null) {
   const { isSignedIn } = useAuth();
@@ -11,7 +12,11 @@ export function useOrganizationProjects(organizationId: string | null) {
   const { data, isLoading, error } = useShape(
     PROJECTS_SHAPE,
     { organization_id: organizationId || '' },
-    { enabled, mutation: PROJECT_MUTATION }
+    {
+      enabled,
+      mutation: PROJECT_MUTATION,
+      ...getElectricShapeSyncOptions('live'),
+    }
   );
 
   return {
