@@ -71,6 +71,7 @@ import {
   prefetchProjectKanbanShapes,
   prefetchProjectKanbanShapesOnHover,
 } from '@/shared/lib/electric/prefetchProjectShapes';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 function getHostInitials(name: string): string {
   const trimmed = name.trim();
@@ -161,6 +162,7 @@ export function SharedAppLayout() {
   } = useShape(PROJECTS_SHAPE, projectParams, {
     enabled: !liteMode && isSignedIn && !!selectedOrgId,
     mutation: PROJECT_MUTATION,
+    ...getElectricShapeSyncOptions('live'),
   });
   const { data: localProjects = [], isLoading: isLoadingLocalProjects } =
     useLocalProjects(liteMode);

@@ -6,6 +6,7 @@ import {
   PROJECT_WORKSPACES_SHAPE,
 } from 'shared/remote-types';
 import { createShapeCollection } from '@/shared/lib/electric/collections';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 const PROJECT_KANBAN_READY_TIMEOUT_MS = 5_000;
 
@@ -17,21 +18,22 @@ export function prefetchProjectKanbanShapes(projectId: string): void {
   if (!projectId) return;
 
   const params = { project_id: projectId };
-  createShapeCollection(
-    PROJECT_ISSUES_SHAPE,
-    params,
-    { readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS },
-    ISSUE_MUTATION
+  const liveSync = getElectricShapeSyncOptions(
+    'live',
+    PROJECT_KANBAN_READY_TIMEOUT_MS
   );
+  const workspaceSync = getElectricShapeSyncOptions(
+    'snapshot',
+    PROJECT_KANBAN_READY_TIMEOUT_MS
+  );
+  createShapeCollection(PROJECT_ISSUES_SHAPE, params, liveSync, ISSUE_MUTATION);
   createShapeCollection(
     PROJECT_PROJECT_STATUSES_SHAPE,
     params,
-    { readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS },
+    liveSync,
     PROJECT_STATUS_MUTATION
   );
-  createShapeCollection(PROJECT_WORKSPACES_SHAPE, params, {
-    readyTimeoutMs: PROJECT_KANBAN_READY_TIMEOUT_MS,
-  });
+  createShapeCollection(PROJECT_WORKSPACES_SHAPE, params, workspaceSync);
 }
 
 const HOVER_PREFETCH_DELAY_MS = 120;

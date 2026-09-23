@@ -7,6 +7,8 @@ import {
   UserContext,
   type UserContextValue,
 } from '@/shared/hooks/useUserContext';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { getElectricShapeSyncOptions } from '@/shared/lib/electric/syncPolicy';
 
 interface UserProviderProps {
   children: ReactNode;
@@ -15,14 +17,25 @@ interface UserProviderProps {
 export function UserProvider({ children }: UserProviderProps) {
   const { isSignedIn } = useAuth();
   const { liteMode } = useUserSystem();
+  const destination = useCurrentAppDestination();
 
   // No params needed - backend gets user from auth context
   const params = useMemo(() => ({}), []);
-  const enabled = isSignedIn && !liteMode;
+  const signedIn = isSignedIn && !liteMode;
+  const workspacesEnabled = signedIn;
+  const inboxEnabled = signedIn && destination?.kind === 'project-inbox';
+  const workspaceSync = getElectricShapeSyncOptions('snapshot');
+  const inboxSync = getElectricShapeSyncOptions('live');
 
   // Shape subscriptions
-  const workspacesResult = useShape(USER_WORKSPACES_SHAPE, params, { enabled });
-  const inboxResult = useShape(USER_INBOX_SHAPE, params, { enabled });
+  const workspacesResult = useShape(USER_WORKSPACES_SHAPE, params, {
+    enabled: workspacesEnabled,
+    ...workspaceSync,
+  });
+  const inboxResult = useShape(USER_INBOX_SHAPE, params, {
+    enabled: inboxEnabled,
+    ...inboxSync,
+  });
 
   // Lookup helpers
   const getWorkspacesForIssue = useCallback(
