@@ -1,10 +1,16 @@
 name: Create GitHub Pre-Release
 
+# Actions 左侧这个名字在 main 上就有 Run workflow。
+# 选中的分支决定用哪一份文件。发布 hyper-vibekanban 的步骤只在
+# 本文件进入 main 之后才会被 main 上的 Run 用到。
+# npm 不会在第一次 Actions 发布时创建包；包必须已经存在，
+# Trusted Publisher 才能保存。
+
 on:
   workflow_dispatch:
     inputs:
       version_type:
-        description: "Version bump type"
+        description: "patch/minor/major 会把 hyper-vibekanban 标成 latest"
         required: true
         default: "patch"
         type: choice
@@ -37,6 +43,27 @@ jobs:
       new_version: ${{ steps.version.outputs.new_version }}
       branch_suffix: ${{ steps.branch.outputs.suffix }}
     steps:
+      - name: Require R2 settings before any version change
+        env:
+          R2_BINARIES_ACCESS_KEY_ID: ${{ secrets.R2_BINARIES_ACCESS_KEY_ID }}
+          R2_BINARIES_SECRET_ACCESS_KEY: ${{ secrets.R2_BINARIES_SECRET_ACCESS_KEY }}
+          R2_BINARIES_ENDPOINT: ${{ secrets.R2_BINARIES_ENDPOINT }}
+          R2_BINARIES_BUCKET: ${{ secrets.R2_BINARIES_BUCKET }}
+          R2_BINARIES_PUBLIC_URL: ${{ secrets.R2_BINARIES_PUBLIC_URL }}
+        run: |
+          missing=0
+          for name in R2_BINARIES_ACCESS_KEY_ID R2_BINARIES_SECRET_ACCESS_KEY R2_BINARIES_ENDPOINT R2_BINARIES_BUCKET R2_BINARIES_PUBLIC_URL; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub Actions secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Refusing to bump the version. Add these Actions secrets, then run again."
+            exit 1
+          fi
+          echo "R2 settings are present."
+
       - name: Install cargo-edit
         uses: taiki-e/cache-cargo-install-action@34ce5120836e5f9f1508d8713d7fdea0e8facd6f # v3.0.1
         with:
