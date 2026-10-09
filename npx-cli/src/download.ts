@@ -1,15 +1,22 @@
 import https from 'https';
+import type { IncomingMessage } from 'http';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import os from 'os';
 
-// Replaced during npm pack by workflow
-export const R2_BASE_URL = '__R2_PUBLIC_URL__';
-export const BINARY_TAG = '__BINARY_TAG__'; // e.g., v0.0.135-20251215122030
+// Public repo. Release assets are anonymous; do not point this at a private repo.
+export const RELEASE_DOWNLOAD_BASE =
+  'https://github.com/magele758/hyper-vibekanban/releases/download';
+// Replaced during npm pack by workflow. Example: v0.1.45-20251215122030
+export const BINARY_TAG = '__BINARY_TAG__';
+const NPM_LATEST_URL =
+  'https://registry.npmjs.org/hyper-vibekanban/latest';
+const RELEASE_USER_AGENT = 'hyper-vibekanban';
+const MAX_REDIRECTS = 5;
 export const CACHE_DIR = path.join(os.homedir(), '.vibe-kanban', 'bin');
 
-// Local development mode: use binaries from npx-cli/dist/ instead of R2
+// Local development mode: use binaries from npx-cli/dist/ instead of GitHub releases
 // Only activate if dist/ exists (i.e., running from source after local-build.sh)
 export const LOCAL_DIST_DIR = path.join(__dirname, '..', 'dist');
 export const LOCAL_DEV_MODE =
@@ -44,17 +51,77 @@ export interface DesktopBundleInfo {
 
 type ProgressCallback = (downloaded: number, total: number) => void;
 
+export function releaseAssetName(
+  platform: string,
+  binaryName: string
+): string {
+  return `${binaryName}-${platform}.zip`;
+}
+
+export function releaseAssetUrl(tag: string, fileName: string): string {
+  return `${RELEASE_DOWNLOAD_BASE}/${encodeURIComponent(tag)}/${fileName}`;
+}
+
+function nextUrl(current: string, location: string | undefined): string {
+  if (!location) {
+    throw new Error(`Redirect from ${current} had no Location header`);
+  }
+  const next = new URL(location, current).toString();
+  if (!next.startsWith('https://')) {
+    throw new Error('Refusing a non-https redirect');
+  }
+  return next;
+}
+
+function httpsGet(
+  url: string,
+  redirectsLeft: number,
+  onResponse: (res: IncomingMessage, finalUrl: string) => void,
+  onError: (err: Error) => void
+): void {
+  const req = https.get(
+    url,
+    { headers: { 'User-Agent': RELEASE_USER_AGENT } },
+    (res) => {
+      const status = res.statusCode || 0;
+      if (
+        status === 301 ||
+        status === 302 ||
+        status === 303 ||
+        status === 307 ||
+        status === 308
+      ) {
+        res.resume();
+        if (redirectsLeft <= 0) {
+          onError(new Error(`Too many redirects fetching ${url}`));
+          return;
+        }
+        let next: string;
+        try {
+          next = nextUrl(url, res.headers.location);
+        } catch (err) {
+          onError(err instanceof Error ? err : new Error(String(err)));
+          return;
+        }
+        httpsGet(next, redirectsLeft - 1, onResponse, onError);
+        return;
+      }
+      onResponse(res, url);
+    }
+  );
+  req.on('error', (err) => onError(err));
+}
+
 function fetchJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    https
-      .get(url, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          return fetchJson<T>(res.headers.location!)
-            .then(resolve)
-            .catch(reject);
-        }
+    httpsGet(
+      url,
+      MAX_REDIRECTS,
+      (res, finalUrl) => {
         if (res.statusCode !== 200) {
-          return reject(new Error(`HTTP ${res.statusCode} fetching ${url}`));
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode} fetching ${finalUrl}`));
+          return;
         }
         let data = '';
         res.on('data', (chunk: string) => (data += chunk));
@@ -62,11 +129,12 @@ function fetchJson<T>(url: string): Promise<T> {
           try {
             resolve(JSON.parse(data) as T);
           } catch {
-            reject(new Error(`Failed to parse JSON from ${url}`));
+            reject(new Error(`Failed to parse JSON from ${finalUrl}`));
           }
         });
-      })
-      .on('error', reject);
+      },
+      reject
+    );
   });
 }
 
@@ -78,7 +146,6 @@ function downloadFile(
 ): Promise<string> {
   const tempPath = destPath + '.tmp';
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(tempPath);
     const hash = crypto.createHash('sha256');
 
     const cleanup = () => {
@@ -87,28 +154,17 @@ function downloadFile(
       } catch {}
     };
 
-    https
-      .get(url, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          file.close();
-          cleanup();
-          return downloadFile(
-            res.headers.location!,
-            destPath,
-            expectedSha256,
-            onProgress
-          )
-            .then(resolve)
-            .catch(reject);
+    httpsGet(
+      url,
+      MAX_REDIRECTS,
+      (res, finalUrl) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode} downloading ${finalUrl}`));
+          return;
         }
 
-        if (res.statusCode !== 200) {
-          file.close();
-          cleanup();
-          return reject(
-            new Error(`HTTP ${res.statusCode} downloading ${url}`)
-          );
-        }
+        const file = fs.createWriteStream(tempPath);
 
         const totalSize = parseInt(
           res.headers['content-length'] || '0',
@@ -143,12 +199,16 @@ function downloadFile(
             }
           }
         });
-      })
-      .on('error', (err) => {
-        file.close();
+        file.on('error', (err) => {
+          cleanup();
+          reject(err);
+        });
+      },
+      (err) => {
         cleanup();
         reject(err);
-      });
+      }
+    );
   });
 }
 
@@ -180,8 +240,12 @@ export async function ensureBinary(
 
   fs.mkdirSync(cacheDir, { recursive: true });
 
+  if (BINARY_TAG.startsWith('__')) {
+    throw new Error('This package has no release tag. Rebuild it from a GitHub release.');
+  }
+
   const manifest = await fetchJson<BinaryManifest>(
-    `${R2_BASE_URL}/binaries/${BINARY_TAG}/manifest.json`
+    releaseAssetUrl(BINARY_TAG, 'manifest.json')
   );
   const binaryInfo = manifest.platforms?.[platform]?.[binaryName];
 
@@ -191,7 +255,10 @@ export async function ensureBinary(
     );
   }
 
-  const url = `${R2_BASE_URL}/binaries/${BINARY_TAG}/${platform}/${binaryName}.zip`;
+  const url = releaseAssetUrl(
+    BINARY_TAG,
+    releaseAssetName(platform, binaryName)
+  );
   await downloadFile(url, zipPath, binaryInfo.sha256, onProgress);
 
   return zipPath;
@@ -243,7 +310,7 @@ export async function ensureDesktopBundle(
 
   // Fetch the desktop manifest
   const manifest = await fetchJson<DesktopManifest>(
-    `${R2_BASE_URL}/binaries/${BINARY_TAG}/tauri/desktop-manifest.json`
+    releaseAssetUrl(BINARY_TAG, 'desktop-manifest.json')
   );
   const platformInfo = manifest.platforms?.[tauriPlatform];
   if (!platformInfo) {
@@ -256,7 +323,7 @@ export async function ensureDesktopBundle(
 
   // Skip download if file already exists (e.g. previous failed install)
   if (!fs.existsSync(destPath)) {
-    const url = `${R2_BASE_URL}/binaries/${BINARY_TAG}/tauri/${tauriPlatform}/${platformInfo.file}`;
+    const url = releaseAssetUrl(BINARY_TAG, platformInfo.file);
     await downloadFile(url, destPath, platformInfo.sha256, onProgress);
   }
 
@@ -268,8 +335,6 @@ export async function ensureDesktopBundle(
 }
 
 export async function getLatestVersion(): Promise<string | undefined> {
-  const manifest = await fetchJson<BinaryManifest>(
-    `${R2_BASE_URL}/binaries/manifest.json`
-  );
-  return manifest.latest;
+  const latest = await fetchJson<{ version?: string }>(NPM_LATEST_URL);
+  return latest.version;
 }

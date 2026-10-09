@@ -10,7 +10,7 @@
 
 <p align="center">让 Claude Code、Gemini CLI、Codex、Cursor、Pi 等 AI 编程 Agent 的效率提升 10 倍...</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/hyper-vibekanban"><img alt="npm" src="https://img.shields.io/npm/v/hyper-vibekanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="构建状态" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
@@ -23,7 +23,7 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **注意：** 官方 Vibe Kanban 云服务已停服。本仓库是上游 [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) 的 fork（hyper-vibekanban）：**原版能力完整保留**，并在其上新增「动态看板 Agent」编排与自托管增强。
+> **注意：** 用 `npx hyper-vibekanban` 启动本仓库发布的包。看板和 Agent 工作流仍在，并带有「动态看板 Agent」与自托管 Remote。
 
 ![](packages/public/screenshots/hyper-board.png)
 
@@ -42,7 +42,7 @@
 | **应用 Preview** | 内置浏览器、DevTools、元素检查、设备模拟 |
 | **Coding Agents** | Claude Code、Codex、Gemini、Copilot、Amp、Cursor、OpenCode、Droid、CCR、Qwen |
 | **Git / PR** | rebase、冲突处理、AI 生成 PR 描述、GitHub / Azure 合并 |
-| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **MCP + Review CLI** | `npx hyper-vibekanban --mcp` / `review` |
 | **设置面** | Agent 配置、MCP、编辑器集成、通知、组织 / 项目 |
 
 原版典型路径仍可用：**建 Issue → 手开 Workspace → 看日志 → Review Diff → 开 PR**。
@@ -140,7 +140,7 @@ Plan → Fork → Implement / Review → Join；可对话创建，再画布微�
 先完成所用 AI Agent 的登录认证，然后：
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 会启动本地服务器并打开浏览器。
@@ -224,7 +224,7 @@ docker compose --env-file .env.remote --profile relay up -d   # 不加 --build
 ## MCP 服务器
 
 ```bash
-npx vibe-kanban --mcp
+npx hyper-vibekanban --mcp
 ```
 
 ```json
@@ -241,10 +241,10 @@ npx vibe-kanban --mcp
 ## CLI 参考
 
 ```bash
-npx vibe-kanban               # 启动本地 UI
-npx vibe-kanban --mcp         # MCP stdio
-npx vibe-kanban review        # 代码审查 CLI
-npx vibe-kanban --help
+npx hyper-vibekanban               # 启动本地 UI
+npx hyper-vibekanban --mcp         # MCP stdio
+npx hyper-vibekanban review        # 代码审查 CLI
+npx hyper-vibekanban --help
 ```
 
 ## 文档

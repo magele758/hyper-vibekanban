@@ -10,7 +10,7 @@
 
 <p align="center">Claude Code, Gemini CLI, Codex, Cursor, Pi 및 기타 코딩 에이전트의 생산성을 10배 높이세요...</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/hyper-vibekanban"><img alt="npm" src="https://img.shields.io/npm/v/hyper-vibekanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
@@ -23,7 +23,7 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **참고:** 공식 Vibe Kanban 클라우드는 종료되었습니다. 이 저장소는 [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) 의 포크(hyper-vibekanban)입니다: **업스트림 기능은 모두 유지**되며, 새로운 **동적 보드 에이전트** 레이어와 셀프호스팅 Remote가 추가됩니다.
+> **참고:** 이 저장소는 `npx hyper-vibekanban` 로 실행합니다. 칸반과 에이전트 워크플로가 있고, 동적 보드 에이전트와 셀프호스팅 Remote가 추가되어 있습니다.
 
 ![](packages/public/screenshots/hyper-board.png)
 
@@ -42,7 +42,7 @@
 | **App preview** | 내장 브라우저, DevTools, inspect, 기기 에뮬레이션 |
 | **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen |
 | **Git / PRs** | Rebase, 충돌 UX, AI PR 설명, GitHub / Azure 머지 |
-| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **MCP + Review CLI** | `npx hyper-vibekanban --mcp` / `review` |
 | **Settings** | Agent profiles, MCP, 에디터 통합, 알림, org / projects |
 
 기존 경로도 그대로 동작합니다: **issue → 직접 Workspace 열기 → 로그 → diff 리뷰 → PR**.
@@ -140,7 +140,7 @@ Plan → Fork → Implement / Review → Join; 채팅으로 만들고 캔버스�
 선호하는 코딩 에이전트로 먼저 인증한 다음:
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 로컬 서버가 시작되고 브라우저가 열립니다.
@@ -206,7 +206,7 @@ npx vibe-kanban
 ## MCP Server
 
 ```bash
-npx vibe-kanban --mcp
+npx hyper-vibekanban --mcp
 ```
 
 ```json
@@ -223,10 +223,10 @@ npx vibe-kanban --mcp
 ## CLI 참고
 
 ```bash
-npx vibe-kanban               # Local UI
-npx vibe-kanban --mcp         # MCP stdio
-npx vibe-kanban review        # Review CLI
-npx vibe-kanban --help
+npx hyper-vibekanban               # Local UI
+npx hyper-vibekanban --mcp         # MCP stdio
+npx hyper-vibekanban review        # Review CLI
+npx hyper-vibekanban --help
 ```
 
 ## 문서
