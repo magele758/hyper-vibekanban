@@ -368,20 +368,33 @@ enum PiEvent {
         #[serde(default, rename = "isError")]
         is_error: bool,
     },
-    AgentEnd {
-        #[serde(default)]
-        #[allow(dead_code)]
-        messages: Vec<PiMessage>,
-    },
+    // Do not deserialize `messages` / `isTerminal`. Newer omp builds append
+    // `role: custom` entries whose `content` is a string (not `PiContent[]`).
+    // Parsing that dump failed the whole event and the fallback treated the
+    // ~600KB JSON as a SystemMessage, drowning the conversation.
+    AgentEnd {},
     #[serde(other)]
     Other,
+}
+
+fn deserialize_pi_message_content<'de, D>(deserializer: D) -> Result<Vec<PiContent>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::Null => Ok(Vec::new()),
+        Value::String(text) => Ok(vec![PiContent::Text { text }]),
+        other => serde_json::from_value(other).map_err(serde::de::Error::custom),
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct PiMessage {
     #[serde(default)]
     role: Option<String>,
-    #[serde(default)]
+    /// omp `role: custom` messages use a string; assistant/user use `PiContent[]`.
+    #[serde(default, deserialize_with = "deserialize_pi_message_content")]
     content: Vec<PiContent>,
     #[serde(default)]
     model: Option<String>,
@@ -465,6 +478,12 @@ pub(crate) async fn normalize_pi_stdout(
         let event: PiEvent = match serde_json::from_str(trimmed) {
             Ok(v) => v,
             Err(_) => {
+                // A failed `agent_end` (or any other giant JSON event) must not
+                // become a chat bubble. Keep short non-JSON stdout as system text.
+                if trimmed.starts_with('{') && trimmed.len() > 8_192 {
+                    tracing::debug!(bytes = trimmed.len(), "skipping unparseable pi json event");
+                    continue;
+                }
                 let entry = NormalizedEntry {
                     timestamp: None,
                     entry_type: NormalizedEntryType::SystemMessage,
@@ -1013,6 +1032,28 @@ mod tests {
                 assert_eq!(ev.delta.as_deref(), Some("完全不同 "));
             }
             _ => panic!("expected message_update"),
+        }
+    }
+
+    #[test]
+    fn parse_agent_end_with_custom_string_content() {
+        // omp 2026-09 dumps the full transcript on agent_end, including custom
+        // messages whose `content` is a string. This must still parse.
+        let raw = r#"{"type":"agent_end","isTerminal":true,"messages":[{"role":"user","content":[{"type":"text","text":"hi"}]},{"role":"custom","customType":"note","content":"not an array","display":true}]}"#;
+        let event: PiEvent = serde_json::from_str(raw).unwrap();
+        assert!(matches!(event, PiEvent::AgentEnd {}));
+    }
+
+    #[test]
+    fn parse_message_end_with_custom_string_content() {
+        let raw = r#"{"type":"message_end","message":{"role":"custom","customType":"note","content":"not an array","display":true}}"#;
+        let event: PiEvent = serde_json::from_str(raw).unwrap();
+        match event {
+            PiEvent::MessageEnd { message } => {
+                assert_eq!(message.role.as_deref(), Some("custom"));
+                assert_eq!(extract_text(&message.content), "not an array");
+            }
+            _ => panic!("expected message_end"),
         }
     }
 
