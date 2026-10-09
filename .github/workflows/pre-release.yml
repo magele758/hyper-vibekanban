@@ -58,9 +58,21 @@ jobs:
       - name: setup node
         uses: ./.github/actions/setup-node
 
+      # `if` 不能引用 secrets，否则 GitHub 拒绝整份 workflow。
+      - name: Detect private deploy key
+        id: deploy_key
+        env:
+          VK_PRIVATE_DEPLOY_KEY: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
+        run: |
+          if [ -n "$VK_PRIVATE_DEPLOY_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup SSH Agent for private dependencies
         id: ssh-setup
-        if: ${{ secrets.VK_PRIVATE_DEPLOY_KEY != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ steps.deploy_key.outputs.present == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
@@ -198,8 +210,19 @@ jobs:
           VITE_POSTHOG_API_ENDPOINT: ${{ secrets.POSTHOG_API_ENDPOINT }}
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
+      - name: Detect Sentry auth token
+        id: sentry_auth
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create Sentry release
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+        if: ${{ steps.sentry_auth.outputs.present == 'true' }}
         uses: getsentry/action-release@dab6548b3c03c4717878099e43782cf5be654289 # v3
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -391,8 +414,19 @@ jobs:
           # Without this, cmake-rs selects RelWithDebInfo and CMake fails when ASM is enabled.
           CARGO_PROFILE_RELEASE_DEBUG: 0
 
+      - name: Detect Sentry auth token
+        id: sentry_auth
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Sentry CLI
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+        if: ${{ steps.sentry_auth.outputs.present == 'true' }}
         uses: matbour/setup-sentry-cli@3e938c54b3018bdd019973689ef984e033b0454b # v2
         with:
           token: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -401,7 +435,7 @@ jobs:
           version: 2.21.2
 
       - name: Upload source maps to Sentry
-        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
+        if: ${{ steps.sentry_auth.outputs.present == 'true' }}
         run: sentry-cli debug-files upload --include-sources target/${{ matrix.target }}/release
 
       - name: Prepare binaries (non-macOS)
