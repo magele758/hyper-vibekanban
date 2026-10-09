@@ -10,7 +10,6 @@ import {
   DESKTOP_CACHE_DIR,
   LOCAL_DEV_MODE,
   LOCAL_DIST_DIR,
-  R2_BASE_URL,
   getLatestVersion,
 } from "./download";
 import {
@@ -196,8 +195,7 @@ async function extractAndRun(
 }
 
 function checkForUpdates(): void {
-  const hasValidR2Url = !R2_BASE_URL.startsWith("__");
-  if (LOCAL_DEV_MODE || !hasValidR2Url) {
+  if (LOCAL_DEV_MODE) {
     return;
   }
 

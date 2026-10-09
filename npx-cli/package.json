@@ -10,7 +10,7 @@
     "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=cjs --outfile=bin/cli.js --external:adm-zip --banner:js=\"#!/usr/bin/env node\"",
     "check": "tsc --noEmit -p tsconfig.json",
     "inject:release": "node scripts/inject-release-config.js",
-    "test": "node --test scripts/npm-release.test.js"
+    "test": "node --test scripts/*.test.js"
   },
   "keywords": [],
   "author": "magele758",

@@ -16,7 +16,6 @@ function main() {
   let next;
   try {
     next = injectReleaseConfig(source, {
-      publicUrl: process.env.R2_BINARIES_PUBLIC_URL || '',
       binaryTag: process.env.BINARY_TAG || '',
     });
   } catch (err) {

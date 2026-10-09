@@ -17,45 +17,27 @@ const {
 } = require('./npm-release');
 
 const SOURCE = [
-  "export const R2_BASE_URL = '__R2_PUBLIC_URL__';",
+  "export const RELEASE_DOWNLOAD_BASE = 'https://github.com/magele758/hyper-vibekanban/releases/download';",
   "export const BINARY_TAG = '__BINARY_TAG__';",
   '',
 ].join('\n');
 
-const PUBLIC_URL = 'https://binaries.example.test/vk';
 const TAG = 'v0.1.45-20261009120000';
 
-test('injects the release URL and tag without keeping placeholders', () => {
-  const next = injectReleaseConfig(SOURCE, {
-    publicUrl: PUBLIC_URL,
-    binaryTag: TAG,
-  });
-  assert.equal(next.includes('__R2_PUBLIC_URL__'), false);
+test('injects the release tag and drops the placeholder', () => {
+  const next = injectReleaseConfig(SOURCE, { binaryTag: TAG });
   assert.equal(next.includes('__BINARY_TAG__'), false);
-  assert.equal(next.includes(PUBLIC_URL), true);
   assert.equal(next.includes(TAG), true);
-});
-
-test('rejects an unsafe URL without echoing it', () => {
-  const bad = "https://binaries.example.test/a'b";
-  assert.throws(
-    () =>
-      injectReleaseConfig(SOURCE, {
-        publicUrl: bad,
-        binaryTag: TAG,
-      }),
-    (err) => {
-      assert.equal(err.message.includes(bad), false);
-      assert.match(err.message, /R2_BINARIES_PUBLIC_URL/);
-      return true;
-    }
+  assert.equal(
+    next.includes('github.com/magele758/hyper-vibekanban/releases/download'),
+    true
   );
 });
 
-test('rejects an empty public URL', () => {
+test('rejects a missing release tag', () => {
   assert.throws(
-    () => injectReleaseConfig(SOURCE, { publicUrl: '', binaryTag: TAG }),
-    /R2_BINARIES_PUBLIC_URL/
+    () => injectReleaseConfig(SOURCE, { binaryTag: '' }),
+    /BINARY_TAG/
   );
 });
 
@@ -253,7 +235,7 @@ test('publish script skips a version already on npm', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-test('inject CLI writes the file and does not print the URL', () => {
+test('inject CLI writes the tag and does not print it as a secret', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vk-npm-inject-'));
   const cliPath = path.join(dir, 'cli.js');
   fs.writeFileSync(cliPath, SOURCE);
@@ -263,17 +245,15 @@ test('inject CLI writes the file and does not print the URL', () => {
     {
       env: {
         ...process.env,
-        R2_BINARIES_PUBLIC_URL: PUBLIC_URL,
         BINARY_TAG: TAG,
       },
       encoding: 'utf8',
     }
   );
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout.includes(PUBLIC_URL), false);
   assert.match(result.stdout, new RegExp(TAG));
   const written = fs.readFileSync(cliPath, 'utf8');
-  assert.equal(written.includes(PUBLIC_URL), true);
-  assert.equal(written.includes('__R2_PUBLIC_URL__'), false);
+  assert.equal(written.includes('__BINARY_TAG__'), false);
+  assert.equal(written.includes(TAG), true);
   fs.rmSync(dir, { recursive: true, force: true });
 });
