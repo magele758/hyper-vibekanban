@@ -67,19 +67,19 @@ test('dist-tag is latest only for stable versions', () => {
 
 test('planPublish refuses placeholders and the wrong package name', () => {
   const plan = planPublish({
-    name: 'vibe-kanban',
+    name: 'hyper-vibekanban',
     version: '0.1.45',
     cliSource: 'const url = "https://binaries.example.test";',
   });
   assert.deepEqual(plan, {
-    name: 'vibe-kanban',
+    name: 'hyper-vibekanban',
     version: '0.1.45',
     tag: 'latest',
   });
   assert.throws(
     () =>
       planPublish({
-        name: 'vibe-kanban',
+        name: 'hyper-vibekanban',
         version: '0.1.45',
         cliSource: SOURCE,
       }),
@@ -92,7 +92,7 @@ test('planPublish refuses placeholders and the wrong package name', () => {
         version: '0.1.45',
         cliSource: 'ok',
       }),
-    /vibe-kanban/
+    /hyper-vibekanban/
   );
 });
 
@@ -140,13 +140,13 @@ function writeTarball(dir, version, cliSource) {
   fs.writeFileSync(
     path.join(root, 'package.json'),
     JSON.stringify({
-      name: 'vibe-kanban',
+      name: 'hyper-vibekanban',
       version,
       private: false,
     })
   );
   fs.writeFileSync(path.join(root, 'bin', 'cli.js'), cliSource);
-  const tgz = path.join(dir, `vibe-kanban-${version}.tgz`);
+  const tgz = path.join(dir, `hyper-vibekanban-${version}.tgz`);
   execFileSync('tar', ['-czf', tgz, 'package'], { cwd: dir });
   return tgz;
 }

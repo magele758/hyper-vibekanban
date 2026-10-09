@@ -7,7 +7,7 @@
 Run vibe kanban instantly without installation:
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 This will launch the application locally and open it in your browser automatically.
@@ -15,10 +15,10 @@ This will launch the application locally and open it in your browser automatical
 Helpful entrypoints:
 
 ```bash
-npx vibe-kanban --help
-npx vibe-kanban --version
-npx vibe-kanban review --help
-npx vibe-kanban mcp --help
+npx hyper-vibekanban --help
+npx hyper-vibekanban --version
+npx hyper-vibekanban review --help
+npx hyper-vibekanban mcp --help
 ```
 
 ## What is Vibe Kanban?
@@ -176,7 +176,7 @@ Vibe Kanban supports customization through its configuration system:
 **Ready to supercharge your development workflow?**
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 _Start managing your projects with the power of AI coding agents today!_

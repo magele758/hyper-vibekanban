@@ -1,10 +1,10 @@
 {
-  "name": "vibe-kanban",
+  "name": "hyper-vibekanban",
   "private": false,
   "version": "0.1.44",
   "main": "index.js",
   "bin": {
-    "vibe-kanban": "bin/cli.js"
+    "hyper-vibekanban": "bin/cli.js"
   },
   "scripts": {
     "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=cjs --outfile=bin/cli.js --external:adm-zip --banner:js=\"#!/usr/bin/env node\"",
@@ -13,7 +13,11 @@
     "test": "node --test scripts/npm-release.test.js"
   },
   "keywords": [],
-  "author": "bloop",
+  "author": "magele758",
+  "homepage": "https://github.com/magele758/hyper-vibekanban",
+  "bugs": {
+    "url": "https://github.com/magele758/hyper-vibekanban/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/magele758/hyper-vibekanban.git"
@@ -25,7 +29,7 @@
     "node": ">=20.19.0"
   },
   "license": "",
-  "description": "NPX wrapper around vibe-kanban and vibe-kanban-mcp",
+  "description": "npx launcher for the hyper-vibekanban server, MCP, and review CLI",
   "devDependencies": {
     "esbuild": "^0.27.2"
   },

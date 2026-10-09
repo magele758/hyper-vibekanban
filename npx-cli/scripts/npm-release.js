@@ -4,6 +4,7 @@
 // error messages: callers pass the R2 URL in, and failures report only
 // the secret name and the length.
 
+const NPM_PACKAGE_NAME = 'hyper-vibekanban';
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const BINARY_TAG_RE = /^v\d+\.\d+\.\d+[0-9A-Za-z.+-]*$/;
 const HTTPS_REST_RE = /^[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$/;
@@ -92,8 +93,10 @@ function distTagForVersion(version) {
 }
 
 function planPublish({ name, version, private: isPrivate, cliSource }) {
-  if (name !== 'vibe-kanban') {
-    throw new Error('Refusing to publish a package that is not vibe-kanban.');
+  if (name !== NPM_PACKAGE_NAME) {
+    throw new Error(
+      `Refusing to publish a package that is not ${NPM_PACKAGE_NAME}.`
+    );
   }
   if (isPrivate === true) {
     throw new Error('Refusing to publish a private package.');
@@ -152,4 +155,5 @@ module.exports = {
   npmViewIsMissing,
   stripEmptyNpmAuth,
   buildPublishArgs,
+  NPM_PACKAGE_NAME,
 };

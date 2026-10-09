@@ -87,7 +87,7 @@ function readPackedFile(tgzPath, entry) {
 function main() {
   const tgzPath = process.argv[2];
   if (!tgzPath || !fs.existsSync(tgzPath)) {
-    console.error('Usage: node scripts/publish-npm.js <vibe-kanban.tgz>');
+    console.error('Usage: node scripts/publish-npm.js <hyper-vibekanban.tgz>');
     process.exit(1);
   }
 
@@ -141,7 +141,7 @@ function main() {
   if (published.status !== 0) {
     console.error(
       'npm publish failed. Trusted publishing for this workflow is missing, ' +
-        'or this account cannot publish vibe-kanban.'
+        'or this npm account cannot publish hyper-vibekanban.'
     );
     process.exit(published.status || 1);
   }

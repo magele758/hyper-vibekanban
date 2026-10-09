@@ -10,7 +10,7 @@
 
 <p align="center">Get 10X more out of Claude Code, Gemini CLI, Codex, Cursor, Pi and other coding agents...</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/hyper-vibekanban"><img alt="npm" src="https://img.shields.io/npm/v/hyper-vibekanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
@@ -23,7 +23,7 @@
   <a href="README.fr.md">Français</a>
 </p>
 
-> **Note:** The official Vibe Kanban cloud has been discontinued. This repo is a fork of [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) (hyper-vibekanban): **all upstream capabilities are kept**, plus a new **dynamic board-agent** layer and self-hosted Remote.
+> **Note:** Start this repository with `npx hyper-vibekanban`. The kanban and agent workflow stays, plus a **dynamic board-agent** layer and self-hosted Remote.
 
 ![](packages/public/screenshots/hyper-board.png)
 
@@ -42,7 +42,7 @@ Upstream is a strong “manually open a Workspace” agent workbench + kanban. T
 | **App preview** | Built-in browser, DevTools, inspect, device emulation |
 | **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen, Grok |
 | **Git / PRs** | Rebase, conflict UX, AI PR descriptions, GitHub / Azure merge |
-| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **MCP + Review CLI** | `npx hyper-vibekanban --mcp` / `review` |
 | **Settings** | Agent profiles, MCP, editor integration, notifications, org / projects |
 
 Classic path still works: **issue → open Workspace by hand → logs → review diff → PR**.
@@ -140,7 +140,7 @@ Upstream core, kept and polished.
 Authenticate with your preferred coding agent first, then:
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 That starts the local server and opens your browser.
@@ -224,7 +224,7 @@ See [supported coding agents](docs/supported-coding-agents.mdx). Board chat runt
 ## MCP Server
 
 ```bash
-npx vibe-kanban --mcp
+npx hyper-vibekanban --mcp
 ```
 
 ```json
@@ -241,10 +241,10 @@ npx vibe-kanban --mcp
 ## CLI Reference
 
 ```bash
-npx vibe-kanban               # Local UI
-npx vibe-kanban --mcp         # MCP stdio
-npx vibe-kanban review        # Review CLI
-npx vibe-kanban --help
+npx hyper-vibekanban               # Local UI
+npx hyper-vibekanban --mcp         # MCP stdio
+npx hyper-vibekanban review        # Review CLI
+npx hyper-vibekanban --help
 ```
 
 ## Documentation

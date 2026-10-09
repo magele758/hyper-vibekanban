@@ -73,7 +73,8 @@ jobs:
         id: version
         run: |
           # Get the latest version from npm registry
-          latest_npm_version=$(npm view vibe-kanban version 2>/dev/null || echo "0.0.0")
+          # Publish this repo's package. Do not read the unrelated npm name vibe-kanban.
+          latest_npm_version=$(npm view hyper-vibekanban version 2>/dev/null || echo "0.0.0")
           echo "Latest npm version: $latest_npm_version"
 
           # Get current repo version
@@ -759,7 +760,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: npx-cli-tgz
-          path: npx-cli/vibe-kanban-*.tgz
+          path: npx-cli/hyper-vibekanban-*.tgz
           retention-days: 1
           if-no-files-found: error
 
@@ -774,7 +775,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             vibe-kanban-${{ needs.bump-version.outputs.new_tag }}.zip
-            npx-cli/vibe-kanban-*.tgz
+            npx-cli/hyper-vibekanban-*.tgz
 
       - name: Record release coordinates
         run: |
@@ -816,7 +817,7 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          files=(npx-package/vibe-kanban-*.tgz)
+          files=(npx-package/hyper-vibekanban-*.tgz)
           if [ "${#files[@]}" -ne 1 ]; then
             echo "Expected one npm tarball, found ${#files[@]}"
             exit 1

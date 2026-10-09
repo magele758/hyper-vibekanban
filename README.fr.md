@@ -10,7 +10,7 @@
 
 <p align="center">Tirez 10× plus de Claude Code, Gemini CLI, Codex, Cursor, Pi et des autres agents de code...</p>
 <p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
+  <a href="https://www.npmjs.com/package/hyper-vibekanban"><img alt="npm" src="https://img.shields.io/npm/v/hyper-vibekanban?style=flat-square" /></a>
   <a href="https://github.com/magele758/hyper-vibekanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/magele758/hyper-vibekanban/.github%2Fworkflows%2Fpublish.yml" /></a>
 </p>
 
@@ -23,7 +23,7 @@
   <a href="README.es.md">Español</a>
 </p>
 
-> **Note :** Le cloud officiel Vibe Kanban a été arrêté. Ce dépôt est un fork de [BloopAI/vibe-kanban](https://github.com/BloopAI/vibe-kanban) (hyper-vibekanban) : **toutes les capacités upstream sont conservées**, plus une nouvelle couche **board-agent dynamique** et un Remote auto-hébergé.
+> **Note :** Lancez ce dépôt avec `npx hyper-vibekanban`. Le flux kanban et agents reste, avec une couche **board-agent dynamique** et un Remote auto-hébergé.
 
 ![](packages/public/screenshots/hyper-board.png)
 
@@ -42,7 +42,7 @@ L’upstream est un solide atelier d’agents + kanban fondé sur « ouvrir un W
 | **App preview** | Navigateur intégré, DevTools, inspect, émulation d’appareils |
 | **Coding agents** | Claude Code, Codex, Gemini, Copilot, Amp, Cursor, OpenCode, Droid, CCR, Qwen |
 | **Git / PRs** | Rebase, UX de conflits, descriptions de PR par IA, merge GitHub / Azure |
-| **MCP + Review CLI** | `npx vibe-kanban --mcp` / `review` |
+| **MCP + Review CLI** | `npx hyper-vibekanban --mcp` / `review` |
 | **Settings** | Agent profiles, MCP, intégration éditeur, notifications, org / projects |
 
 Le chemin classique fonctionne toujours : **issue → ouvrir un Workspace à la main → logs → revue de diff → PR**.
@@ -140,7 +140,7 @@ Cœur de l’upstream, conservé et peaufiné.
 Authentifiez-vous d’abord avec votre agent de code préféré, puis :
 
 ```bash
-npx vibe-kanban
+npx hyper-vibekanban
 ```
 
 Cela démarre le serveur local et ouvre le navigateur.
@@ -206,7 +206,7 @@ Voir [supported coding agents](docs/supported-coding-agents.mdx). Les runtimes d
 ## MCP Server
 
 ```bash
-npx vibe-kanban --mcp
+npx hyper-vibekanban --mcp
 ```
 
 ```json
@@ -223,10 +223,10 @@ npx vibe-kanban --mcp
 ## Référence CLI
 
 ```bash
-npx vibe-kanban               # Local UI
-npx vibe-kanban --mcp         # MCP stdio
-npx vibe-kanban review        # Review CLI
-npx vibe-kanban --help
+npx hyper-vibekanban               # Local UI
+npx hyper-vibekanban --mcp         # MCP stdio
+npx hyper-vibekanban review        # Review CLI
+npx hyper-vibekanban --help
 ```
 
 ## Documentation
