@@ -31,8 +31,10 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Only run for main app releases (not remote-v* tags) that were converted from pre-release
-    if: github.event.release.prerelease == false && !startsWith(github.event.release.tag_name, 'remote-')
+    # Automatic publishes run from pre-release.yml. This workflow publishes when
+    # a pre-release is promoted, or when dispatched to retry a release.
+    # remote-* / relay-* tags are image releases, not the npm package.
+    if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == false)) && !startsWith(github.event.release.tag_name || inputs.tag_name, 'remote-') && !startsWith(github.event.release.tag_name || inputs.tag_name, 'relay-') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -112,15 +114,13 @@ jobs:
 
       - name: Publish to npm
         run: |
-          cd npx-cli
-
-          # Publish the exact same package that was tested
-          PACKAGE_FILE="${{ steps.verify.outputs.package-file }}"
-
-          echo "Publishing $PACKAGE_FILE to npm..."
-          npm publish "$PACKAGE_FILE" --provenance --access public
-
-          echo "✅ Successfully published to npm!"
+          SCRIPT="npx-cli/scripts/publish-npm.js"
+          if [ ! -f "$SCRIPT" ]; then
+            echo "This tag does not include the publish script; using the default branch copy."
+            git fetch --depth=1 origin "${{ github.event.repository.default_branch }}"
+            git checkout FETCH_HEAD -- "$SCRIPT" npx-cli/scripts/npm-release.js
+          fi
+          node "$SCRIPT" "npx-cli/${{ steps.verify.outputs.package-file }}"
 
       - name: Update release description
         uses: actions/github-script@v8
@@ -128,19 +128,27 @@ jobs:
           RELEASE_ID: ${{ inputs.release_id }}
         with:
           script: |
-            const releaseId = context.payload.release?.id || process.env.RELEASE_ID;;
-
-            // Fetch the release to get the current body
+            const releaseId = Number(
+              context.payload.release?.id || process.env.RELEASE_ID
+            );
+            if (!releaseId) {
+              core.warning('No release id; skipped the npm publish note.');
+              return;
+            }
+            const marker = '✅ **Published to npm registry**';
             const release = await github.rest.repos.getRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: releaseId
             });
-
             const currentBody = release.data.body || '';
+            if (currentBody.includes(marker)) {
+              core.notice('Release notes already record the npm publish.');
+              return;
+            }
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: releaseId,
-              body: currentBody + '\n\n✅ **Published to npm registry**'
+              body: `${currentBody}\n\n${marker}`
             });

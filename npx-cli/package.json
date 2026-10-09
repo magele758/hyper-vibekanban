@@ -8,13 +8,18 @@
   },
   "scripts": {
     "build": "esbuild src/cli.ts --bundle --platform=node --target=node20 --format=cjs --outfile=bin/cli.js --external:adm-zip --banner:js=\"#!/usr/bin/env node\"",
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "inject:release": "node scripts/inject-release-config.js",
+    "test": "node --test scripts/npm-release.test.js"
   },
   "keywords": [],
   "author": "bloop",
   "repository": {
     "type": "git",
-    "url": "https://github.com/magele758/hyper-vibekanban"
+    "url": "git+https://github.com/magele758/hyper-vibekanban.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=20.19.0"

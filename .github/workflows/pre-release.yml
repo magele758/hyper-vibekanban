@@ -54,7 +54,7 @@ jobs:
 
       - name: Setup SSH Agent for private dependencies
         id: ssh-setup
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ secrets.VK_PRIVATE_DEPLOY_KEY != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387 # v0.9.0
         with:
           ssh-private-key: ${{ secrets.VK_PRIVATE_DEPLOY_KEY }}
@@ -192,6 +192,7 @@ jobs:
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
 
       - name: Create Sentry release
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
         uses: getsentry/action-release@dab6548b3c03c4717878099e43782cf5be654289 # v3
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -384,6 +385,7 @@ jobs:
           CARGO_PROFILE_RELEASE_DEBUG: 0
 
       - name: Setup Sentry CLI
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
         uses: matbour/setup-sentry-cli@3e938c54b3018bdd019973689ef984e033b0454b # v2
         with:
           token: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -392,6 +394,7 @@ jobs:
           version: 2.21.2
 
       - name: Upload source maps to Sentry
+        if: ${{ secrets.SENTRY_AUTH_TOKEN != '' }}
         run: sentry-cli debug-files upload --include-sources target/${{ matrix.target }}/release
 
       - name: Prepare binaries (non-macOS)
@@ -609,23 +612,48 @@ jobs:
           echo "Downloaded binaries:"
           find binaries/
 
-      - name: Configure AWS CLI for R2
+      - name: Require R2 settings
+        env:
+          R2_BINARIES_ACCESS_KEY_ID: ${{ secrets.R2_BINARIES_ACCESS_KEY_ID }}
+          R2_BINARIES_SECRET_ACCESS_KEY: ${{ secrets.R2_BINARIES_SECRET_ACCESS_KEY }}
+          R2_BINARIES_ENDPOINT: ${{ secrets.R2_BINARIES_ENDPOINT }}
+          R2_BINARIES_BUCKET: ${{ secrets.R2_BINARIES_BUCKET }}
+          R2_BINARIES_PUBLIC_URL: ${{ secrets.R2_BINARIES_PUBLIC_URL }}
         run: |
-          aws configure set aws_access_key_id ${{ secrets.R2_BINARIES_ACCESS_KEY_ID }}
-          aws configure set aws_secret_access_key ${{ secrets.R2_BINARIES_SECRET_ACCESS_KEY }}
+          missing=0
+          for name in R2_BINARIES_ACCESS_KEY_ID R2_BINARIES_SECRET_ACCESS_KEY R2_BINARIES_ENDPOINT R2_BINARIES_BUCKET R2_BINARIES_PUBLIC_URL; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub Actions secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Refusing to upload binaries. The npm package downloads them from this bucket."
+            exit 1
+          fi
+          echo "R2 settings are present."
+
+      - name: Configure AWS CLI for R2
+        env:
+          R2_BINARIES_ACCESS_KEY_ID: ${{ secrets.R2_BINARIES_ACCESS_KEY_ID }}
+          R2_BINARIES_SECRET_ACCESS_KEY: ${{ secrets.R2_BINARIES_SECRET_ACCESS_KEY }}
+        run: |
+          aws configure set aws_access_key_id "$R2_BINARIES_ACCESS_KEY_ID"
+          aws configure set aws_secret_access_key "$R2_BINARIES_SECRET_ACCESS_KEY"
           aws configure set default.region auto
 
       - name: Generate manifest and upload to R2
+        env:
+          TAG: ${{ needs.bump-version.outputs.new_tag }}
+          VERSION: ${{ needs.bump-version.outputs.new_version }}
+          ENDPOINT: ${{ secrets.R2_BINARIES_ENDPOINT }}
+          BUCKET: ${{ secrets.R2_BINARIES_BUCKET }}
         run: |
-          TAG="${{ needs.bump-version.outputs.new_tag }}"
-          ENDPOINT="${{ secrets.R2_BINARIES_ENDPOINT }}"
-          BUCKET="${{ secrets.R2_BINARIES_BUCKET }}"
-
           # Generate version manifest with checksums
           node -e "
             const fs = require('fs');
             const crypto = require('crypto');
-            const manifest = { version: '$TAG', platforms: {} };
+            const manifest = { version: process.env.TAG, platforms: {} };
             const platforms = ['linux-x64', 'linux-arm64', 'windows-x64', 'windows-arm64'];
             const binaries = ['vibe-kanban', 'vibe-kanban-mcp', 'vibe-kanban-review'];
 
@@ -666,18 +694,17 @@ jobs:
             --endpoint-url "$ENDPOINT" --content-type "application/json"
 
           # Update global manifest
-          VERSION="${{ needs.bump-version.outputs.new_version }}"
           echo "Updating global manifest..."
           echo "{\"latest\": \"$VERSION\"}" | aws s3 cp - \
             "s3://$BUCKET/binaries/manifest.json" \
             --endpoint-url "$ENDPOINT" --content-type "application/json"
 
       - name: Verify upload
+        env:
+          TAG: ${{ needs.bump-version.outputs.new_tag }}
+          ENDPOINT: ${{ secrets.R2_BINARIES_ENDPOINT }}
+          BUCKET: ${{ secrets.R2_BINARIES_BUCKET }}
         run: |
-          TAG="${{ needs.bump-version.outputs.new_tag }}"
-          ENDPOINT="${{ secrets.R2_BINARIES_ENDPOINT }}"
-          BUCKET="${{ secrets.R2_BINARIES_BUCKET }}"
-
           echo "Listing uploaded files..."
           aws s3 ls "s3://$BUCKET/binaries/$TAG/" \
             --endpoint-url "$ENDPOINT" \
@@ -686,6 +713,8 @@ jobs:
   create-prerelease:
     needs: [bump-version, build-frontend, upload-to-r2]
     runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.gh-release.outputs.id }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -716,22 +745,109 @@ jobs:
           cd npx-cli
           npm ci
 
-      - name: Build npx-cli TypeScript, inject secrets, and Pack
+      - name: Build npx-cli, inject release config, and pack
+        env:
+          R2_BINARIES_PUBLIC_URL: ${{ secrets.R2_BINARIES_PUBLIC_URL }}
+          BINARY_TAG: ${{ needs.bump-version.outputs.new_tag }}
         run: |
           cd npx-cli
           npm run build
-          # Replace placeholders in the bundled output
-          sed -i "s|__R2_PUBLIC_URL__|${{ secrets.R2_BINARIES_PUBLIC_URL }}|g" bin/cli.js
-          sed -i "s|__BINARY_TAG__|${{ needs.bump-version.outputs.new_tag }}|g" bin/cli.js
+          node scripts/inject-release-config.js
           npm pack
 
+      - name: Upload npm package
+        uses: actions/upload-artifact@v6
+        with:
+          name: npx-cli-tgz
+          path: npx-cli/vibe-kanban-*.tgz
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Create GitHub Pre-Release
+        id: gh-release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           tag_name: ${{ needs.bump-version.outputs.new_tag }}
           name: Pre-release ${{ needs.bump-version.outputs.new_tag }}
           prerelease: true
           generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             vibe-kanban-${{ needs.bump-version.outputs.new_tag }}.zip
             npx-cli/vibe-kanban-*.tgz
+
+      - name: Record release coordinates
+        run: |
+          {
+            echo "tag=${{ needs.bump-version.outputs.new_tag }}"
+            echo "release_id=${{ steps.gh-release.outputs.id }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # npm trusted publishing matches this workflow filename (pre-release.yml),
+  # because the publish command runs here rather than in a called workflow.
+  publish-npm:
+    needs: [bump-version, create-prerelease]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      # Node 22.22.2 regresses `npm install -g npm@...`. Pin the same patch
+      # as publish.yml until that upstream regression is resolved.
+      NODE_VERSION: 22.22.1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.bump-version.outputs.new_tag }}
+
+      - name: Setup Node
+        uses: ./.github/actions/setup-node
+
+      - name: Upgrade npm for OIDC support
+        run: npm install -g npm@11.12.0
+
+      - name: Download npm package
+        uses: actions/download-artifact@v7
+        with:
+          name: npx-cli-tgz
+          path: npx-package
+
+      - name: Publish to npm
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(npx-package/vibe-kanban-*.tgz)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "Expected one npm tarball, found ${#files[@]}"
+            exit 1
+          fi
+          node npx-cli/scripts/publish-npm.js "${files[0]}"
+
+      - name: Update release description
+        uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ needs.create-prerelease.outputs.release_id }}
+        with:
+          script: |
+            const releaseId = Number(process.env.RELEASE_ID);
+            if (!releaseId) {
+              core.warning('No release id; skipped the npm publish note.');
+              return;
+            }
+            const marker = '✅ **Published to npm registry**';
+            const release = await github.rest.repos.getRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId
+            });
+            const currentBody = release.data.body || '';
+            if (currentBody.includes(marker)) {
+              core.notice('Release notes already record the npm publish.');
+              return;
+            }
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: releaseId,
+              body: `${currentBody}\n\n${marker}`
+            });
