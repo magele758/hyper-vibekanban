@@ -187,11 +187,13 @@ function RootLayoutContent() {
     <NiceModalProvider>{pageContent}</NiceModalProvider>
   );
 
+  // UserProvider (and shells under it) call useUserSystem(). The context
+  // must wrap those callers; local-web already does this at the app root.
   return (
-    <UserProvider>
-      <RemoteActionsProvider>
-        <RemoteUserSystemProvider>{content}</RemoteUserSystemProvider>
-      </RemoteActionsProvider>
-    </UserProvider>
+    <RemoteUserSystemProvider>
+      <UserProvider>
+        <RemoteActionsProvider>{content}</RemoteActionsProvider>
+      </UserProvider>
+    </RemoteUserSystemProvider>
   );
 }
