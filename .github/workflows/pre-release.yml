@@ -19,6 +19,10 @@ on:
           - minor
           - major
           - prerelease
+  # Some GitHub App tokens can push and send repository_dispatch, but cannot
+  # call workflow_dispatch. client_payload.version_type uses the same values.
+  repository_dispatch:
+    types: [pre-release]
 
 concurrency:
   group: release-${{ github.ref_name }} # allow concurrent prerelease from different branches
@@ -89,7 +93,17 @@ jobs:
 
       - name: Determine and update versions
         id: version
+        env:
+          VERSION_TYPE: ${{ github.event.inputs.version_type || github.event.client_payload.version_type }}
         run: |
+          case "$VERSION_TYPE" in
+            patch|minor|major|prerelease) ;;
+            *)
+              echo "unsupported version_type" >&2
+              exit 1
+              ;;
+          esac
+
           # Get the latest version from npm registry
           # Publish this repo's package. Do not read the unrelated npm name vibe-kanban.
           latest_npm_version=$(npm view hyper-vibekanban version 2>/dev/null || echo "0.0.0")
@@ -114,7 +128,7 @@ jobs:
           timestamp=$(date +%Y%m%d%H%M%S)
 
           # Update root package.json based on base version
-          if [[ "${{ github.event.inputs.version_type }}" == "prerelease" ]]; then
+          if [[ "$VERSION_TYPE" == "prerelease" ]]; then
             # For prerelease, use current package.json version and add branch suffix
             npm version prerelease --preid="${{ steps.branch.outputs.suffix }}" --no-git-tag-version
 
@@ -123,7 +137,7 @@ jobs:
           else
             # For regular releases, use base version and bump it
             npm version $base_version --no-git-tag-version --allow-same-version
-            npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
+            npm version "$VERSION_TYPE" --no-git-tag-version
 
             new_version=$(node -p "require('./package.json').version")
             new_tag="v${new_version}-${timestamp}"
