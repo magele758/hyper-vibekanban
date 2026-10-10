@@ -3,6 +3,7 @@ const REPLACEMENTS: Array<[string, string]> = [
   ['/favicon-vk-dark.svg', '/favicon-maestro-dark.svg'],
   ['/apple-touch-icon.png', '/maestro-icon.png'],
   ['/site.webmanifest', '/site-maestro.webmanifest'],
+  ['<title>hyper-vibekanban</title>', '<title>Maestro</title>'],
   ['<title>Vibe Kanban</title>', '<title>Maestro</title>'],
 ];
 

@@ -404,7 +404,7 @@ async fn export_data(
     let zip_bytes = result.into_inner();
 
     let date = Utc::now().format("%Y-%m-%d");
-    let filename = format!("vibe-kanban-export-{date}.zip");
+    let filename = format!("hyper-vibekanban-export-{date}.zip");
 
     Ok((
         StatusCode::OK,

@@ -33,9 +33,7 @@ export function ProjectSunsetPage({ projectName }: ProjectSunsetPageProps) {
                   ? `"${projectName}" is now export-only.`
                   : 'This project is now export-only.'}{' '}
                 You can still download your project and issue data, but kanban,
-                issue, and workspace flows are no longer available here. The
-                official Vibe Kanban cloud service has been discontinued; use
-                local self-hosting instead.
+                issue, and workspace flows are no longer available here.
               </p>
             </div>
             <div className="flex flex-col gap-half sm:flex-row">

@@ -115,8 +115,8 @@ fn initialize_repo_without_user_creates_initial_commit() {
     if has_global_git_identity() {
         assert!(name.is_some() && email.is_some());
     } else {
-        assert_eq!(name.as_deref(), Some("Vibe Kanban"));
-        assert_eq!(email.as_deref(), Some("noreply@vibe-kanban.local"));
+        assert_eq!(name.as_deref(), Some("hyper-vibekanban"));
+        assert_eq!(email.as_deref(), Some("noreply@hyper-vibekanban.local"));
     }
 }
 
@@ -425,7 +425,7 @@ fn squash_merge_libgit2_sets_author_without_user() {
     if has_global_git_identity() {
         assert!(name.is_some() && email.is_some());
     } else {
-        assert_eq!(name.as_deref(), Some("Vibe Kanban"));
-        assert_eq!(email.as_deref(), Some("noreply@vibe-kanban.local"));
+        assert_eq!(name.as_deref(), Some("hyper-vibekanban"));
+        assert_eq!(email.as_deref(), Some("noreply@hyper-vibekanban.local"));
     }
 }

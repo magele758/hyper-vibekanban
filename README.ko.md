@@ -29,7 +29,7 @@
 
 ## 업스트림 대비: 유지하는 것 / 추가하는 것
 
-업스트림은 강력한 “수동으로 Workspace를 여는” 에이전트 워크벤치 + 칸반입니다. 이 포크는 그 구조를 그대로 유지하고, **보드 이벤트 → 자동 인큐 → 실행 → 결과 기록**과 종료된 클라우드를 대체하는 셀프호스팅을 추가합니다.
+업스트림은 강력한 “수동으로 Workspace를 여는” 에이전트 워크벤치 + 칸반입니다. 이 포크는 그 구조를 그대로 유지하고, **보드 이벤트 → 자동 인큐 → 실행 → 결과 기록**과 셀프호스팅 Remote를 추가합니다.
 
 ### ✅ 업스트림에서 계승 (완전 유지)
 
@@ -61,13 +61,13 @@
 | **Host picker on create** | 이 머신 또는 페어링된 remote worker에서 workspace 실행 |
 | **Mobile board layout** | 스마트폰용 단일 열 + 상태 pills |
 | **Pi coding agent** | 추가 Workspace 실행기로서의 Pi CLI |
-| **Self-hosted Remote stack** | 클라우드 종료 후 Docker Remote + Relay + ElectricSQL (`scripts/vk-*.sh`) |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL (`scripts/vk-*.sh`) |
 
 ### 🔄 업스트림 대비 강화
 
 | 영역 | 업스트림 | 이 포크 |
 |------|----------|-----------|
-| Remote Access | 공식 클라우드 페어링 | **Self-hosted** Remote / Relay; worker-host SOP |
+| Remote Access | 호스트 페어링 | **Self-hosted** Remote / Relay; worker-host SOP |
 | Board | 정적 카드 + 수동 Workspace | 진행 기록 쓰기가 있는 **할당 가능한 agents / squads** |
 | Triggers | UI / MCP로 Workspace 생성 | 추가로: assign, @, Autopilot, webhook, Feishu |
 
@@ -147,7 +147,7 @@ npx hyper-vibekanban
 
 ### Self-hosted Remote (선택)
 
-공식 클라우드 종료 이후, 이 저장소는 멀티 디바이스 동기화를 위한 Docker Remote + Relay + ElectricSQL 스택을 제공합니다. 개발 헬퍼는 `scripts/vk-*.sh`(포트는 `scripts/vk-ports.sh`)에 있습니다. [셀프호스팅 가이드](docs/self-hosting/deploy-docker.mdx)를 참고하세요.
+이 저장소는 멀티 디바이스 동기화를 위한 Docker Remote + Relay + ElectricSQL 스택을 제공합니다. 개발 헬퍼는 `scripts/vk-*.sh`(포트는 `scripts/vk-ports.sh`)에 있습니다. [셀프호스팅 가이드](docs/self-hosting/deploy-docker.mdx)를 참고하세요.
 
 ---
 
@@ -214,7 +214,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

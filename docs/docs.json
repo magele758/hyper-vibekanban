@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Vibe Kanban",
+  "name": "hyper-vibekanban",
   "description": "A kanban board for developers to track coding tasks with AI coding agents",
   "appearance": {
     "default": "light"
@@ -173,8 +173,7 @@
   ],
   "footer": {
     "socials": {
-      "github": "https://github.com/magele758/hyper-vibekanban",
-      "x": "https://x.com/vibekanban"
+      "github": "https://github.com/magele758/hyper-vibekanban"
     }
   }
 }

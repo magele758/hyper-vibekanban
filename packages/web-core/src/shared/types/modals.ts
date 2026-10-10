@@ -9,8 +9,6 @@ declare module '@ebay/nice-modal-react' {
     confirm: ConfirmDialogProps;
 
     // App flow modals
-    'release-notes': void;
-
     'editor-selection': EditorSelectionDialogProps;
   }
 }

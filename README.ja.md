@@ -29,7 +29,7 @@
 
 ## 上流との比較：継承するもの / 追加するもの
 
-上流は強力な「手作業で Workspace を開く」エージェント作業台 + かんばんです。本フォークはそのまま維持し、さらに **ボードイベント → 自動エンキュー → 実行 → 書き戻し**、および終了したクラウドのセルフホスト代替を追加します。
+上流は強力な「手作業で Workspace を開く」エージェント作業台 + かんばんです。本フォークはそのまま維持し、さらに **ボードイベント → 自動エンキュー → 実行 → 書き戻し**、およびセルフホスト Remote を追加します。
 
 ### ✅ 上流から継承（完全維持）
 
@@ -61,13 +61,13 @@
 | **Host picker on create** | このマシン、またはペアリング済み remote worker で workspace を実行 |
 | **Mobile board layout** | スマートフォン向け単一列 + ステータス pills |
 | **Pi coding agent** | 追加の Workspace 実行器としての Pi CLI |
-| **Self-hosted Remote stack** | クラウド終了後の Docker Remote + Relay + ElectricSQL（`scripts/vk-*.sh`） |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL（`scripts/vk-*.sh`） |
 
 ### 🔄 上流からの強化
 
 | 領域 | 上流 | 本フォーク |
 |------|----------|-----------|
-| Remote Access | 公式クラウドペアリング | **Self-hosted** Remote / Relay；worker-host SOP |
+| Remote Access | ホスト側ペアリング | **Self-hosted** Remote / Relay；worker-host SOP |
 | Board | 静的カード + 手動 Workspace | 進捗書き戻し付きの**アサイン可能な agents / squads** |
 | Triggers | UI / MCP で Workspace 作成 | さらに：assign、@、Autopilot、webhook、Feishu |
 
@@ -147,7 +147,7 @@ npx hyper-vibekanban
 
 ### Self-hosted Remote（任意）
 
-公式クラウド終了後、本リポジトリはマルチデバイス同期向けに Docker Remote + Relay + ElectricSQL スタックを同梱しています。開発ヘルパーは `scripts/vk-*.sh`（ポートは `scripts/vk-ports.sh`）にあります。[セルフホスティングガイド](docs/self-hosting/deploy-docker.mdx) を参照してください。
+本リポジトリはマルチデバイス同期向けに Docker Remote + Relay + ElectricSQL スタックを同梱しています。開発ヘルパーは `scripts/vk-*.sh`（ポートは `scripts/vk-ports.sh`）にあります。[セルフホスティングガイド](docs/self-hosting/deploy-docker.mdx) を参照してください。
 
 ---
 
@@ -214,7 +214,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

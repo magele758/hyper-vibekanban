@@ -199,8 +199,8 @@ async function installAndLaunchWindows(
 
   const sentinel = readSentinel(dir);
   if (sentinel?.appPath) {
-    const appExe = path.join(sentinel.appPath, 'Vibe Kanban.exe');
-    if (fs.existsSync(appExe)) {
+    const appExe = windowsExeIn(sentinel.appPath);
+    if (appExe) {
       return launchWindowsApp(appExe);
     }
   }
@@ -219,7 +219,7 @@ async function installAndLaunchWindows(
   const installerPath = path.join(dir, installer);
   const installDir = path.join(dir, 'app');
 
-  console.error('Installing Vibe Kanban...');
+  console.error('Installing hyper-vibekanban...');
   try {
     // NSIS supports /S for silent install and /D= for install directory
     execSync(`"${installerPath}" /S /D="${installDir}"`, {
@@ -233,40 +233,50 @@ async function installAndLaunchWindows(
     );
     execSync(`"${installerPath}"`, { stdio: 'inherit' });
     // For interactive install, the default location is used
-    const defaultDir = path.join(
-      process.env.LOCALAPPDATA || '',
-      'vibe-kanban'
+    const defaultDirs = ['hyper-vibekanban', 'vibe-kanban'].map((name) =>
+      path.join(process.env.LOCALAPPDATA || '', name)
     );
-    if (fs.existsSync(path.join(defaultDir, 'Vibe Kanban.exe'))) {
-      writeSentinel(dir, {
-        type: 'nsis-exe',
-        appPath: defaultDir,
-      });
-      return launchWindowsApp(
-        path.join(defaultDir, 'Vibe Kanban.exe')
-      );
+    for (const defaultDir of defaultDirs) {
+      const appExe = windowsExeIn(defaultDir);
+      if (appExe) {
+        writeSentinel(dir, {
+          type: 'nsis-exe',
+          appPath: defaultDir,
+        });
+        return launchWindowsApp(appExe);
+      }
     }
     console.error(
-      'Installation complete. Please launch Vibe Kanban from your Start menu.'
+      'Installation complete. Please launch hyper-vibekanban from your Start menu.'
     );
     return 0;
   }
 
   writeSentinel(dir, { type: 'nsis-exe', appPath: installDir });
 
-  const appExe = path.join(installDir, 'Vibe Kanban.exe');
-  if (fs.existsSync(appExe)) {
+  const appExe = windowsExeIn(installDir);
+  if (appExe) {
     return launchWindowsApp(appExe);
   }
 
   console.error(
-    'Installation complete. Please launch Vibe Kanban from your Start menu.'
+    'Installation complete. Please launch hyper-vibekanban from your Start menu.'
   );
   return 0;
 }
 
+const WINDOWS_EXE_NAMES = ['hyper-vibekanban.exe', 'Vibe Kanban.exe'];
+
+function windowsExeIn(dir: string): string | null {
+  for (const name of WINDOWS_EXE_NAMES) {
+    const appExe = path.join(dir, name);
+    if (fs.existsSync(appExe)) return appExe;
+  }
+  return null;
+}
+
 function launchWindowsApp(appExe: string): number {
-  console.error('Launching Vibe Kanban...');
+  console.error('Launching hyper-vibekanban...');
   spawn(appExe, [], { detached: true, stdio: 'ignore' }).unref();
   return 0;
 }

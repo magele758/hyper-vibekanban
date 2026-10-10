@@ -61,13 +61,13 @@ El flujo clásico sigue funcionando: **issue → abrir Workspace a mano → logs
 | **Host picker on create** | Ejecutar un workspace en esta máquina o en un remote worker emparejado |
 | **Mobile board layout** | Columna única + pills de estado para teléfonos |
 | **Pi coding agent** | Pi CLI como ejecutor adicional de Workspace |
-| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL tras el cierre de la nube (`scripts/vk-*.sh`) |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL (`scripts/vk-*.sh`) |
 
 ### 🔄 Mejorado frente al upstream
 
 | Área | Upstream | Este fork |
 |------|----------|-----------|
-| Remote Access | Emparejamiento con la nube oficial | Remote / Relay **self-hosted**; SOP worker-host |
+| Remote Access | Emparejamiento alojado | Remote / Relay **self-hosted**; SOP worker-host |
 | Board | Tarjetas estáticas + Workspace manual | **Agents / squads asignables** con escritura de progreso |
 | Triggers | UI / MCP crean Workspace | También: assign, @, Autopilot, webhook, Feishu |
 
@@ -147,7 +147,7 @@ Eso inicia el servidor local y abre el navegador.
 
 ### Remote autoalojado (opcional)
 
-Tras el cierre de la nube oficial, este repo incluye un stack Docker Remote + Relay + ElectricSQL para sincronización multi-dispositivo. Los helpers de desarrollo están en `scripts/vk-*.sh` (puertos en `scripts/vk-ports.sh`). Consulta la [guía de autoalojamiento](docs/self-hosting/deploy-docker.mdx).
+Este repo incluye un stack Docker Remote + Relay + ElectricSQL para sincronización multi-dispositivo. Los helpers de desarrollo están en `scripts/vk-*.sh` (puertos en `scripts/vk-ports.sh`). Consulta la [guía de autoalojamiento](docs/self-hosting/deploy-docker.mdx).
 
 ---
 
@@ -214,7 +214,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

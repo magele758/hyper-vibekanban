@@ -48,7 +48,7 @@ export type CreatePRDialogResult = {
   error?: string;
 };
 
-const PR_TITLE_SUFFIX = ' (vibe-kanban)';
+const PR_TITLE_SUFFIX = ' (hyper-vibekanban)';
 
 const appendPrTitleSuffix = (title: string): string => {
   const trimmedTitle = title.trim();

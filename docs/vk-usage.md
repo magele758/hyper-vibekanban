@@ -1,4 +1,4 @@
-# Vibe Kanban 本地启动说明
+# hyper-vibekanban 本地启动说明
 
 ## 默认端口（避免与常见 3000/8080 冲突）
 

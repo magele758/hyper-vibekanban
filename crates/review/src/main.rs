@@ -34,7 +34,7 @@ const BANNER: &str = r#"
 #[derive(Parser, Debug)]
 #[command(name = "review")]
 #[command(
-    about = "Vibe-Kanban Review helps you review GitHub pull requests by turning them into a clear, story-driven summary instead of a wall of diffs. You provide a pull request URL, optionally link a Claude Code project for additional context, and it builds a narrative that highlights key events and important decisions, helping you prioritise what actually needs attention. It's particularly useful when reviewing large amounts of AI-generated code. Note that code is uploaded to and processed on Vibe-Kanban servers using AI."
+    about = "Review a GitHub pull request as a short narrative. Pass a pull request URL and the base URL of your self-hosted review API (--api-url). You can optionally attach a Claude Code session for extra context. The archive is sent to that API."
 )]
 #[command(version)]
 struct Args {
@@ -45,20 +45,16 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    /// API base URL for your self-hosted review backend (required; official cloud is retired)
+    /// Base URL of your self-hosted review API
     #[arg(long, env = "REVIEW_API_URL")]
     api_url: String,
 }
 
 fn show_disclaimer() {
     println!();
-    println!(
-        "DISCLAIMER: Your code will be processed on our secure remote servers, all artefacts (code, AI logs, etc...) will be deleted after 14 days."
-    );
+    println!("The pull request archive is sent to the review API from --api-url.");
     println!();
-    println!("Full terms and conditions and privacy policy: https://review.fast/terms");
-    println!();
-    println!("Press Enter to accept and continue...");
+    println!("Press Enter to continue...");
 
     let mut input = String::new();
     std::io::stdin().read_line(&mut input).ok();

@@ -444,7 +444,7 @@ fn simple_html_response(status: StatusCode, message: String) -> Response<String>
   </head>
   <body>
     <div class="container">
-      <img class="logo" src="data:image/png;base64,{APP_ICON_BASE64}" alt="Vibe Kanban">
+      <img class="logo" src="data:image/png;base64,{APP_ICON_BASE64}" alt="hyper-vibekanban">
       <div class="content">
         <p class="title">{message}</p>
         <p class="subtitle">Please close this tab and try again.</p>
@@ -483,7 +483,7 @@ fn close_window_response(message: String, skip_auto_close: bool) -> Response<Str
   </head>
   <body>
     <div class="container">
-      <img class="logo" src="data:image/png;base64,{APP_ICON_BASE64}" alt="Vibe Kanban">
+      <img class="logo" src="data:image/png;base64,{APP_ICON_BASE64}" alt="hyper-vibekanban">
       <div class="content">
         <p class="title">{message}</p>
         <p class="subtitle">You can close this tab and return to the app.</p>

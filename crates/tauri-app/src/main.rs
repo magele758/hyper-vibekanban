@@ -28,7 +28,7 @@ const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 #[cfg(feature = "lite")]
 const WINDOW_TITLE: &str = "Maestro";
 #[cfg(not(feature = "lite"))]
-const WINDOW_TITLE: &str = "Vibe Kanban";
+const WINDOW_TITLE: &str = "hyper-vibekanban";
 
 #[cfg(target_os = "linux")]
 mod linux_notifications;

@@ -20,7 +20,7 @@ describe('productDisplayName', () => {
   it('uses Maestro for the lite desktop product', () => {
     expect(LITE_PRODUCT_NAME).toBe('Maestro');
     expect(productDisplayName(true)).toBe('Maestro');
-    expect(productDisplayName(false)).toBe('Vibe Kanban');
+    expect(productDisplayName(false)).toBe('hyper-vibekanban');
   });
 
   it('keeps Maestro brand assets off the full-product logo paths', () => {
@@ -43,7 +43,7 @@ describe('applyMaestroLiteHtml', () => {
     <link rel="icon" href="/favicon-vk-dark.svg" media="(prefers-color-scheme: dark)">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest" />
-    <title>Vibe Kanban</title>
+    <title>hyper-vibekanban</title>
 </head>
 </html>`);
 
@@ -53,6 +53,7 @@ describe('applyMaestroLiteHtml', () => {
     expect(html).toContain('/site-maestro.webmanifest');
     expect(html).toContain('<title>Maestro</title>');
     expect(html).not.toContain('favicon-vk');
+    expect(html).not.toContain('hyper-vibekanban');
     expect(html).not.toContain('Vibe Kanban');
     expect(html).not.toContain('/apple-touch-icon.png');
   });
