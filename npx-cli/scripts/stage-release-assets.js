@@ -11,7 +11,6 @@ const PLATFORMS = [
   'windows-x64',
   'windows-arm64',
   'macos-arm64',
-  'macos-x64',
 ];
 // Main zip/manifest key matches npx-cli extractAndRun("hyper-vibekanban").
 const BINARIES = [

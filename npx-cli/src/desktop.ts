@@ -13,7 +13,6 @@ interface SentinelMeta {
 
 const PLATFORM_MAP: Record<string, string> = {
   'macos-arm64': 'darwin-aarch64',
-  'macos-x64': 'darwin-x86_64',
   'linux-x64': 'linux-x86_64',
   'linux-arm64': 'linux-aarch64',
   'windows-x64': 'windows-x86_64',

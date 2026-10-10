@@ -140,7 +140,6 @@ hyper-vibekanban supports customization through its configuration system:
 
 - Linux x64
 - Windows x64
-- macOS x64 (Intel)
 - macOS ARM64 (Apple Silicon)
 
 ## Use Cases
