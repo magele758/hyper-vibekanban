@@ -155,8 +155,25 @@ jobs:
           echo "new_version=$new_version" >> $GITHUB_OUTPUT
           echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
 
+      - name: Provide billing stub (self-host build strips the private billing crate)
+        run: |
+          # crates/remote is excluded from the workspace, so cargo set-version
+          # does not refresh crates/remote/Cargo.lock. Metadata still has to
+          # resolve the optional path dep at /tmp/billing-stub. vk-billing stays
+          # off, so a stub is enough and the private repo is not required.
+          mkdir -p /tmp/billing-stub/src
+          cat > /tmp/billing-stub/Cargo.toml <<'EOF'
+          [package]
+          name = "billing"
+          version = "0.1.0"
+          edition = "2021"
+
+          [lib]
+          path = "src/lib.rs"
+          EOF
+          echo '// stub billing crate (unused: vk-billing feature is off)' > /tmp/billing-stub/src/lib.rs
+
       - name: Update remote crate lockfile
-        if: ${{ steps.ssh-setup.outcome == 'success' }}
         run: cargo metadata --format-version 1 --manifest-path crates/remote/Cargo.toml > /dev/null
 
       - name: Update relay-tunnel crate lockfile
