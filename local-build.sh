@@ -61,11 +61,11 @@ cargo build --release --bin vibe-kanban-mcp --manifest-path Cargo.toml
 
 echo "📦 Creating distribution package..."
 
-# Copy the main binary
-cp ${CARGO_TARGET_DIR}/release/server vibe-kanban
-zip -q vibe-kanban.zip vibe-kanban
-rm -f vibe-kanban 
-mv vibe-kanban.zip npx-cli/dist/$PLATFORM/vibe-kanban.zip
+# Copy the main binary. The name inside the zip is what npx extracts.
+cp ${CARGO_TARGET_DIR}/release/server hyper-vibekanban
+zip -q hyper-vibekanban.zip hyper-vibekanban
+rm -f hyper-vibekanban
+mv hyper-vibekanban.zip npx-cli/dist/$PLATFORM/hyper-vibekanban.zip
 
 # Copy the MCP binary
 cp ${CARGO_TARGET_DIR}/release/vibe-kanban-mcp vibe-kanban-mcp
@@ -81,7 +81,7 @@ mv vibe-kanban-review.zip npx-cli/dist/$PLATFORM/vibe-kanban-review.zip
 
 echo "✅ CLI build complete!"
 echo "📁 Files created:"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban.zip"
+echo "   - npx-cli/dist/$PLATFORM/hyper-vibekanban.zip"
 echo "   - npx-cli/dist/$PLATFORM/vibe-kanban-mcp.zip"
 echo "   - npx-cli/dist/$PLATFORM/vibe-kanban-review.zip"
 

@@ -271,7 +271,7 @@ async function runMain(desktopMode: boolean): Promise<void> {
 
   // Browser mode (default — headless server + opens browser)
   console.log(`Starting hyper-vibekanban v${CLI_VERSION}${modeLabel}...`);
-  await extractAndRun("vibe-kanban", (bin) => {
+  await extractAndRun("hyper-vibekanban", (bin) => {
     execSync(`"${bin}"`, { stdio: "inherit" });
   });
 }

@@ -12,8 +12,12 @@ const {
 
 test('release asset names are flat and unique per platform', () => {
   assert.equal(
-    releaseAssetName('linux-x64', 'vibe-kanban'),
-    'vibe-kanban-linux-x64.zip'
+    releaseAssetName('linux-x64', 'hyper-vibekanban'),
+    'hyper-vibekanban-linux-x64.zip'
+  );
+  assert.equal(
+    releaseAssetName('macos-arm64', 'hyper-vibekanban'),
+    'hyper-vibekanban-macos-arm64.zip'
   );
   assert.equal(
     releaseAssetName('windows-arm64', 'vibe-kanban-mcp'),
@@ -30,10 +34,12 @@ test('stages checksummed zips for every required platform', () => {
     'linux-arm64',
     'windows-x64',
     'windows-arm64',
+    'macos-arm64',
+    'macos-x64',
   ]) {
     fs.mkdirSync(path.join(source, platform), { recursive: true });
     for (const binary of [
-      'vibe-kanban',
+      'hyper-vibekanban',
       'vibe-kanban-mcp',
       'vibe-kanban-review',
     ]) {
@@ -45,12 +51,35 @@ test('stages checksummed zips for every required platform', () => {
   }
   const manifest = stageReleaseAssets(source, dest);
   assert.equal(
-    fs.existsSync(path.join(dest, 'vibe-kanban-linux-arm64.zip')),
+    fs.existsSync(path.join(dest, 'hyper-vibekanban-linux-arm64.zip')),
     true
   );
   assert.equal(
-    manifest.platforms['linux-x64']['vibe-kanban'].sha256.length,
+    fs.existsSync(path.join(dest, 'hyper-vibekanban-macos-arm64.zip')),
+    true
+  );
+  assert.equal(
+    fs.existsSync(path.join(dest, 'hyper-vibekanban-macos-x64.zip')),
+    true
+  );
+  assert.equal(manifest.platforms['macos-arm64']['vibe-kanban'], undefined);
+  assert.equal(
+    manifest.platforms['linux-x64']['hyper-vibekanban'].sha256.length,
+    64
+  );
+  assert.equal(
+    manifest.platforms['macos-arm64']['hyper-vibekanban'].sha256.length,
     64
   );
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test('cli downloads the main binary as hyper-vibekanban', () => {
+  const cli = fs.readFileSync(
+    path.join(__dirname, '../src/cli.ts'),
+    'utf8'
+  );
+  assert.match(cli, /extractAndRun\(\s*"hyper-vibekanban"/);
+  assert.doesNotMatch(cli, /extractAndRun\(\s*"vibe-kanban"/);
+  assert.match(cli, /Downloading \$\{baseName\}/);
 });
