@@ -35,7 +35,6 @@ test('stages checksummed zips for every required platform', () => {
     'windows-x64',
     'windows-arm64',
     'macos-arm64',
-    'macos-x64',
   ]) {
     fs.mkdirSync(path.join(source, platform), { recursive: true });
     for (const binary of [
@@ -58,10 +57,7 @@ test('stages checksummed zips for every required platform', () => {
     fs.existsSync(path.join(dest, 'hyper-vibekanban-macos-arm64.zip')),
     true
   );
-  assert.equal(
-    fs.existsSync(path.join(dest, 'hyper-vibekanban-macos-x64.zip')),
-    true
-  );
+  assert.equal(manifest.platforms['macos-x64'], undefined);
   assert.equal(manifest.platforms['macos-arm64']['vibe-kanban'], undefined);
   assert.equal(
     manifest.platforms['linux-x64']['hyper-vibekanban'].sha256.length,
