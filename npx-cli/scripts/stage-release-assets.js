@@ -10,8 +10,15 @@ const PLATFORMS = [
   'linux-arm64',
   'windows-x64',
   'windows-arm64',
+  'macos-arm64',
+  'macos-x64',
 ];
-const BINARIES = ['vibe-kanban', 'vibe-kanban-mcp', 'vibe-kanban-review'];
+// Main zip/manifest key matches npx-cli extractAndRun("hyper-vibekanban").
+const BINARIES = [
+  'hyper-vibekanban',
+  'vibe-kanban-mcp',
+  'vibe-kanban-review',
+];
 
 function releaseAssetName(platform, binaryName) {
   return `${binaryName}-${platform}.zip`;
