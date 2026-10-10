@@ -11,6 +11,7 @@ const {
   npmViewIsMissing,
   stripEmptyNpmAuth,
   buildPublishArgs,
+  publishFailureMessage,
 } = require('./npm-release');
 
 const TOKEN_ENV_KEYS = [
@@ -139,10 +140,7 @@ function main() {
   );
   const published = runNpm(buildPublishArgs(tgzPath, plan.tag), true);
   if (published.status !== 0) {
-    console.error(
-      'npm publish failed. Trusted publishing for this workflow is missing, ' +
-        'or this npm account cannot publish hyper-vibekanban.'
-    );
+    console.error(publishFailureMessage(published.status));
     process.exit(published.status || 1);
   }
   console.log(`Published ${plan.name}@${plan.version}.`);
