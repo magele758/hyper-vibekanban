@@ -84,7 +84,7 @@
   "signIn": "Sign in",
   "signOut": "Sign out",
   "oauth": {
-    "title": "Sign in to Vibe Kanban",
+    "title": "Sign in to hyper-vibekanban",
     "description": "Sign in to join organizations and share tasks with your team",
     "continueWithGitHub": "Continue with GitHub",
     "continueWithGoogle": "Continue with Google",
@@ -251,7 +251,7 @@
   "workspacesGuide": {
     "welcome": {
       "title": "Welcome",
-      "content": "Welcome to the Workspaces page. One view of the workspaces across all of your projects, and the fastest way to review work from your agents. Share feedback anytime via the navbar icon."
+      "content": "Welcome to the Workspaces page. One view of the workspaces across all of your projects, and the fastest way to review work from your agents."
     },
     "commandBar": {
       "title": "Command Bar",
@@ -508,7 +508,7 @@
     "projectsGuide": {
       "intro": {
         "title": "Welcome",
-        "content": "Welcome to Vibe Kanban. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this help dialog or give feedback anytime from the navbar."
+        "content": "Welcome to hyper-vibekanban. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this guide from the project menu."
       },
       "welcome": {
         "title": "Projects",
@@ -524,7 +524,7 @@
       },
       "organizations": {
         "title": "Invite your team",
-        "content": "We've automatically created a personal organization and initial project so you can get started with Vibe Kanban. Export your cloud data before shutdown."
+        "content": "We've automatically created a personal organization and initial project so you can get started with hyper-vibekanban. You can also create new organizations and invite your team to collaborate."
       }
     }
   },

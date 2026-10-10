@@ -29,7 +29,7 @@
 
 ## vs upstream : ce que l’on conserve / ce que l’on ajoute
 
-L’upstream est un solide atelier d’agents + kanban fondé sur « ouvrir un Workspace à la main ». Ce fork le conserve tel quel et ajoute **événement de board → mise en file automatique → exécution → écriture en retour**, plus un remplacement auto-hébergé du cloud retiré.
+L’upstream est un solide atelier d’agents + kanban fondé sur « ouvrir un Workspace à la main ». Ce fork le conserve tel quel et ajoute **événement de board → mise en file automatique → exécution → écriture en retour**, plus un Remote auto-hébergé.
 
 ### ✅ Hérité de l’upstream (entièrement conservé)
 
@@ -61,13 +61,13 @@ Le chemin classique fonctionne toujours : **issue → ouvrir un Workspace à la 
 | **Host picker on create** | Lancer un workspace sur cette machine ou un remote worker appairé |
 | **Mobile board layout** | Colonne unique + pills de statut pour téléphones |
 | **Pi coding agent** | Pi CLI comme exécuteur Workspace supplémentaire |
-| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL après l’arrêt du cloud (`scripts/vk-*.sh`) |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL (`scripts/vk-*.sh`) |
 
 ### 🔄 Amélioré par rapport à l’upstream
 
 | Domaine | Upstream | Ce fork |
 |------|----------|-----------|
-| Remote Access | Appairage cloud officiel | Remote / Relay **self-hosted** ; SOP worker-host |
+| Remote Access | Appairage hébergé | Remote / Relay **self-hosted** ; SOP worker-host |
 | Board | Cartes statiques + Workspace manuel | **Agents / squads assignables** avec écriture du progrès |
 | Triggers | UI / MCP créent un Workspace | Aussi : assign, @, Autopilot, webhook, Feishu |
 
@@ -147,7 +147,7 @@ Cela démarre le serveur local et ouvre le navigateur.
 
 ### Remote auto-hébergé (optionnel)
 
-Après l’arrêt du cloud officiel, ce dépôt fournit une stack Docker Remote + Relay + ElectricSQL pour la synchro multi-appareils. Les helpers de développement sont sous `scripts/vk-*.sh` (ports dans `scripts/vk-ports.sh`). Voir le [guide d’auto-hébergement](docs/self-hosting/deploy-docker.mdx).
+Ce dépôt fournit une stack Docker Remote + Relay + ElectricSQL pour la synchro multi-appareils. Les helpers de développement sont sous `scripts/vk-*.sh` (ports dans `scripts/vk-ports.sh`). Voir le [guide d’auto-hébergement](docs/self-hosting/deploy-docker.mdx).
 
 ---
 
@@ -214,7 +214,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

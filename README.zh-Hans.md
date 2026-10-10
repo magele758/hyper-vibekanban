@@ -29,7 +29,7 @@
 
 ## 相对原版：继承了什么 / 新增了什么
 
-一句话：原版是「人手开 Workspace 的 Agent 工作台 + 看板」；本 fork 在其上叠一层 **看板事件 → 自动入队执行 → 结果回写**，并把停服的云能力改成可自托管。
+一句话：原版是「人手开 Workspace 的 Agent 工作台 + 看板」；本 fork 在其上叠一层 **看板事件 → 自动入队执行 → 结果回写**，并带上可自托管的 Remote。
 
 ### ✅ 继承自原版（完整保留，用法不变）
 
@@ -61,13 +61,13 @@
 | **创建时 Host 选择** | Workspace 可指定在本机或已配对的远程 Worker 上跑 |
 | **手机看板布局** | 窄屏单列 + 状态 pill，适合手机查看看板 |
 | **Pi Coding Agent** | 新增 Pi CLI 作为 Workspace 执行器之一 |
-| **自托管 Remote 栈** | 官方云停服后，用 Docker Remote + Relay + ElectricSQL 续上多端同步（见 `scripts/vk-*.sh`） |
+| **自托管 Remote 栈** | Docker Remote + Relay + ElectricSQL，用于多端同步（见 `scripts/vk-*.sh`） |
 
 ### 🔄 相对原版的增强（有基础，本 fork 加强）
 
 | 能力 | 原版 | 本 fork |
 |------|------|---------|
-| Remote Access | 官方云配对 | **本地自托管** Remote / Relay；Worker Host SOP |
+| Remote Access | 托管配对 | **本地自托管** Remote / Relay；Worker Host SOP |
 | 看板 | 静态卡片 + 人手开 Workspace | **可指派 Agent / Squad**，进度回写看板 |
 | 执行入口 | UI / MCP 手动创建 Workspace | 另增：指派、@、Autopilot、Webhook、飞书 |
 
@@ -147,7 +147,7 @@ npx hyper-vibekanban
 
 ### 自托管 Remote（可选）
 
-官方云停服后，本仓库用 Docker Remote + Relay + ElectricSQL 续上「多端同步 / 远程看板」。开发栈一键脚本见仓库根目录 `scripts/vk-*.sh`（端口约定见 `scripts/vk-ports.sh`）。部署说明：[自托管指南](docs/self-hosting/deploy-docker.mdx)。
+本仓库用 Docker Remote + Relay + ElectricSQL 做多端同步和远程看板。开发栈一键脚本见仓库根目录 `scripts/vk-*.sh`（端口约定见 `scripts/vk-ports.sh`）。部署说明：[自托管指南](docs/self-hosting/deploy-docker.mdx)。
 
 #### 预构建镜像（GHCR）——部署无需本地编译
 
@@ -232,7 +232,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

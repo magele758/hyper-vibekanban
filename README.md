@@ -29,7 +29,7 @@
 
 ## vs upstream: what we keep / what we add
 
-Upstream is a strong “manually open a Workspace” agent workbench + kanban. This fork keeps that intact, and adds **board event → auto enqueue → execute → write-back**, plus a self-hosted replacement for the retired cloud.
+Upstream is a strong “manually open a Workspace” agent workbench + kanban. This fork keeps that intact, and adds **board event → auto enqueue → execute → write-back**, plus a self-hosted Remote.
 
 ### ✅ Inherited from upstream (fully kept)
 
@@ -61,13 +61,13 @@ Classic path still works: **issue → open Workspace by hand → logs → review
 | **Host picker on create** | Run a workspace on this machine or a paired remote worker |
 | **Mobile board layout** | Single-column + status pills for phones |
 | **Pi coding agent** | Pi CLI as an additional Workspace executor |
-| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL after cloud shutdown (`scripts/vk-*.sh`) |
+| **Self-hosted Remote stack** | Docker Remote + Relay + ElectricSQL (`scripts/vk-*.sh`) |
 
 ### 🔄 Enhanced vs upstream
 
 | Area | Upstream | This fork |
 |------|----------|-----------|
-| Remote Access | Official cloud pairing | **Self-hosted** Remote / Relay; worker-host SOP |
+| Remote Access | Hosted pairing | **Self-hosted** Remote / Relay; worker-host SOP |
 | Board | Static cards + manual Workspace | **Assignable agents / squads** with progress write-back |
 | Triggers | UI / MCP create Workspace | Also: assign, @, Autopilot, webhook, Feishu |
 
@@ -147,7 +147,7 @@ That starts the local server and opens your browser.
 
 ### Self-hosted Remote (optional)
 
-After the official cloud shutdown, this repo ships a Docker Remote + Relay + ElectricSQL stack for multi-device sync. Dev helpers live under `scripts/vk-*.sh` (ports in `scripts/vk-ports.sh`). See the [self-hosting guide](docs/self-hosting/deploy-docker.mdx).
+This repo ships a Docker Remote + Relay + ElectricSQL stack for multi-device sync. Dev helpers live under `scripts/vk-*.sh` (ports in `scripts/vk-ports.sh`). See the [self-hosting guide](docs/self-hosting/deploy-docker.mdx).
 
 #### Prebuilt images (GHCR) — deploy without local compiles
 
@@ -232,7 +232,7 @@ npx hyper-vibekanban --mcp
   "mcpServers": {
     "vibe_kanban": {
       "command": "npx",
-      "args": ["-y", "vibe-kanban@latest", "--mcp"]
+      "args": ["-y", "hyper-vibekanban@latest", "--mcp"]
     }
   }
 }

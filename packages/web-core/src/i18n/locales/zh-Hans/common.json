@@ -80,7 +80,7 @@
   "signIn": "登录",
   "signOut": "退出登录",
   "oauth": {
-    "title": "登录 Vibe Kanban",
+    "title": "登录 hyper-vibekanban",
     "description": "登录以加入组织并与团队共享任务",
     "continueWithGitHub": "使用 GitHub 继续",
     "continueWithGoogle": "使用 Google 继续",
@@ -237,7 +237,7 @@
   "workspacesGuide": {
     "welcome": {
       "title": "欢迎",
-      "content": "欢迎使用 Workspaces，这是 Vibe Kanban 的全新设计界面。我们正在向部分用户推出以获取早期反馈。您可以随时通过导航栏中的反馈图标分享您的想法。"
+      "content": "欢迎使用 Workspaces。在这里可以查看所有项目的工作区，并快速审阅 Agent 的工作。"
     },
     "commandBar": {
       "title": "命令栏",
@@ -494,7 +494,7 @@
     "projectsGuide": {
       "intro": {
         "title": "Welcome",
-        "content": "Welcome to Vibe Kanban. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this help dialog or give feedback anytime from the navbar."
+        "content": "Welcome to hyper-vibekanban. Use the help sections in this panel to learn how things work, then create your first issue. You can re-open this guide from the project menu."
       },
       "welcome": {
         "title": "Projects",
@@ -510,7 +510,7 @@
       },
       "organizations": {
         "title": "Invite your team",
-        "content": "We've automatically created a personal organization and initial project so you can get started with Vibe Kanban. Export your cloud data before shutdown."
+        "content": "We've automatically created a personal organization and initial project so you can get started with hyper-vibekanban. You can also create new organizations and invite your team to collaborate."
       }
     }
   },

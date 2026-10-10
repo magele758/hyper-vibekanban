@@ -3,7 +3,7 @@
     "command": "npx",
     "args": [
       "-y",
-      "vibe-kanban@latest",
+      "hyper-vibekanban@latest",
       "--mcp"
     ]
   },
@@ -46,8 +46,8 @@
   },
   "meta": {
     "vibe_kanban": {
-      "name": "Vibe Kanban",
-      "description": "Create, update and delete Vibe Kanban tasks",
+      "name": "hyper-vibekanban",
+      "description": "Create, update and delete hyper-vibekanban tasks",
       "url": "https://github.com/magele758/hyper-vibekanban/blob/main/docs/integrations/vibe-kanban-mcp-server.mdx",
       "icon": "favicon-vk-light.svg"
     },
@@ -78,7 +78,6 @@
     "dev_manager": {
       "name": "Dev Manager",
       "description": "Launch and manage multiple dev servers in parallel with automatic port allocation",
-      "url": "https://github.com/BloopAI/dev-manager-mcp",
       "icon": "mcp/dev_manager_logo.svg"
     }
   }

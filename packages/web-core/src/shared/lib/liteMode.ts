@@ -22,7 +22,7 @@ export function isViteLiteMode(): boolean {
 }
 
 export function productDisplayName(lite: boolean): string {
-  return lite ? LITE_PRODUCT_NAME : 'Vibe Kanban';
+  return lite ? LITE_PRODUCT_NAME : 'hyper-vibekanban';
 }
 
 export function resolveLiteMode(serverLiteMode?: boolean | null): boolean {

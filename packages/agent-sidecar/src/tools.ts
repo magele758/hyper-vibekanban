@@ -36,7 +36,7 @@ async function remoteFetch<T>(
   return JSON.parse(body) as T;
 }
 
-export const TOOL_SYSTEM_PROMPT = `You are a board Copilot for Vibe Kanban (参谋，不是 coding agent).
+export const TOOL_SYSTEM_PROMPT = `You are a board Copilot for hyper-vibekanban (参谋，不是 coding agent).
 You help clarify requirements, prioritize, edit issues, and suggest assigning Agents/Squads/Autopilots.
 
 When you need to mutate the board, emit ONE fenced block exactly like:

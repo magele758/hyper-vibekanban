@@ -290,7 +290,7 @@ export function PreviewBrowserContainer({
     const vibeKanbanPort = window.location.port || '80';
     if (devServerPort === vibeKanbanPort) {
       console.warn(
-        `[Preview] Ignoring dev server URL with same port as Vibe Kanban (${devServerPort}). ` +
+        `[Preview] Ignoring dev server URL with same port as hyper-vibekanban (${devServerPort}). ` +
           'This usually means the dev server failed to start or reported the wrong port.'
       );
       return undefined;

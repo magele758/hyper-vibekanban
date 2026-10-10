@@ -420,7 +420,8 @@ async fn fetch_status_message(
                 }
                 lines.push(format!("- **CWD**: `{}`", thread.cwd.display()));
                 lines.push(format!("- **CLI version**: `{}`", thread.cli_version));
-                let source_label = format!("{:?}", thread.source).replace("VsCode", "Vibe Kanban");
+                let source_label =
+                    format!("{:?}", thread.source).replace("VsCode", "hyper-vibekanban");
                 lines.push(format!("- **Source**: `{source_label}`"));
             }
             Err(err) => {

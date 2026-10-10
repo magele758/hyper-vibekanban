@@ -2,7 +2,7 @@
 
 > 配套文档:[`vk-usage.md`](vk-usage.md)(端口/启动)、根目录 `CLAUDE.md`「Local Dev Stack」一节(手机 HTTPS 前门 `VK_MOBILE`)。
 >
-> 适用场景:手机经 Tailscale 访问 Vibe Kanban(Desktop `:13001` / Remote `:13000` / 手机 HTTPS 前门 `:13444`)时**很慢或剧烈卡顿**,但**同一手机连 WiFi 就很快**。
+> 适用场景:手机经 Tailscale 访问 hyper-vibekanban(Desktop `:13001` / Remote `:13000` / 手机 HTTPS 前门 `:13444`)时**很慢或剧烈卡顿**,但**同一手机连 WiFi 就很快**。
 
 ## TL;DR
 
