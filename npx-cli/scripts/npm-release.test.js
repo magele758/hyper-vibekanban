@@ -14,6 +14,7 @@ const {
   npmViewIsMissing,
   stripEmptyNpmAuth,
   buildPublishArgs,
+  publishFailureMessage,
 } = require('./npm-release');
 
 const SOURCE = [
@@ -107,13 +108,36 @@ test('strips only empty auth lines from npmrc text', () => {
 test('publish args request provenance, public access, and the dist-tag', () => {
   assert.deepEqual(buildPublishArgs('pkg.tgz', 'latest'), [
     'publish',
-    'pkg.tgz',
+    path.resolve('pkg.tgz'),
     '--provenance',
     '--access',
     'public',
     '--tag',
     'latest',
   ]);
+});
+
+test('slashy relative tarball paths are published as absolute files', () => {
+  const relative = 'npx-package/hyper-vibekanban-0.1.45.tgz';
+  const absolute = path.resolve(relative);
+  assert.deepEqual(buildPublishArgs(relative, 'latest'), [
+    'publish',
+    absolute,
+    '--provenance',
+    '--access',
+    'public',
+    '--tag',
+    'latest',
+  ]);
+  assert.equal(path.isAbsolute(absolute), true);
+  assert.equal(buildPublishArgs(absolute, 'latest')[1], absolute);
+});
+
+test('git exit 128 is not described as a missing trusted publisher', () => {
+  const gitFailure = publishFailureMessage(128);
+  assert.equal(/trusted publishing/i.test(gitFailure), false);
+  assert.match(gitFailure, /git exit 128/);
+  assert.match(publishFailureMessage(1), /Trusted publishing/);
 });
 
 function writeTarball(dir, version, cliSource) {
@@ -152,7 +176,14 @@ case "$1" in
     echo "No match found for version" >&2
     exit 1
     ;;
-  publish) exit 0 ;;
+  publish)
+    if [ "$STUB_MODE" = "git128" ]; then
+      echo "npm error code 128" >&2
+      echo "npm error command git --no-replace-objects ls-remote ssh://git@github.com/npx-package/hyper-vibekanban-0.1.45.tgz.git" >&2
+      exit 128
+    fi
+    exit 0
+    ;;
   *) exit 1 ;;
 esac
 `
@@ -204,6 +235,77 @@ test('publish script uses OIDC args and does not forward npm tokens', () => {
   assert.equal(stubLog.includes(planted), false);
   const npmrc = fs.readFileSync(path.join(home, '.npmrc'), 'utf8');
   assert.equal(npmrc.includes('_authToken'), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('publish script resolves a slashy relative tarball before npm', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vk-npm-abs-'));
+  const home = path.join(dir, 'home');
+  const binDir = path.join(dir, 'bin');
+  const pkgDir = path.join(dir, 'npx-package');
+  fs.mkdirSync(home);
+  fs.mkdirSync(binDir);
+  fs.mkdirSync(pkgDir);
+  writeNpmStub(binDir);
+  const tgz = writeTarball(
+    pkgDir,
+    '0.1.45',
+    'const url = "https://binaries.example.test/vk";\n'
+  );
+  const relative = path.relative(dir, tgz);
+  assert.equal(relative, 'npx-package/hyper-vibekanban-0.1.45.tgz');
+  const log = path.join(dir, 'stub.log');
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'publish-npm.js'), relative],
+    {
+      cwd: dir,
+      env: {
+        PATH: `${binDir}:/usr/bin:/bin`,
+        HOME: home,
+        STUB_LOG: log,
+        STUB_MODE: 'missing',
+        GITHUB_ACTIONS: 'true',
+      },
+      encoding: 'utf8',
+    }
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const stubLog = fs.readFileSync(log, 'utf8');
+  const absolute = path.resolve(dir, relative);
+  assert.match(
+    stubLog,
+    new RegExp(
+      `publish ${absolute.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} --provenance --access public --tag latest`
+    )
+  );
+  assert.equal(stubLog.includes(`publish ${relative} `), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('publish script does not blame trusted publishing for git exit 128', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vk-npm-git128-'));
+  const binDir = path.join(dir, 'bin');
+  fs.mkdirSync(binDir);
+  writeNpmStub(binDir);
+  const tgz = writeTarball(dir, '0.1.45', 'const url = "https://ok.example";\n');
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'publish-npm.js'), tgz],
+    {
+      env: {
+        PATH: `${binDir}:/usr/bin:/bin`,
+        HOME: dir,
+        STUB_LOG: path.join(dir, 'stub.log'),
+        STUB_MODE: 'git128',
+        GITHUB_ACTIONS: 'true',
+      },
+      encoding: 'utf8',
+    }
+  );
+  assert.equal(result.status, 128);
+  assert.equal(/trusted publishing/i.test(result.stderr), false);
+  assert.match(result.stderr, /git exit 128/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

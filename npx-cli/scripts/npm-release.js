@@ -2,6 +2,8 @@
 
 // Shared checks for packing and publishing npx-cli.
 
+const path = require('path');
+
 const NPM_PACKAGE_NAME = 'hyper-vibekanban';
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 const BINARY_TAG_RE = /^v\d+\.\d+\.\d+[0-9A-Za-z.+-]*$/;
@@ -101,15 +103,30 @@ function stripEmptyNpmAuth(contents) {
 }
 
 function buildPublishArgs(tgzPath, tag) {
+  // "dir/file.tgz" is an npm GitHub shorthand unless the path is absolute
+  // (or starts with ./ or /). publish then runs git ls-remote and exits 128.
   return [
     'publish',
-    tgzPath,
+    path.resolve(tgzPath),
     '--provenance',
     '--access',
     'public',
     '--tag',
     tag,
   ];
+}
+
+function publishFailureMessage(status) {
+  if (status === 128) {
+    return (
+      'npm publish failed with git exit 128. The package path was treated ' +
+      'as a repository; this is not a missing trusted publisher.'
+    );
+  }
+  return (
+    'npm publish failed. Trusted publishing for this workflow is missing, ' +
+    'or this npm account cannot publish hyper-vibekanban.'
+  );
 }
 
 module.exports = {
@@ -121,5 +138,6 @@ module.exports = {
   npmViewIsMissing,
   stripEmptyNpmAuth,
   buildPublishArgs,
+  publishFailureMessage,
   NPM_PACKAGE_NAME,
 };
