@@ -9,7 +9,17 @@ import { useOrgContext } from '@/shared/hooks/useOrgContext';
 import { useUserContext } from '@/shared/hooks/useUserContext';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
 import { useProjectWorkspaceCreateDraft } from '@/shared/hooks/useProjectWorkspaceCreateDraft';
+import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
+import {
+  issueCreateNavigationHostId,
+  resolveIssueWorkspaceCreateHostId,
+} from '@/shared/lib/issueWorkspaceCreateHost';
+import { getDestinationHostId } from '@/shared/lib/routes/appNavigation';
+import { useHostId } from '@/shared/providers/HostIdProvider';
 import { workspacesApi } from '@/shared/lib/api';
 import { enableArchivedWorkspaceStream } from '@/shared/lib/archivedWorkspaceStreamGate';
 import { workspaceRecordKeys } from '@/shared/hooks/useWorkspaceRecord';
@@ -42,6 +52,12 @@ export function IssueWorkspacesSectionContainer({
   const queryClient = useQueryClient();
   const { projectId } = useParams({ strict: false });
   const appNavigation = useAppNavigation();
+  const runtime = useAppRuntime();
+  const pageHostId = useHostId();
+  const destination = useCurrentAppDestination();
+  const routeHostId = getDestinationHostId(destination);
+  const { executionHostId } = useExecutionHostId();
+  const { remoteHosts } = useRemoteCloudHostsAppBarModel();
   const { openWorkspaceCreateFromState } = useProjectWorkspaceCreateDraft();
   const { userId } = useAuth();
   const { workspaces } = useUserContext();
@@ -93,9 +109,15 @@ export function IssueWorkspacesSectionContainer({
       const owner =
         membersWithProfilesById.get(workspace.owner_user_id) ?? null;
 
+      const onThisHost = Boolean(
+        workspace.local_workspace_id &&
+          localWorkspacesById.has(workspace.local_workspace_id)
+      );
+
       return {
         id: workspace.id,
-        localWorkspaceId: workspace.local_workspace_id,
+        // Another machine's local id 404s on this page's /api/workspaces.
+        localWorkspaceId: onThisHost ? workspace.local_workspace_id : null,
         name: workspace.name,
         archived: workspace.archived,
         filesChanged: workspace.files_changed ?? 0,
@@ -140,21 +162,54 @@ export function IssueWorkspacesSectionContainer({
       return;
     }
 
+    const hostInput = {
+      runtime,
+      routeHostId,
+      executionHostId,
+      pageHostId,
+      hosts: remoteHosts,
+    };
+    const targetHostId = resolveIssueWorkspaceCreateHostId(hostInput);
+    const navigationHostId = issueCreateNavigationHostId({
+      ...hostInput,
+      targetHostId,
+    });
+
+    if (
+      runtime === 'remote' &&
+      !targetHostId &&
+      (navigationHostId === null || !pageHostId)
+    ) {
+      await ConfirmDialog.show({
+        title: t('common:error'),
+        message: t('createMode.hostPicker.offlineHint', {
+          defaultValue:
+            'Selected host is offline. Choose this machine or another online host.',
+        }),
+        confirmText: t('common:ok'),
+        showCancelButton: false,
+      });
+      return;
+    }
+
     const issue = getIssue(issueId);
     const initialPrompt = buildWorkspaceCreatePrompt(
       issue?.title ?? null,
       issue?.description ?? null
     );
-    const localWorkspaceIds = buildLocalWorkspaceIdSet(
-      activeWorkspaces,
-      archivedWorkspaces
-    );
-
-    const defaults = await getWorkspaceDefaults(
-      workspaces,
-      localWorkspaceIds,
-      projectId
-    );
+    const requestedHostId =
+      navigationHostId === undefined ? pageHostId : navigationHostId;
+    const defaultsOnRequestedHost =
+      (requestedHostId ?? null) === (pageHostId ?? null);
+    // Repo and workspace ids from another machine 404 on this page's
+    // /api/workspaces and leave the create button disabled.
+    const defaults = defaultsOnRequestedHost
+      ? await getWorkspaceDefaults(
+          workspaces,
+          buildLocalWorkspaceIdSet(activeWorkspaces, archivedWorkspaces),
+          projectId
+        )
+      : null;
     const createState = buildWorkspaceCreateInitialState({
       prompt: initialPrompt,
       defaults,
@@ -163,6 +218,7 @@ export function IssueWorkspacesSectionContainer({
 
     const draftId = await openWorkspaceCreateFromState(createState, {
       issueId,
+      ...(navigationHostId !== undefined ? { hostId: navigationHostId } : {}),
     });
     if (!draftId) {
       await ConfirmDialog.show({
@@ -183,6 +239,11 @@ export function IssueWorkspacesSectionContainer({
     activeWorkspaces,
     archivedWorkspaces,
     workspaces,
+    runtime,
+    routeHostId,
+    executionHostId,
+    pageHostId,
+    remoteHosts,
     t,
   ]);
 
@@ -201,7 +262,11 @@ export function IssueWorkspacesSectionContainer({
   // Handle clicking a workspace card to open it
   const handleWorkspaceClick = useCallback(
     (localWorkspaceId: string | null) => {
-      if (projectId && localWorkspaceId) {
+      if (
+        projectId &&
+        localWorkspaceId &&
+        localWorkspacesById.has(localWorkspaceId)
+      ) {
         appNavigation.goToProjectIssueWorkspace(
           projectId,
           issueId,
@@ -209,7 +274,7 @@ export function IssueWorkspacesSectionContainer({
         );
       }
     },
-    [projectId, issueId, appNavigation]
+    [projectId, issueId, appNavigation, localWorkspacesById]
   );
 
   // Handle unlinking a workspace from the issue
@@ -223,6 +288,10 @@ export function IssueWorkspacesSectionContainer({
       });
 
       if (result === 'confirmed') {
+        if (!localWorkspacesById.has(localWorkspaceId)) {
+          return;
+        }
+
         try {
           await workspacesApi.unlinkFromIssue(localWorkspaceId);
         } catch (error) {
@@ -238,7 +307,7 @@ export function IssueWorkspacesSectionContainer({
         }
       }
     },
-    [t]
+    [localWorkspacesById, t]
   );
 
   // Handle deleting a workspace (unlinks first, then deletes local)
