@@ -7,6 +7,12 @@ import type {
   StartSpake2EnrollmentResponse,
 } from 'shared/types';
 import { getAuthRuntime } from '@/shared/lib/auth/runtime';
+import { resolveRelayApiBaseForPage } from '@/shared/lib/relayApiBase';
+
+export {
+  isLoopbackHostname,
+  isSelfHostedDevHostname,
+} from '@/shared/lib/relayApiBase';
 
 export interface RelaySigningSessionRefreshPayload {
   client_id: string;
@@ -20,32 +26,6 @@ const BUILD_TIME_RELAY_API_BASE = import.meta.env.VITE_RELAY_API_BASE_URL || '';
 const USE_REMOTE_API_BASE_FALLBACK = !BUILD_TIME_RELAY_API_BASE;
 
 let _relayApiBase: string = BUILD_TIME_RELAY_API_BASE || BUILD_TIME_API_BASE;
-
-export function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '[::1]' ||
-    hostname === '::1'
-  );
-}
-
-/** Dev/self-host: baked relay URL may use LAN IP while the page is opened via Tailscale IP/DNS. */
-export function isSelfHostedDevHostname(hostname: string): boolean {
-  if (isLoopbackHostname(hostname)) {
-    return true;
-  }
-  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) {
-    return true;
-  }
-  if (hostname.endsWith('.ts.net')) {
-    return true;
-  }
-  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)) {
-    return true;
-  }
-  return false;
-}
 
 export function setRelayApiBase(base: string | null | undefined) {
   if (base) {
@@ -62,65 +42,18 @@ export function resolveDefaultRelayApiBase(
   remoteApiBase?: string | null
 ): string {
   const relayPort = import.meta.env.VITE_RELAY_PORT || '18082';
+  const tailscaleRelayHttpsPort =
+    import.meta.env.VITE_TAILSCALE_RELAY_HTTPS_PORT || '18443';
 
   if (typeof window !== 'undefined') {
     const { protocol, hostname } = window.location;
-
-    // Front-door HTTPS pages (desktop localhost h2 / mobile Tailscale): the
-    // relay is only reachable via its dedicated HTTPS front door, never the raw
-    // http relay port. Trust the build-time relay base (set by vk-start to that
-    // front door) instead of deriving a raw-port origin → avoids mixed-content.
-    if (
-      protocol === 'https:' &&
-      BUILD_TIME_RELAY_API_BASE.startsWith('https:')
-    ) {
-      try {
-        const baked = new URL(BUILD_TIME_RELAY_API_BASE);
-        if (
-          baked.hostname !== hostname &&
-          (hostname.endsWith('.ts.net') || isSelfHostedDevHostname(hostname))
-        ) {
-          if (hostname.endsWith('.ts.net')) {
-            const relayDoorPort =
-              import.meta.env.VITE_TAILSCALE_RELAY_HTTPS_PORT || '18443';
-            return `${protocol}//${hostname}:${relayDoorPort}`;
-          }
-          return `${protocol}//${hostname}:${relayPort}`;
-        }
-      } catch {
-        // fall through to baked base
-      }
-      return BUILD_TIME_RELAY_API_BASE;
-    }
-
-    const liveRelayOrigin = `${protocol}//${hostname}:${relayPort}`;
-
-    if (BUILD_TIME_RELAY_API_BASE) {
-      try {
-        const baked = new URL(BUILD_TIME_RELAY_API_BASE);
-        // Worker desktops open on localhost but point at another machine's
-        // relay (e.g. Mac Tailscale). Do not remap that remote relay onto
-        // localhost — nothing is listening there.
-        if (
-          isLoopbackHostname(hostname) &&
-          !isLoopbackHostname(baked.hostname)
-        ) {
-          return BUILD_TIME_RELAY_API_BASE;
-        }
-        if (
-          baked.hostname === hostname ||
-          baked.hostname === 'localhost' ||
-          isSelfHostedDevHostname(baked.hostname)
-        ) {
-          return liveRelayOrigin;
-        }
-        return BUILD_TIME_RELAY_API_BASE;
-      } catch {
-        return liveRelayOrigin;
-      }
-    }
-
-    return liveRelayOrigin;
+    return resolveRelayApiBaseForPage({
+      bakedRelayApiBase: BUILD_TIME_RELAY_API_BASE,
+      pageProtocol: protocol,
+      pageHostname: hostname,
+      relayPort,
+      tailscaleRelayHttpsPort,
+    });
   }
 
   if (BUILD_TIME_RELAY_API_BASE) {
