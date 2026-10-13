@@ -57,7 +57,7 @@ Add the following configuration to your agent's MCP servers configuration:
 The hyper-vibekanban MCP server provides tools for managing organisations, projects, issues, workspaces, and task execution.
 
 <Note>
-Many tools accept an optional `project_id` or `organization_id` parameter. When running inside a workspace linked to a remote project, these are inferred automatically from context and can be omitted. The exception is `list_projects`, which always requires an explicit `organization_id`.
+Many tools accept an optional `project_id` or `organization_id` parameter. When running inside a workspace linked to a remote project, these are inferred automatically from context and can be omitted. `list_projects` and `create_project` always require an explicit `organization_id`.
 </Note>
 
 ### Context
@@ -77,7 +77,14 @@ Many tools accept an optional `project_id` or `organization_id` parameter. When 
 
 | Tool | Purpose | Required Parameters | Optional Parameters | Returns |
 |------|---------|-------------------|-------------------|---------|
-| `list_projects` | List projects in an organisation | `organization_id` | None | List of projects with IDs and names |
+| `list_projects` | List projects in an organisation | `organization_id` | None | List of projects with IDs, names, and colours |
+| `create_project` | Create a project in an organisation | `organization_id`<br/>`name` | `color` | Created project |
+| `update_project` | Update a project's name, colour, or sort order | `project_id` | `name`<br/>`color`<br/>`sort_order` | Updated project |
+| `list_project_statuses` | List statuses for a project | None | `project_id` | Statuses with IDs, names, colours, and sort order |
+
+<Tip>
+`color` uses HSL in the form `H S% L%`, for example `217 91% 60%`. `create_project` uses that blue when `color` is omitted. `update_project` leaves the existing colour unchanged when `color` is omitted, and leaves the name and sort order unchanged when those fields are omitted.
+</Tip>
 
 ### Issue Management
 
