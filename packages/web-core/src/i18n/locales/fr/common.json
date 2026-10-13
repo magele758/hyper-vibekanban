@@ -543,7 +543,11 @@
       "label": "Exécuter sur",
       "thisMachine": "Cette machine",
       "offlineHost": "{{name}} (hors ligne)",
-      "offlineHint": "L’hôte sélectionné est hors ligne. Choisissez cette machine ou un autre hôte en ligne."
+      "offlineHint": "L’hôte sélectionné est hors ligne. Choisissez cette machine ou un autre hôte en ligne.",
+      "offlineHintRemote": "L’hôte sélectionné est hors ligne. Choisissez un hôte en ligne.",
+      "selectHost": "Choisir une machine",
+      "noOnlineHost": "Choisissez un hôte en ligne pour exécuter cet espace.",
+      "noPairedHosts": "Aucune machine appairée. Appairez un hôte avant de créer un workspace."
     }
   },
   "modelSelector": {

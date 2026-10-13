@@ -553,7 +553,11 @@
       "label": "Run on",
       "thisMachine": "This machine",
       "offlineHost": "{{name}} (offline)",
-      "offlineHint": "Selected host is offline. Choose this machine or another online host."
+      "offlineHint": "Selected host is offline. Choose this machine or another online host.",
+      "offlineHintRemote": "Selected host is offline. Choose an online host.",
+      "selectHost": "Select a machine",
+      "noOnlineHost": "Choose an online host to run this workspace.",
+      "noPairedHosts": "No paired machines yet. Pair a host before creating a workspace."
     },
     "console": {
       "warning": "The agent runs directly in your repo's current directory and branch. It will not create a branch or commit for you — you stay in control of commits.",

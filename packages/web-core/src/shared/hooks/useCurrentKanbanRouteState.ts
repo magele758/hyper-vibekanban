@@ -17,10 +17,11 @@ export function useCurrentKanbanRouteState(): KanbanRouteState {
     () => resolveKanbanRouteState(destination),
     [destination]
   );
-  // Kanban boards (project routes) never carry a /hosts/{id} URL segment, so on
-  // Desktop fold in the selected execution host. This keeps the issue composer
-  // (and any other host-scoped route state) from colliding across hosts for the
-  // same project. On remote-web executionHostId is always null → unchanged.
+  // Kanban boards (project routes) never carry a /hosts/{id} URL segment, so
+  // fold in the selected execution host. This keeps the issue composer (and
+  // any other host-scoped route state) from colliding across hosts for the
+  // same project. On the data service page the picker sets that host so issue
+  // create follows the machine the user chose.
   const effectiveHostId = routeState.hostId ?? executionHostId;
   const issueComposerKey = useMemo(() => {
     if (!routeState.projectId) {

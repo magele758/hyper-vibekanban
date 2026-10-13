@@ -21,8 +21,15 @@ import { CreateModeRepoPickerBar } from './CreateModeRepoPickerBar';
 import { CreateModeHostPicker } from '@/shared/components/CreateModeHostPicker';
 import { ModelSelectorContainer } from '@/shared/components/ModelSelectorContainer';
 import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
+import { useCreateModeHosts } from '@/shared/hooks/useCreateModeHosts';
+import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
 import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
-import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
+import {
+  LOCAL_CREATE_HOST_VALUE,
+  isCreateHostRunnable,
+  resolveCreateModeHostValue,
+} from '@/shared/lib/createModeHostPickerModel';
+import { getDestinationHostId } from '@/shared/lib/routes/appNavigation';
 
 function getRepoDisplayName(repo: Repo) {
   return repo.display_name || repo.name;
@@ -45,9 +52,30 @@ export function CreateChatBoxContainer({
 }: CreateChatBoxContainerProps) {
   const { t } = useTranslation('common');
   const runtime = useAppRuntime();
+  const destination = useCurrentAppDestination();
+  const routeHostId = getDestinationHostId(destination);
   const { profiles, config } = useUserSystem();
-  const { hosts: remoteHosts } = useRemoteCloudHostsAppBarModel();
+  const { hosts: createHosts, isLoading: createHostsLoading } =
+    useCreateModeHosts();
   const { executionHostId } = useExecutionHostId();
+  const selectedHostValue = resolveCreateModeHostValue({
+    runtime,
+    executionHostId,
+    routeHostId,
+    hosts: createHosts,
+  });
+  const executionHostIdForRequest =
+    !selectedHostValue || selectedHostValue === LOCAL_CREATE_HOST_VALUE
+      ? null
+      : selectedHostValue;
+  const hostChoicePending = runtime === 'remote' && createHostsLoading;
+  const canRunOnHost =
+    !hostChoicePending &&
+    isCreateHostRunnable({
+      runtime,
+      hostId: executionHostIdForRequest,
+      hosts: createHosts,
+    });
   const {
     repos,
     targetBranches,
@@ -65,15 +93,6 @@ export function CreateChatBoxContainer({
     setAttachments: setDraftAttachments,
     localProjectId,
   } = useCreateMode();
-
-  const isExecutionHostOffline = useMemo(() => {
-    if (runtime !== 'local' || !executionHostId) {
-      return false;
-    }
-
-    const host = remoteHosts.find((item) => item.id === executionHostId);
-    return !host || host.status === 'offline';
-  }, [executionHostId, remoteHosts, runtime]);
 
   const { createWorkspace } = useCreateWorkspace();
   const hasSelectedRepos = repos.length > 0;
@@ -218,7 +237,7 @@ export function CreateChatBoxContainer({
     hasSelectedBranchesForAllRepos &&
     message.trim().length > 0 &&
     effectiveExecutor !== null &&
-    !isExecutionHostOffline;
+    canRunOnHost;
 
   const handlePresetSelect = (presetId: string | null) => {
     if (!effectiveExecutor) return;
@@ -309,6 +328,10 @@ export function CreateChatBoxContainer({
     const result = await createWorkspace.mutateAsync({
       data,
       linkToIssue,
+      execution: {
+        runtime,
+        hostId: executionHostIdForRequest,
+      },
     });
 
     if (result.workspace) {
@@ -338,23 +361,37 @@ export function CreateChatBoxContainer({
     localProjectId,
     effectiveMode,
     effectiveConsoleRepoId,
+    runtime,
+    executionHostIdForRequest,
   ]);
 
   // Determine error to display
-  const displayError = isExecutionHostOffline
-    ? t('createMode.hostPicker.offlineHint', {
-        defaultValue:
-          'Selected host is offline. Choose this machine or another online host.',
-      })
-    : hasAttemptedSubmit && repos.length === 0
-      ? 'Add at least one repository to create a workspace'
-      : hasAttemptedSubmit && !hasSelectedBranchesForAllRepos
-        ? 'Select a branch for every repository before creating a workspace'
-        : createWorkspace.error
-          ? createWorkspace.error instanceof Error
-            ? createWorkspace.error.message
-            : 'Failed to create workspace'
-          : null;
+  const displayError =
+    !canRunOnHost && !hostChoicePending
+      ? t(
+          runtime === 'remote'
+            ? executionHostIdForRequest
+              ? 'createMode.hostPicker.offlineHintRemote'
+              : 'createMode.hostPicker.noOnlineHost'
+            : 'createMode.hostPicker.offlineHint',
+          {
+            defaultValue:
+              runtime === 'remote'
+                ? executionHostIdForRequest
+                  ? 'Selected host is offline. Choose an online host.'
+                  : 'Choose an online host to run this workspace.'
+                : 'Selected host is offline. Choose this machine or another online host.',
+          }
+        )
+      : hasAttemptedSubmit && repos.length === 0
+        ? 'Add at least one repository to create a workspace'
+        : hasAttemptedSubmit && !hasSelectedBranchesForAllRepos
+          ? 'Select a branch for every repository before creating a workspace'
+          : createWorkspace.error
+            ? createWorkspace.error instanceof Error
+              ? createWorkspace.error.message
+              : 'Failed to create workspace'
+            : null;
 
   // Wait for initial value to be applied before rendering
   // This ensures the editor mounts with content ready, so autoFocus works correctly
@@ -490,7 +527,7 @@ export function CreateChatBoxContainer({
                   }
                   onSend={handleSubmit}
                   isSending={createWorkspace.isPending}
-                  disabled={!hasSelectedRepos || isExecutionHostOffline}
+                  disabled={!hasSelectedRepos || !canRunOnHost}
                   executor={{
                     selected: effectiveExecutor,
                     options: executorOptions,

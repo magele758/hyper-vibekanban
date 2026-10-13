@@ -543,7 +543,11 @@
       "label": "Ejecutar en",
       "thisMachine": "Esta máquina",
       "offlineHost": "{{name}} (fuera de línea)",
-      "offlineHint": "El host seleccionado está fuera de línea. Elija esta máquina u otro host en línea."
+      "offlineHint": "El host seleccionado está fuera de línea. Elija esta máquina u otro host en línea.",
+      "offlineHintRemote": "El host seleccionado está desconectado. Elige un host en línea.",
+      "selectHost": "Elegir máquina",
+      "noOnlineHost": "Elige un host en línea para ejecutar este workspace.",
+      "noPairedHosts": "No hay máquinas emparejadas. Empareja un host antes de crear un workspace."
     }
   },
   "modelSelector": {
