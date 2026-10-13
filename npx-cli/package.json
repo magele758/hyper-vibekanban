@@ -1,7 +1,7 @@
 {
   "name": "hyper-vibekanban",
   "private": false,
-  "version": "0.1.50-main.0",
+  "version": "0.1.50-main.1",
   "main": "index.js",
   "bin": {
     "hyper-vibekanban": "bin/cli.js"
