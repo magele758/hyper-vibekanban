@@ -8904,6 +8904,7 @@ dependencies = [
  "relay-types",
  "relay-webrtc",
  "relay-ws",
+ "remote-info",
  "reqwest 0.13.2",
  "rust-embed",
  "rustls",

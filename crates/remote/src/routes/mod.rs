@@ -35,6 +35,7 @@ pub(crate) mod error;
 mod export;
 pub mod feishu;
 mod github_app;
+mod host_links;
 pub mod hosts;
 mod identity;
 pub mod inbox;

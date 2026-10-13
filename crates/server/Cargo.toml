@@ -31,6 +31,7 @@ relay-webrtc = { path = "../relay-webrtc" }
 ws-bridge = { path = "../ws-bridge" }
 desktop-bridge = { path = "../desktop-bridge" }
 preview-proxy = { path = "../preview-proxy" }
+remote-info = { path = "../remote-info" }
 trusted-key-auth = { path = "../trusted-key-auth" }
 tokio = { workspace = true }
 shlex = "1.3.0"

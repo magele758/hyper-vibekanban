@@ -10,7 +10,9 @@ use super::error::ErrorResponse;
 use crate::{AppState, auth::RequestContext, db::hosts::HostRepository};
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/hosts", get(list_hosts))
+    Router::new()
+        .route("/hosts", get(list_hosts))
+        .merge(super::host_links::router())
 }
 
 async fn list_hosts(

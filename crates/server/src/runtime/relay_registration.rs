@@ -18,14 +18,29 @@ pub fn default_host_nickname(user_id: &str) -> String {
     format!("{os_type} host ({user_id})")
 }
 
-pub fn clean_host_nickname(config: &Config, user_id: &str) -> String {
-    config
-        .host_nickname
-        .as_deref()
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .map(str::to_string)
+pub fn resolve_host_nickname(
+    env_nickname: Option<&str>,
+    config_nickname: Option<&str>,
+    user_id: &str,
+) -> String {
+    let cleaned = |value: Option<&str>| {
+        value
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+    };
+    cleaned(env_nickname)
+        .or_else(|| cleaned(config_nickname))
         .unwrap_or_else(|| default_host_nickname(user_id))
+}
+
+pub fn clean_host_nickname(config: &Config, user_id: &str) -> String {
+    let from_env = std::env::var("VK_HOST_NICKNAME").ok();
+    resolve_host_nickname(
+        from_env.as_deref(),
+        config.host_nickname.as_deref(),
+        user_id,
+    )
 }
 
 struct RelayParams {
@@ -155,4 +170,23 @@ async fn start_relay(
         shutdown,
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_host_nickname;
+
+    #[test]
+    fn nickname_prefers_env_over_config_and_default() {
+        assert_eq!(
+            resolve_host_nickname(Some("  my-host  "), Some("config-name"), "user"),
+            "my-host"
+        );
+        assert_eq!(
+            resolve_host_nickname(Some("   "), Some("config-name"), "user"),
+            "config-name"
+        );
+        let fallback = resolve_host_nickname(None, None, "machine-1");
+        assert!(fallback.contains("machine-1"));
+    }
 }

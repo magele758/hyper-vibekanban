@@ -17,6 +17,7 @@ import {
   installAndLaunch,
   cleanOldDesktopVersions,
 } from "./desktop";
+import { resolveJoinRelayBase } from "../scripts/relay-base.js";
 
 const CLI_VERSION: string = require("../package.json").version;
 
@@ -237,6 +238,63 @@ async function runReview(args: string[]): Promise<void> {
   });
 }
 
+function requireJoinEnv(name: string, trim: boolean): string {
+  const raw = process.env[name] ?? "";
+  const value = trim ? raw.trim() : raw;
+  if (!value) {
+    console.error(`${name} is required.`);
+    console.error("");
+    console.error("Usage:");
+    console.error("  VK_SHARED_API_BASE=https://<data-host>:13444 \\");
+    console.error("  VK_SHARED_RELAY_API_BASE=https://<data-host>:18443 \\");
+    console.error("  VK_LOCAL_LOGIN_EMAIL=you@example.com \\");
+    console.error("  VK_LOCAL_LOGIN_PASSWORD=... \\");
+    console.error("  VK_HOST_NICKNAME=my-host \\");
+    console.error("  npx hyper-vibekanban join");
+    process.exit(1);
+  }
+  return value;
+}
+
+async function runJoin(): Promise<void> {
+  const apiBase = requireJoinEnv("VK_SHARED_API_BASE", true);
+  requireJoinEnv("VK_LOCAL_LOGIN_EMAIL", true);
+  requireJoinEnv("VK_LOCAL_LOGIN_PASSWORD", false);
+  requireJoinEnv("VK_HOST_NICKNAME", true);
+
+  const relayBase = resolveJoinRelayBase(
+    apiBase,
+    process.env.VK_SHARED_RELAY_API_BASE,
+  );
+  if (/^https:\/\/[^/]*\.ts\.net:18082(?:\/|$)/i.test(relayBase)) {
+    console.error(`Refusing to use plaintext relay port: ${relayBase}`);
+    process.exit(1);
+  }
+
+  process.env.VK_SHARED_API_BASE = apiBase;
+  process.env.VK_SHARED_RELAY_API_BASE = relayBase;
+  process.env.VK_JOIN = "1";
+  process.env.VK_NO_BROWSER = "1";
+  console.error(`Data service: ${apiBase}`);
+  console.error(`Relay API:    ${relayBase}`);
+
+  await extractAndRun("hyper-vibekanban", (bin) => {
+    const proc = spawn(bin, ["join"], {
+      stdio: "inherit",
+      env: process.env,
+    });
+    proc.on("exit", (code) => process.exit(code || 0));
+    proc.on("error", (error) => {
+      console.error("Join failed:", error.message);
+      process.exit(1);
+    });
+    process.on("SIGINT", () => {
+      proc.kill("SIGINT");
+    });
+    process.on("SIGTERM", () => proc.kill("SIGTERM"));
+  });
+}
+
 async function runMain(desktopMode: boolean): Promise<void> {
   checkForUpdates();
 
@@ -311,6 +369,15 @@ async function main(): Promise<void> {
     .allowUnknownOptions()
     .action((_args: string[], options: RootOptions) => {
       runOrExit(runMain(Boolean(options.desktop)));
+    });
+
+  cli
+    .command(
+      "join",
+      "Log in to a data service and register this machine with Relay",
+    )
+    .action(() => {
+      runOrExit(runJoin());
     });
 
   cli

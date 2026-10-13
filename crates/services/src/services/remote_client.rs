@@ -277,32 +277,39 @@ impl RemoteClient {
         let (email, password) = local_login_credentials()?;
 
         warn!(%email, "Auto local login after definitive auth failure");
-        let response = match self
-            .local_login(&LocalLoginRequest {
-                email: email.clone(),
-                password,
-            })
-            .await
-        {
-            Ok(response) => response,
+        match self.login_with_password(&email, &password).await {
+            Ok(token) => Some(token),
             Err(err) => {
                 warn!(error = %err, %email, "Auto local login failed");
-                return None;
+                None
             }
-        };
+        }
+    }
 
+    /// Log in with email/password and persist the resulting tokens.
+    pub async fn login_with_password(
+        &self,
+        email: &str,
+        password: &str,
+    ) -> Result<String, RemoteClientError> {
+        let response = self
+            .local_login(&LocalLoginRequest {
+                email: email.to_string(),
+                password: password.to_string(),
+            })
+            .await?;
         let expires_at = extract_expiration(&response.access_token).ok();
         let creds = Credentials {
             access_token: Some(response.access_token.clone()),
             refresh_token: response.refresh_token,
             expires_at,
         };
-        if let Err(err) = self.auth_context.save_credentials(&creds).await {
-            warn!(error = %err, "Failed to persist credentials after auto local login");
-            return None;
-        }
+        self.auth_context
+            .save_credentials(&creds)
+            .await
+            .map_err(|err| RemoteClientError::Storage(err.to_string()))?;
         self.auth_context.clear_remote_auth_degraded_slug().await;
-        Some(response.access_token)
+        Ok(response.access_token)
     }
 
     async fn refresh_credentials(

@@ -10,6 +10,7 @@ pub mod electric_publications;
 pub mod export;
 pub mod feishu;
 pub mod github_app;
+pub mod host_links;
 pub mod hosts;
 pub mod identity_errors;
 pub mod inbox;

@@ -186,9 +186,14 @@ impl Deployment for LocalDeployment {
         let relay_api_base = if lite_mode {
             None
         } else {
-            std::env::var("VK_SHARED_RELAY_API_BASE")
+            let explicit = std::env::var("VK_SHARED_RELAY_API_BASE")
                 .ok()
-                .or_else(|| option_env!("VK_SHARED_RELAY_API_BASE").map(|s| s.to_string()))
+                .or_else(|| option_env!("VK_SHARED_RELAY_API_BASE").map(|s| s.to_string()));
+            remote_info::resolve_relay_api_base(
+                explicit.as_deref(),
+                api_base.as_deref(),
+                remote_info::is_join_mode(),
+            )
         };
         let remote_info = RemoteInfo::new();
         if let Some(api_base) = api_base.clone() {
@@ -197,6 +202,7 @@ impl Deployment for LocalDeployment {
                 .expect("api_base already set");
         }
         if let Some(relay_api_base) = relay_api_base {
+            tracing::info!(%relay_api_base, "Using relay API base");
             remote_info
                 .set_relay_api_base(relay_api_base)
                 .expect("relay_api_base already set");

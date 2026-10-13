@@ -1,6 +1,7 @@
 use anyhow::{self, Error as AnyhowError};
 use axum::Router;
 use deployment::{Deployment, DeploymentError};
+use remote_info::is_join_mode;
 use server::{
     DeploymentImpl, middleware::origin::validate_origin, routes, runtime::relay_registration,
 };
@@ -139,10 +140,14 @@ async fn main() -> Result<(), VibeKanbanError> {
         .set_preview_proxy_port(actual_proxy_port)
         .expect("client preview proxy port already set");
 
+    if is_join_mode() {
+        server::runtime::join::prepare_join_session(&deployment).await?;
+    }
+
     let app_router = routes::router(deployment.clone());
 
-    // Production only: open browser
-    if !cfg!(debug_assertions) {
+    // Production only: open browser. `join` stays headless.
+    if should_open_browser() {
         tracing::info!("Opening browser...");
         let browser_port = actual_main_port;
         tokio::spawn(async move {
@@ -182,6 +187,19 @@ async fn main() -> Result<(), VibeKanbanError> {
 
     relay_registration::spawn_relay(&deployment).await;
 
+    if is_join_mode() {
+        let link_deployment = deployment.clone();
+        let link_shutdown = shutdown_token.clone();
+        tokio::spawn(async move {
+            server::runtime::join::maintain_host_link(
+                link_deployment,
+                actual_main_port,
+                link_shutdown,
+            )
+            .await;
+        });
+    }
+
     tokio::select! {
         _ = shutdown_signal() => {
             tracing::info!("Shutdown signal received");
@@ -195,6 +213,16 @@ async fn main() -> Result<(), VibeKanbanError> {
     perform_cleanup_actions(&deployment).await;
 
     Ok(())
+}
+
+fn should_open_browser() -> bool {
+    if cfg!(debug_assertions) || is_join_mode() {
+        return false;
+    }
+    !matches!(
+        std::env::var("VK_NO_BROWSER").ok().as_deref(),
+        Some("1") | Some("true")
+    )
 }
 
 pub async fn shutdown_signal() {
