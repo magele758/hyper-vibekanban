@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::debug!("Database pool created");
 
     let jwt = Arc::new(JwtService::new(config.jwt_secret.clone()));
-    let state = RelayAppState::new(pool, config.clone(), jwt);
+    let state = RelayAppState::new(pool, config.clone(), jwt).await?;
 
     let router = routes::build_router(state);
 
