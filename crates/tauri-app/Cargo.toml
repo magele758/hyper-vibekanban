@@ -1,6 +1,6 @@
 [package]
 name = "vibe-kanban-tauri"
-version = "0.1.50-main.1"
+version = "0.1.50-main.2"
 edition = "2024"
 
 [[bin]]
