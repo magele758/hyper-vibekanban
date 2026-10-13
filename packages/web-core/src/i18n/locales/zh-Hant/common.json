@@ -543,7 +543,11 @@
       "label": "執行於",
       "thisMachine": "此本機",
       "offlineHost": "{{name}} (離線)",
-      "offlineHint": "選取的微服務/主機已離線。請選擇此本機或其他在線主機。"
+      "offlineHint": "選取的微服務/主機已離線。請選擇此本機或其他在線主機。",
+      "offlineHintRemote": "所選機器已離線，請改選一台在線的。",
+      "selectHost": "選擇機器",
+      "noOnlineHost": "請選擇一台在線的遠端機器來執行。",
+      "noPairedHosts": "還沒有已配對的機器。請先配對一台 Host。"
     }
   },
   "modelSelector": {

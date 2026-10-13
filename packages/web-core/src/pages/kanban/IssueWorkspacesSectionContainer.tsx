@@ -11,9 +11,9 @@ import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
+import { useCreateModeHosts } from '@/shared/hooks/useCreateModeHosts';
 import { useExecutionHostId } from '@/shared/hooks/useExecutionHostId';
 import { useProjectWorkspaceCreateDraft } from '@/shared/hooks/useProjectWorkspaceCreateDraft';
-import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
 import {
   issueCreateNavigationHostId,
   resolveIssueWorkspaceCreateHostId,
@@ -57,7 +57,7 @@ export function IssueWorkspacesSectionContainer({
   const destination = useCurrentAppDestination();
   const routeHostId = getDestinationHostId(destination);
   const { executionHostId } = useExecutionHostId();
-  const { remoteHosts } = useRemoteCloudHostsAppBarModel();
+  const { hosts: remoteHosts } = useCreateModeHosts();
   const { openWorkspaceCreateFromState } = useProjectWorkspaceCreateDraft();
   const { userId } = useAuth();
   const { workspaces } = useUserContext();
@@ -182,10 +182,17 @@ export function IssueWorkspacesSectionContainer({
     ) {
       await ConfirmDialog.show({
         title: t('common:error'),
-        message: t('createMode.hostPicker.offlineHint', {
-          defaultValue:
-            'Selected host is offline. Choose this machine or another online host.',
-        }),
+        message: t(
+          runtime === 'remote'
+            ? 'createMode.hostPicker.noOnlineHost'
+            : 'createMode.hostPicker.offlineHint',
+          {
+            defaultValue:
+              runtime === 'remote'
+                ? 'Choose an online host to run this workspace.'
+                : 'Selected host is offline. Choose this machine or another online host.',
+          }
+        ),
         confirmText: t('common:ok'),
         showCancelButton: false,
       });

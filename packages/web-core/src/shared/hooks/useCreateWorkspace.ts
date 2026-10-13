@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { workspacesApi } from '@/shared/lib/api';
+import type { WorkspaceExecutionTarget } from '@/shared/lib/workspaceExecutionTarget';
 import type { CreateAndStartWorkspaceRequest } from 'shared/types';
 import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { localProjectKeys } from '@/shared/hooks/useLocalProjects';
@@ -10,20 +11,26 @@ interface CreateWorkspaceParams {
     remoteProjectId: string;
     issueId: string;
   };
+  execution?: WorkspaceExecutionTarget;
 }
 
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
 
   const createWorkspace = useMutation({
-    mutationFn: async ({ data, linkToIssue }: CreateWorkspaceParams) => {
-      const { workspace } = await workspacesApi.createAndStart(data);
+    mutationFn: async ({
+      data,
+      linkToIssue,
+      execution,
+    }: CreateWorkspaceParams) => {
+      const { workspace } = await workspacesApi.createAndStart(data, execution);
 
       if (linkToIssue && workspace && !data.linked_issue) {
         await workspacesApi.linkToIssue(
           workspace.id,
           linkToIssue.remoteProjectId,
-          linkToIssue.issueId
+          linkToIssue.issueId,
+          execution
         );
       }
 

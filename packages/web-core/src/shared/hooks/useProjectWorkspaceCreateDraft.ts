@@ -29,9 +29,7 @@ export function useProjectWorkspaceCreateDraft() {
       // A null override means this machine, so an offline selection is not
       // inherited by the create page (that disables the submit button).
       if (typeof hostId === 'string') {
-        if (runtime === 'local') {
-          setExecutionHostId(hostId);
-        }
+        setExecutionHostId(hostId);
         if (!getCurrentHostId()) {
           setRelayHostFallback(hostId);
         }

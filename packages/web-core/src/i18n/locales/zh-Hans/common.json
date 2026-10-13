@@ -539,7 +539,11 @@
       "label": "运行在",
       "thisMachine": "本机",
       "offlineHost": "{{name}}（离线）",
-      "offlineHint": "所选 Host 已离线。请改选本机或其他在线 Host。"
+      "offlineHint": "所选 Host 已离线。请改选本机或其他在线 Host。",
+      "offlineHintRemote": "所选机器已离线，请改选一台在线的。",
+      "selectHost": "选择机器",
+      "noOnlineHost": "请选择一台在线的远程机器来执行。",
+      "noPairedHosts": "还没有已配对的机器。请先配对一台 Host。"
     },
     "console": {
       "warning": "智能体直接在你仓库的当前目录和当前分支上运行。它不会替你新建分支或提交——是否提交由你决定。",

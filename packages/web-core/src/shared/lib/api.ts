@@ -122,6 +122,10 @@ import { createWorkspaceWithSession } from '@/shared/types/attempt';
 import { resolveHostRequestScope } from '@/shared/lib/hostRequestScope';
 import { makeRequest as makeRemoteRequest } from '@/shared/lib/remoteApi';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
+import {
+  workspaceExecutionRequestOptions,
+  type WorkspaceExecutionTarget,
+} from '@/shared/lib/workspaceExecutionTarget';
 
 export class ApiError<E = unknown> extends Error {
   public status?: number;
@@ -149,6 +153,30 @@ const makeRequest = async (url: string, options: RequestInit = {}) => {
   return makeLocalApiRequest(url, {
     ...options,
     headers,
+  });
+};
+
+const makeExecutionRequest = async (
+  url: string,
+  execution: WorkspaceExecutionTarget | undefined,
+  options: RequestInit = {}
+) => {
+  const headers = new Headers(options.headers ?? {});
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  if (!execution) {
+    return makeLocalApiRequest(url, {
+      ...options,
+      headers,
+    });
+  }
+
+  return makeLocalApiRequest(url, {
+    ...options,
+    headers,
+    ...workspaceExecutionRequestOptions(execution),
   });
 };
 
@@ -489,12 +517,17 @@ export const projectApi = {
 // Workspace APIs
 export const workspacesApi = {
   createAndStart: async (
-    data: CreateAndStartWorkspaceRequest
+    data: CreateAndStartWorkspaceRequest,
+    execution?: WorkspaceExecutionTarget
   ): Promise<CreateAndStartWorkspaceResponse> => {
-    const response = await makeRequest(`/api/workspaces/start`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    const response = await makeExecutionRequest(
+      `/api/workspaces/start`,
+      execution,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
     return handleApiResponse<CreateAndStartWorkspaceResponse>(response);
   },
 
@@ -603,12 +636,17 @@ export const workspacesApi = {
   linkToIssue: async (
     workspaceId: string,
     projectId: string,
-    issueId: string
+    issueId: string,
+    execution?: WorkspaceExecutionTarget
   ): Promise<void> => {
-    const response = await makeRequest(`/api/workspaces/${workspaceId}/links`, {
-      method: 'POST',
-      body: JSON.stringify({ project_id: projectId, issue_id: issueId }),
-    });
+    const response = await makeExecutionRequest(
+      `/api/workspaces/${workspaceId}/links`,
+      execution,
+      {
+        method: 'POST',
+        body: JSON.stringify({ project_id: projectId, issue_id: issueId }),
+      }
+    );
     return handleApiResponse<void>(response);
   },
 

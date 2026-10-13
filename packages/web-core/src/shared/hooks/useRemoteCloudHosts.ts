@@ -72,12 +72,12 @@ async function fetchRemoteCloudHostsState(): Promise<RemoteCloudHostsState> {
   return { hosts };
 }
 
-export function useRemoteCloudHostsState() {
+export function useRemoteCloudHostsState(options?: { enabled?: boolean }) {
   const { liteMode } = useUserSystem();
   return useQuery({
     queryKey: REMOTE_CLOUD_HOSTS_STATE_QUERY_KEY,
     queryFn: fetchRemoteCloudHostsState,
-    enabled: !liteMode,
+    enabled: (options?.enabled ?? true) && !liteMode,
     staleTime: 30 * 1000,
   });
 }
@@ -109,11 +109,13 @@ export function useRemoveRemoteCloudHostMutation() {
   });
 }
 
-export function useRemoteCloudHostsAppBarModel(): {
+export function useRemoteCloudHostsAppBarModel(options?: {
+  enabled?: boolean;
+}): {
   hosts: AppBarHost[];
   remoteHosts: RemoteCloudHost[];
 } {
-  const { data } = useRemoteCloudHostsState();
+  const { data } = useRemoteCloudHostsState(options);
 
   const remoteHosts = data?.hosts ?? [];
 

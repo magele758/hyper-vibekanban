@@ -543,7 +543,11 @@
       "label": "실행 위치",
       "thisMachine": "이 머신",
       "offlineHost": "{{name}} (오프라인)",
-      "offlineHint": "선택한 호스트가 오프라인입니다. 이 머신 또는 온라인 호스트를 선택하세요."
+      "offlineHint": "선택한 호스트가 오프라인입니다. 이 머신 또는 온라인 호스트를 선택하세요.",
+      "offlineHintRemote": "선택한 호스트가 오프라인입니다. 온라인 호스트를 선택하세요.",
+      "selectHost": "머신 선택",
+      "noOnlineHost": "실행할 온라인 호스트를 선택하세요.",
+      "noPairedHosts": "페어링된 머신이 없습니다. 워크스페이스를 만들기 전에 호스트를 페어링하세요."
     }
   },
   "modelSelector": {
