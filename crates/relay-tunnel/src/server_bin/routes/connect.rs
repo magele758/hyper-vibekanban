@@ -14,7 +14,6 @@ use uuid::Uuid;
 
 use super::super::{
     auth::RequestContext,
-    db::hosts::HostRepository,
     relay_registry::{ActiveRelay, RelayRegistry},
     state::RelayAppState,
 };
@@ -35,10 +34,12 @@ pub async fn relay_connect(
     Query(query): Query<ConnectQuery>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let repo = HostRepository::new(&state.pool);
+    let registry = state.relay_registry.clone();
+    let pool = state.pool.clone();
 
-    let host_id = match repo
-        .upsert_host(
+    let host_id = match registry
+        .register_host(
+            &pool,
             ctx.user.id,
             &query.machine_id,
             &query.name,
@@ -53,18 +54,23 @@ pub async fn relay_connect(
         }
     };
 
-    if let Err(error) = repo
-        .mark_host_online(host_id, query.agent_version.as_deref())
+    // Identifies this attempt in `hosts.relay_connection_token`. The matching
+    // disconnect is the only one allowed to mark the shared row offline.
+    let connection_token = Uuid::new_v4();
+    if let Err(error) = registry
+        .publish_online(
+            &pool,
+            host_id,
+            query.agent_version.as_deref(),
+            connection_token,
+        )
         .await
     {
         tracing::warn!(?error, "failed to mark host online");
     }
 
-    let registry = state.relay_registry.clone();
-    let pool = state.pool.clone();
-
     ws.on_upgrade(move |socket| async move {
-        handle_control_channel(socket, pool, registry, host_id).await;
+        handle_control_channel(socket, pool, registry, host_id, connection_token).await;
     })
 }
 
@@ -73,6 +79,7 @@ async fn handle_control_channel(
     pool: sqlx::PgPool,
     registry: RelayRegistry,
     host_id: Uuid,
+    connection_token: Uuid,
 ) {
     let registry_for_connect = registry.clone();
     let connected_relay = Arc::new(tokio::sync::Mutex::new(None::<Arc<ActiveRelay>>));
@@ -99,10 +106,23 @@ async fn handle_control_channel(
         registry.get(&host_id).await.is_none()
     };
 
-    let repo = HostRepository::new(&pool);
     if should_mark_offline {
-        if let Err(error) = repo.mark_host_offline(host_id).await {
-            tracing::warn!(?error, "failed to mark host offline");
+        match registry
+            .publish_offline(&pool, host_id, connection_token)
+            .await
+        {
+            Ok(true) => {
+                tracing::debug!(%host_id, "marked host offline");
+            }
+            Ok(false) => {
+                tracing::debug!(
+                    %host_id,
+                    "left host online; a newer relay connection owns the session"
+                );
+            }
+            Err(error) => {
+                tracing::warn!(?error, "failed to mark host offline");
+            }
         }
     } else {
         tracing::debug!(

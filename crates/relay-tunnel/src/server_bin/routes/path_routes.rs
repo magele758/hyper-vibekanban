@@ -137,6 +137,11 @@ async fn do_relay_proxy_for_host(
     browser_session_id: Uuid,
     request: Request,
 ) -> Response {
+    // The control socket lives only on the pod that accepted the WebSocket.
+    // Host name and online/offline are the shared `hosts` row, but tunnel
+    // bytes are not forwarded across pods. Load balancers must use ClientIP
+    // session affinity so this executor's long-lived connection stays on one
+    // Relay pod.
     let relay = match state.relay_registry.get(&host_id).await {
         Some(relay) => relay,
         None => return (StatusCode::NOT_FOUND, "No active relay").into_response(),

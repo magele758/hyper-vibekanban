@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE hosts\n            SET status = 'online',\n                last_seen_at = NOW(),\n                agent_version = COALESCE($2, agent_version),\n                relay_connection_token = $3,\n                updated_at = NOW()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c994a65539e016fc5dcc1596ddaf4f68a258a703133bd9fbdcd3d9b01288634"
+}

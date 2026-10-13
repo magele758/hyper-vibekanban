@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE hosts\n            SET status = 'offline',\n                relay_connection_token = NULL,\n                updated_at = NOW()\n            WHERE id = $1\n              AND relay_connection_token = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c9db62bb0907335f6adc9c42a88256f8df755cbec4539f7f541806b7a5e88df1"
+}

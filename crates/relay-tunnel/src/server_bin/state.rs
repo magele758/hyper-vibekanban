@@ -13,12 +13,24 @@ pub struct RelayAppState {
 }
 
 impl RelayAppState {
-    pub fn new(pool: PgPool, config: RelayServerConfig, jwt: Arc<JwtService>) -> Self {
-        Self {
+    pub async fn new(
+        pool: PgPool,
+        config: RelayServerConfig,
+        jwt: Arc<JwtService>,
+    ) -> Result<Self, sqlx::Error> {
+        let relay_registry = RelayRegistry::default();
+        relay_registry.load_existing_hosts(&pool).await?;
+        let (host_count, online_count) = relay_registry.presence_counts().await;
+        tracing::info!(
+            host_count,
+            online_count,
+            "loaded existing relay hosts from database"
+        );
+        Ok(Self {
             pool,
             config,
             jwt,
-            relay_registry: RelayRegistry::default(),
-        }
+            relay_registry,
+        })
     }
 }
