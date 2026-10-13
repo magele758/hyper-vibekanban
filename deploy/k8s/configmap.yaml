@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vibekanban-config
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/part-of: hyper-vibekanban
+data:
+  # Public URL browsers use for Remote (OAuth callbacks and links).
+  SERVER_PUBLIC_BASE_URL: http://remote.vibekanban.svc.cluster.local:8081

@@ -1,0 +1,175 @@
+# Stateless API. Every replica uses the same JWT secret and the same Postgres.
+apiVersion: v1
+kind: Service
+metadata:
+  name: remote
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: remote
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  selector:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: remote
+  ports:
+    - name: http
+      port: 8081
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: remote
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: remote
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibekanban
+      app.kubernetes.io/component: remote
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibekanban
+        app.kubernetes.io/component: remote
+        app.kubernetes.io/part-of: hyper-vibekanban
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: vibekanban
+                    app.kubernetes.io/component: remote
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until pg_isready -h postgres -p 5432 -U remote -d remote; do
+                echo "waiting for postgres"
+                sleep 2
+              done
+      containers:
+        - name: remote
+          image: ghcr.io/magele758/hyper-vibekanban-remote:latest
+          imagePullPolicy: Always
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+          env:
+            - name: RUST_LOG
+              value: info,remote=info
+            - name: SERVER_LISTEN_ADDR
+              value: 0.0.0.0:8081
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: POSTGRES_PASSWORD
+            - name: SERVER_DATABASE_URL
+              value: postgres://remote:$(POSTGRES_PASSWORD)@postgres:5432/remote
+            - name: ELECTRIC_URL
+              value: http://electric:3000
+            - name: ELECTRIC_ROLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: ELECTRIC_ROLE_PASSWORD
+            - name: SERVER_PUBLIC_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: vibekanban-config
+                  key: SERVER_PUBLIC_BASE_URL
+            - name: VIBEKANBAN_REMOTE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: VIBEKANBAN_REMOTE_JWT_SECRET
+            - name: SELF_HOST_LOCAL_AUTH_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: SELF_HOST_LOCAL_AUTH_EMAIL
+                  optional: true
+            - name: SELF_HOST_LOCAL_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: SELF_HOST_LOCAL_AUTH_PASSWORD
+                  optional: true
+            - name: GITHUB_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: GITHUB_OAUTH_CLIENT_ID
+                  optional: true
+            - name: GITHUB_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: GITHUB_OAUTH_CLIENT_SECRET
+                  optional: true
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: GOOGLE_OAUTH_CLIENT_ID
+                  optional: true
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: GOOGLE_OAUTH_CLIENT_SECRET
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8081
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi

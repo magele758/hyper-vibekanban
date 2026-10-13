@@ -1,0 +1,136 @@
+# One primary, one volume. This Service stays ClusterIP so Postgres is
+# not published outside the cluster. Do not switch it to NodePort or
+# LoadBalancer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  # The PVC is ReadWriteOnce. Recreate keeps a second pod from mounting it.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibekanban
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibekanban
+        app.kubernetes.io/component: postgres
+        app.kubernetes.io/part-of: hyper-vibekanban
+    spec:
+      automountServiceAccountToken: false
+      # Official postgres:16-alpine drops to uid/gid 70.
+      securityContext:
+        fsGroup: 70
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          args:
+            - postgres
+            - -c
+            - wal_level=logical
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: POSTGRES_PASSWORD
+            # Subdirectory avoids initdb refusing a mount that contains lost+found.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
