@@ -37,6 +37,7 @@ impl ToolError {
 }
 
 mod context;
+mod hosts;
 mod issue_assignees;
 mod issue_relationships;
 mod issue_tags;
@@ -52,6 +53,7 @@ impl McpServer {
     pub fn global_mode_router() -> rmcp::handler::server::tool::ToolRouter<Self> {
         Self::context_tools_router()
             + Self::workspaces_tools_router()
+            + Self::hosts_tools_router()
             + Self::organizations_tools_router()
             + Self::repos_tools_router()
             + Self::remote_projects_tools_router()
@@ -397,9 +399,8 @@ mod tests {
 
     fn install_rustls_provider() {
         RUSTLS_PROVIDER.call_once(|| {
-            rustls::crypto::aws_lc_rs::default_provider()
-                .install_default()
-                .expect("Failed to install rustls crypto provider");
+            // Another test module may have installed the process-wide provider first.
+            let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
         });
     }
 
@@ -435,6 +436,8 @@ mod tests {
 
         assert!(actual.contains("list_workspaces"));
         assert!(actual.contains("delete_workspace"));
+        assert!(actual.contains("list_hosts"));
+        assert!(actual.contains("start_workspace_on_host"));
         assert!(!actual.contains("output_markdown"));
     }
 
