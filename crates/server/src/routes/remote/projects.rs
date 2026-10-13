@@ -1,7 +1,9 @@
-use api_types::{ListProjectsResponse, Project};
+use api_types::{
+    CreateProjectRequest, ListProjectsResponse, MutationResponse, Project, UpdateProjectRequest,
+};
 use axum::{
     Router,
-    extract::{Path, Query, State},
+    extract::{Json, Path, Query, State},
     response::Json as ResponseJson,
     routing::get,
 };
@@ -18,8 +20,14 @@ pub(super) struct ListRemoteProjectsQuery {
 
 pub(super) fn router() -> Router<DeploymentImpl> {
     Router::new()
-        .route("/projects", get(list_remote_projects))
-        .route("/projects/{project_id}", get(get_remote_project))
+        .route(
+            "/projects",
+            get(list_remote_projects).post(create_remote_project),
+        )
+        .route(
+            "/projects/{project_id}",
+            get(get_remote_project).patch(update_remote_project),
+        )
 }
 
 async fn list_remote_projects(
@@ -38,4 +46,23 @@ async fn get_remote_project(
     let client = deployment.remote_client()?;
     let project = client.get_remote_project(project_id).await?;
     Ok(ResponseJson(ApiResponse::success(project)))
+}
+
+async fn create_remote_project(
+    State(deployment): State<DeploymentImpl>,
+    Json(request): Json<CreateProjectRequest>,
+) -> Result<ResponseJson<ApiResponse<MutationResponse<Project>>>, ApiError> {
+    let client = deployment.remote_client()?;
+    let response = client.create_remote_project(&request).await?;
+    Ok(ResponseJson(ApiResponse::success(response)))
+}
+
+async fn update_remote_project(
+    State(deployment): State<DeploymentImpl>,
+    Path(project_id): Path<Uuid>,
+    Json(request): Json<UpdateProjectRequest>,
+) -> Result<ResponseJson<ApiResponse<MutationResponse<Project>>>, ApiError> {
+    let client = deployment.remote_client()?;
+    let response = client.update_remote_project(project_id, &request).await?;
+    Ok(ResponseJson(ApiResponse::success(response)))
 }

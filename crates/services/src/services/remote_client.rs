@@ -7,18 +7,18 @@ use api_types::{
     ClaimAgentTaskResponse, CreateAgentRequest, CreateInvitationRequest, CreateInvitationResponse,
     CreateIssueAssigneeRequest, CreateIssueCommentRequest, CreateIssueRelationshipRequest,
     CreateIssueRequest, CreateIssueTagRequest, CreateOrganizationRequest,
-    CreateOrganizationResponse, CreateWorkspaceRequest, DeleteResponse, DeleteWorkspaceRequest,
-    GetInvitationResponse, GetOrganizationResponse, HandoffInitRequest, HandoffInitResponse,
-    HandoffRedeemRequest, HandoffRedeemResponse, Issue, IssueAssignee, IssueComment,
-    IssueRelationship, IssueTag, ListAgentsResponse, ListAttachmentsResponse,
+    CreateOrganizationResponse, CreateProjectRequest, CreateWorkspaceRequest, DeleteResponse,
+    DeleteWorkspaceRequest, GetInvitationResponse, GetOrganizationResponse, HandoffInitRequest,
+    HandoffInitResponse, HandoffRedeemRequest, HandoffRedeemResponse, Issue, IssueAssignee,
+    IssueComment, IssueRelationship, IssueTag, ListAgentsResponse, ListAttachmentsResponse,
     ListInvitationsResponse, ListIssueAssigneesResponse, ListIssueRelationshipsResponse,
     ListIssueTagsResponse, ListIssuesResponse, ListMembersResponse, ListOrganizationsResponse,
     ListProjectStatusesResponse, ListProjectsResponse, ListPullRequestsResponse, ListTagsResponse,
     LocalLoginRequest, LocalLoginResponse, MutationResponse, Organization, ProfileResponse,
     PullRequest, RevokeInvitationRequest, SearchIssuesRequest, Tag, TokenRefreshRequest,
     TokenRefreshResponse, UpdateAgentTaskRequest, UpdateIssueRequest, UpdateMemberRoleRequest,
-    UpdateMemberRoleResponse, UpdateOrganizationRequest, UpdatePullRequestApiRequest,
-    UpdateWorkspaceRequest, UpsertPullRequestRequest, Workspace,
+    UpdateMemberRoleResponse, UpdateOrganizationRequest, UpdateProjectRequest,
+    UpdatePullRequestApiRequest, UpdateWorkspaceRequest, UpsertPullRequestRequest, Workspace,
 };
 use backon::{ExponentialBuilder, Retryable};
 use chrono::Duration as ChronoDuration;
@@ -1091,6 +1091,30 @@ impl RemoteClient {
             .await
     }
 
+    /// Creates a project on the remote server.
+    pub async fn create_remote_project(
+        &self,
+        request: &CreateProjectRequest,
+    ) -> Result<MutationResponse<api_types::Project>, RemoteClientError> {
+        self.post_authed("/v1/projects", Some(&create_project_body(request)))
+            .await
+    }
+
+    /// Updates a project on the remote server.
+    ///
+    /// Absent fields are omitted so the remote partial-update semantics stay intact.
+    pub async fn update_remote_project(
+        &self,
+        project_id: Uuid,
+        request: &UpdateProjectRequest,
+    ) -> Result<MutationResponse<api_types::Project>, RemoteClientError> {
+        self.patch_authed(
+            &format!("/v1/projects/{project_id}"),
+            &update_project_body(request),
+        )
+        .await
+    }
+
     // ── Project Statuses ────────────────────────────────────────────────
 
     /// Lists project statuses for a project (used for status name ↔ UUID mapping).
@@ -1163,6 +1187,35 @@ impl RemoteClient {
             .map_err(|e| RemoteClientError::Transport(e.to_string()))?;
         Ok(bytes.to_vec())
     }
+}
+
+fn create_project_body(request: &CreateProjectRequest) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "organization_id": request.organization_id,
+        "name": request.name,
+        "color": request.color,
+    });
+    if let Some(id) = request.id {
+        body["id"] = serde_json::json!(id);
+    }
+    body
+}
+
+fn update_project_body(request: &UpdateProjectRequest) -> serde_json::Value {
+    let mut body = serde_json::Map::new();
+    if let Some(name) = &request.name {
+        body.insert("name".to_string(), serde_json::Value::String(name.clone()));
+    }
+    if let Some(color) = &request.color {
+        body.insert(
+            "color".to_string(),
+            serde_json::Value::String(color.clone()),
+        );
+    }
+    if let Some(sort_order) = request.sort_order {
+        body.insert("sort_order".to_string(), serde_json::json!(sort_order));
+    }
+    serde_json::Value::Object(body)
 }
 
 fn map_reqwest_error(e: reqwest::Error) -> RemoteClientError {
@@ -1263,6 +1316,44 @@ mod tests {
             RemoteClientError::Api(HandoffErrorCode::Other(ref c)) if c == "session_revoked"
         ));
         assert!(err.is_definitive_auth_failure());
+    }
+
+    #[test]
+    fn project_request_bodies_omit_absent_fields() {
+        let organization_id = Uuid::new_v4();
+        let created = create_project_body(&CreateProjectRequest {
+            id: None,
+            organization_id,
+            name: "Alpha".to_string(),
+            color: "217 91% 60%".to_string(),
+        });
+        assert_eq!(
+            created,
+            serde_json::json!({
+                "organization_id": organization_id,
+                "name": "Alpha",
+                "color": "217 91% 60%",
+            })
+        );
+
+        let project_id = Uuid::new_v4();
+        let with_id = create_project_body(&CreateProjectRequest {
+            id: Some(project_id),
+            organization_id,
+            name: "Alpha".to_string(),
+            color: "217 91% 60%".to_string(),
+        });
+        assert_eq!(with_id["id"], serde_json::json!(project_id));
+
+        let updated = update_project_body(&UpdateProjectRequest {
+            name: Some("Beta".to_string()),
+            color: None,
+            sort_order: Some(3),
+        });
+        assert_eq!(
+            updated,
+            serde_json::json!({ "name": "Beta", "sort_order": 3 })
+        );
     }
 
     #[test]
