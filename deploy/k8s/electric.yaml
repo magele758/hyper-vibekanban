@@ -1,0 +1,146 @@
+# Electric owns the Postgres logical replication slot. Keep a single
+# replica. Recreate so a rollout never runs two sync processes at once.
+apiVersion: v1
+kind: Service
+metadata:
+  name: electric
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: electric
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: electric
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+    - name: pg-proxy
+      port: 65432
+      targetPort: pg-proxy
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: electric-data
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: electric
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: electric
+  namespace: vibekanban
+  labels:
+    app.kubernetes.io/name: vibekanban
+    app.kubernetes.io/component: electric
+    app.kubernetes.io/part-of: hyper-vibekanban
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibekanban
+      app.kubernetes.io/component: electric
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibekanban
+        app.kubernetes.io/component: electric
+        app.kubernetes.io/part-of: hyper-vibekanban
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: wait-for-remote
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until wget -q -O /dev/null http://remote:8081/v1/health; do
+                echo "waiting for remote migrations"
+                sleep 3
+              done
+      containers:
+        - name: electric
+          image: electricsql/electric:1.4.13
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ELECTRIC_ROLE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vibekanban-secrets
+                  key: ELECTRIC_ROLE_PASSWORD
+            - name: DATABASE_URL
+              value: postgresql://electric_sync:$(ELECTRIC_ROLE_PASSWORD)@postgres:5432/remote?sslmode=disable
+            - name: PG_PROXY_PORT
+              value: "65432"
+            - name: LOGICAL_PUBLISHER_HOST
+              value: electric
+            - name: AUTH_MODE
+              value: insecure
+            - name: ELECTRIC_INSECURE
+              value: "true"
+            - name: ELECTRIC_MANUAL_TABLE_PUBLISHING
+              value: "true"
+            - name: ELECTRIC_USAGE_REPORTING
+              value: "false"
+            - name: ELECTRIC_FEATURE_FLAGS
+              value: allow_subqueries,tagged_subqueries
+            - name: ELECTRIC_STORAGE_DIR
+              value: /app/persistent
+          ports:
+            - name: http
+              containerPort: 3000
+            - name: pg-proxy
+              containerPort: 65432
+          volumeMounts:
+            - name: data
+              mountPath: /app/persistent
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: HTTP
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: electric-data
