@@ -1,14 +1,18 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { AppBarHost } from "@vibe/ui/components/AppBar";
-import type { RelayHost } from "shared/remote-types";
 import { listPairedRelayHosts } from "@/shared/lib/relayPairingStorage";
-import { listRelayHosts } from "@/shared/lib/remoteApi";
+import { hostIsLinked, relayListStatus } from "@/shared/lib/relayHostStatus";
+import { listRelayHosts, listServerHostLinks } from "@/shared/lib/remoteApi";
 
 const RELAY_APP_BAR_HOSTS_QUERY_KEY = ["relay-app-bar-hosts", "hosts"] as const;
 const RELAY_APP_BAR_PAIRED_HOSTS_QUERY_KEY = [
   "relay-app-bar-hosts",
   "paired-hosts",
+] as const;
+const RELAY_APP_BAR_SERVER_LINKS_QUERY_KEY = [
+  "relay-app-bar-hosts",
+  "server-links",
 ] as const;
 
 interface UseRelayAppBarHostsResult {
@@ -45,17 +49,6 @@ export function resolveRelayNavigationHostId(
   return null;
 }
 
-function mapRelayHostStatus(
-  host: RelayHost,
-  pairedHostIds: Set<string>,
-): AppBarHost["status"] {
-  if (!pairedHostIds.has(host.id)) {
-    return "unpaired";
-  }
-
-  return host.status === "online" ? "online" : "offline";
-}
-
 export function useRelayAppBarHosts(
   enabled: boolean,
 ): UseRelayAppBarHostsResult {
@@ -82,22 +75,43 @@ export function useRelayAppBarHosts(
     refetchInterval: 5_000,
   });
 
+  const serverLinksQuery = useQuery({
+    queryKey: RELAY_APP_BAR_SERVER_LINKS_QUERY_KEY,
+    queryFn: async () => {
+      try {
+        return await listServerHostLinks();
+      } catch (error) {
+        console.error("Failed to load server host links for app bar", error);
+        return [];
+      }
+    },
+    enabled,
+    staleTime: 5_000,
+    refetchInterval: 5_000,
+  });
+
   const hosts = useMemo<AppBarHost[]>(() => {
     if (!enabled) {
       return [];
     }
 
     const relayHosts = hostsQuery.data ?? [];
-    const pairedHostIds = new Set(
+    const indexedHostIds = new Set(
       (pairedHostsQuery.data ?? []).map((host) => host.host_id),
+    );
+    const serverHostIds = new Set(
+      (serverLinksQuery.data ?? []).map((host) => host.host_id),
     );
 
     return relayHosts.map((host) => ({
       id: host.id,
       name: host.name,
-      status: mapRelayHostStatus(host, pairedHostIds),
+      status: relayListStatus(
+        host.status,
+        hostIsLinked(host.id, indexedHostIds, serverHostIds),
+      ),
     }));
-  }, [enabled, hostsQuery.data, pairedHostsQuery.data]);
+  }, [enabled, hostsQuery.data, pairedHostsQuery.data, serverLinksQuery.data]);
 
   return {
     hosts,

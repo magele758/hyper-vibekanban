@@ -19,7 +19,21 @@ npx hyper-vibekanban --help
 npx hyper-vibekanban --version
 npx hyper-vibekanban review --help
 npx hyper-vibekanban mcp --help
+npx hyper-vibekanban join
 ```
+
+Register this machine with a data service without opening the local page or copying a pairing code. The process stays running so the host can remain online.
+
+```bash
+VK_SHARED_API_BASE=https://<data-host>:13444 \
+VK_SHARED_RELAY_API_BASE=https://<data-host>:18443 \
+VK_LOCAL_LOGIN_EMAIL=you@example.com \
+VK_LOCAL_LOGIN_PASSWORD=... \
+VK_HOST_NICKNAME=my-host \
+npx hyper-vibekanban join
+```
+
+`https://*.ts.net` relay URLs use port 18443. `VK_SHARED_RELAY_API_BASE` can be omitted; it is derived from the data-service URL.
 
 ## What is hyper-vibekanban?
 

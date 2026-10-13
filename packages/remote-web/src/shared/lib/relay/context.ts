@@ -4,6 +4,7 @@ import {
   savePairedRelayHost,
   subscribeRelayPairingChanges,
 } from "@/shared/lib/relayPairingStorage";
+import { listServerHostLinks } from "@/shared/lib/remoteApi";
 import {
   createRemoteSession,
   refreshRelaySigningSession,
@@ -96,5 +97,20 @@ async function getRemoteSessionId(hostId: string): Promise<string> {
 
 async function findPairedHost(hostId: string): Promise<PairedRelayHost | null> {
   const pairedHosts = await listPairedRelayHosts();
-  return pairedHosts.find((host) => host.host_id === hostId) ?? null;
+  const local = pairedHosts.find((host) => host.host_id === hostId);
+  if (local) {
+    return local;
+  }
+
+  try {
+    const links = await listServerHostLinks();
+    const remote = links.find((host) => host.host_id === hostId) ?? null;
+    if (remote) {
+      await savePairedRelayHost(remote);
+    }
+    return remote;
+  } catch (error) {
+    console.warn("Failed to load server host link", error);
+    return null;
+  }
 }

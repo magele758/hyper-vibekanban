@@ -14,6 +14,7 @@ import type {
 } from 'shared/remote-types';
 import { getAuthRuntime } from '@/shared/lib/auth/runtime';
 import { sha256Bytes } from '@/shared/lib/relayCrypto';
+import type { PairedRelayHost } from '@/shared/lib/relayPairingStorage';
 import {
   isLoopbackHostname,
   isSelfHostedDevHostname,
@@ -260,6 +261,46 @@ export async function listRelayHosts(): Promise<RelayHost[]> {
 
   const body = (await response.json()) as ListRelayHostsResponse;
   return body.hosts;
+}
+
+interface ServerHostLink {
+  host_id: string;
+  host_name?: string | null;
+  client_id: string;
+  client_name?: string | null;
+  public_key_b64: string;
+  private_key_jwk: JsonWebKey;
+  server_public_key_b64: string;
+  signing_session_id?: string | null;
+  paired_at: string;
+}
+
+/** Host links stored by `join`, readable by any browser signed into this account. */
+export async function listServerHostLinks(): Promise<PairedRelayHost[]> {
+  const response = await makeRequest('/v1/hosts/links', { method: 'GET' });
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw await parseErrorResponse(response, 'Failed to list host links');
+  }
+
+  const body = (await response.json()) as { links?: ServerHostLink[] };
+  return (body.links ?? []).map(linkToPairedHost);
+}
+
+function linkToPairedHost(link: ServerHostLink): PairedRelayHost {
+  return {
+    host_id: link.host_id,
+    host_name: link.host_name || link.host_id,
+    client_id: link.client_id,
+    client_name: link.client_name ?? undefined,
+    signing_session_id: link.signing_session_id ?? undefined,
+    public_key_b64: link.public_key_b64,
+    private_key_jwk: link.private_key_jwk,
+    server_public_key_b64: link.server_public_key_b64,
+    paired_at: link.paired_at,
+  };
 }
 
 // ---------------------------------------------------------------------------
