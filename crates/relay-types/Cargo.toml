@@ -1,6 +1,6 @@
 [package]
 name = "relay-types"
-version = "0.1.50-main.2"
+version = "0.1.50-main.3"
 edition = "2024"
 
 [dependencies]
