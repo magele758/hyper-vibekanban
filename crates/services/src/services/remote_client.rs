@@ -1,6 +1,6 @@
 //! OAuth client for authorization-code handoffs with automatic retries.
 
-use std::time::Duration;
+use std::{io::ErrorKind, path::Path, time::Duration};
 
 use api_types::{
     AcceptInvitationResponse, Agent, AgentTask, AuthMethodsResponse, ClaimAgentTaskRequest,
@@ -1259,8 +1259,24 @@ fn local_login_credentials() -> Option<(String, String)> {
         return Some((email, password));
     }
 
-    let path = utils::assets::asset_dir().join("local_login.json");
-    let bytes = std::fs::read(&path).ok()?;
+    read_optional_local_login_file(&utils::assets::asset_dir().join("local_login.json"))
+}
+
+/// `local_login.json` is optional. A missing file is "not configured", not a
+/// credentials storage failure. Other IO errors are logged with the path.
+fn read_optional_local_login_file(path: &Path) -> Option<(String, String)> {
+    let bytes = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(err) if err.kind() == ErrorKind::NotFound => return None,
+        Err(err) => {
+            warn!(
+                path = %path.display(),
+                error = %err,
+                "optional local login file could not be read"
+            );
+            return None;
+        }
+    };
     #[derive(Deserialize)]
     struct LocalLoginFile {
         email: String,
@@ -1361,6 +1377,18 @@ mod tests {
             updated,
             serde_json::json!({ "name": "Beta", "sort_order": 3 })
         );
+    }
+
+    #[test]
+    fn missing_local_login_file_is_optional() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("local_login.json");
+        assert!(read_optional_local_login_file(&path).is_none());
+
+        std::fs::write(&path, br#"{"email":"a@b.c","password":"secret"}"#).unwrap();
+        let (email, password) = read_optional_local_login_file(&path).unwrap();
+        assert_eq!(email, "a@b.c");
+        assert_eq!(password, "secret");
     }
 
     #[test]
