@@ -10,6 +10,7 @@ const {
   injectReleaseConfig,
   npmSupportsOidc,
   distTagForVersion,
+  assertPrereleaseDistTag,
   planPublish,
   npmViewIsMissing,
   stripEmptyNpmAuth,
@@ -45,6 +46,7 @@ test('rejects a missing release tag', () => {
 test('dist-tag is latest only for stable versions', () => {
   assert.equal(distTagForVersion('0.1.45'), 'latest');
   assert.equal(distTagForVersion('0.1.44-3e90.0'), '3e90');
+  assert.equal(distTagForVersion('0.1.50-main.4'), 'main');
   assert.throws(() => distTagForVersion('0.1.44-latest.1'), /dist-tag/);
 });
 
@@ -334,6 +336,37 @@ test('publish script skips a version already on npm', () => {
   assert.match(result.stdout, /already on npm/);
   const stubLog = fs.readFileSync(log, 'utf8');
   assert.equal(stubLog.includes('publish'), false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('prerelease policy refuses to move latest', () => {
+  assert.equal(assertPrereleaseDistTag('0.1.50-main.4'), 'main');
+  assert.throws(() => assertPrereleaseDistTag('0.1.50'), /latest/);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vk-npm-policy-'));
+  const binDir = path.join(dir, 'bin');
+  fs.mkdirSync(binDir);
+  writeNpmStub(binDir);
+  const tgz = writeTarball(dir, '0.1.50', 'const url = "https://ok.example";\n');
+  const log = path.join(dir, 'stub.log');
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, 'publish-npm.js'), tgz],
+    {
+      env: {
+        PATH: `${binDir}:/usr/bin:/bin`,
+        HOME: dir,
+        STUB_LOG: log,
+        STUB_MODE: 'missing',
+        GITHUB_ACTIONS: 'true',
+        NPM_DIST_TAG_POLICY: 'prerelease',
+      },
+      encoding: 'utf8',
+    }
+  );
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /latest/);
+  assert.equal(fs.readFileSync(log, 'utf8').includes('publish'), false);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 

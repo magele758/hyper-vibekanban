@@ -5,19 +5,17 @@ name: Create GitHub Pre-Release
 # 本文件进入 main 之后才会被 main 上的 Run 用到。
 # npm 不会在第一次 Actions 发布时创建包；包必须已经存在，
 # Trusted Publisher 才能保存。
+# 这里只发预发布，不移动 npm latest。稳定版见 npm-publish.md。
 
 on:
   workflow_dispatch:
     inputs:
       version_type:
-        description: "patch/minor/major 会把 hyper-vibekanban 标成 latest"
+        description: "只发预发布。稳定版 latest 用 release-stable.yml"
         required: true
-        default: "patch"
+        default: "prerelease"
         type: choice
         options:
-          - patch
-          - minor
-          - major
           - prerelease
   # Some GitHub App tokens can push and send repository_dispatch, but cannot
   # call workflow_dispatch. client_payload.version_type uses the same values.
@@ -96,63 +94,37 @@ jobs:
         env:
           VERSION_TYPE: ${{ github.event.inputs.version_type || github.event.client_payload.version_type }}
         run: |
+          set -euo pipefail
           case "$VERSION_TYPE" in
-            patch|minor|major|prerelease) ;;
+            prerelease) ;;
+            patch|minor|major)
+              echo "version_type=${VERSION_TYPE} is not published from pre-release.yml." >&2
+              echo "Run release-stable.yml. It cuts a stable version and starts publish.yml." >&2
+              exit 1
+              ;;
             *)
               echo "unsupported version_type" >&2
               exit 1
               ;;
           esac
 
-          # Get the latest version from npm registry
-          # Publish this repo's package. Do not read the unrelated npm name vibe-kanban.
-          latest_npm_version=$(npm view hyper-vibekanban version 2>/dev/null || echo "0.0.0")
-          echo "Latest npm version: $latest_npm_version"
-
-          # Get current repo version
-          current_repo_version=$(node -p "require('./package.json').version")
-          echo "Current repo version: $current_repo_version"
-
-          # Use the higher of the two versions as the base (prevents downgrade errors with cargo set-version)
-          base_version=$(node -e "
-            const npm = '$latest_npm_version'.split('.').map(Number);
-            const repo = '$current_repo_version'.split('.').map(Number);
-            for (let i = 0; i < 3; i++) {
-              if ((npm[i] || 0) > (repo[i] || 0)) { console.log('$latest_npm_version'); process.exit(); }
-              if ((npm[i] || 0) < (repo[i] || 0)) { console.log('$current_repo_version'); process.exit(); }
-            }
-            console.log('$current_repo_version');
-          ")
-          echo "Base version for bump: $base_version"
-
+          # Prerelease numbers come from package.json. npm latest is not a base,
+          # so this job cannot move the latest dist-tag.
           timestamp=$(date +%Y%m%d%H%M%S)
-
-          # Update root package.json based on base version
-          if [[ "$VERSION_TYPE" == "prerelease" ]]; then
-            # For prerelease, use current package.json version and add branch suffix
-            npm version prerelease --preid="${{ steps.branch.outputs.suffix }}" --no-git-tag-version
-
-            new_version=$(node -p "require('./package.json').version")
-            new_tag="v${new_version}.${timestamp}"
-          else
-            # For regular releases, use base version and bump it
-            npm version $base_version --no-git-tag-version --allow-same-version
-            npm version "$VERSION_TYPE" --no-git-tag-version
-
-            new_version=$(node -p "require('./package.json').version")
-            new_tag="v${new_version}-${timestamp}"
-          fi
+          npm version prerelease --preid="${{ steps.branch.outputs.suffix }}" --no-git-tag-version
+          new_version=$(node -p "require('./package.json').version")
+          new_tag="v${new_version}.${timestamp}"
 
           # Update npx-cli package.json to match
           (
             cd npx-cli
-            npm version $new_version --no-git-tag-version --allow-same-version
+            npm version "$new_version" --no-git-tag-version --allow-same-version
           )
 
           # Update web app package.json to match
           (
             cd packages/local-web
-            npm version $new_version --no-git-tag-version --allow-same-version
+            npm version "$new_version" --no-git-tag-version --allow-same-version
           )
 
           cargo set-version --workspace "$new_version"
@@ -166,8 +138,8 @@ jobs:
           "
 
           echo "New version: $new_version"
-          echo "new_version=$new_version" >> $GITHUB_OUTPUT
-          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+          echo "new_version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "new_tag=$new_tag" >> "$GITHUB_OUTPUT"
 
       - name: Provide billing stub (self-host build strips the private billing crate)
         run: |
@@ -778,7 +750,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # npm trusted publishing matches this workflow filename (pre-release.yml),
-  # because the publish command runs here rather than in a called workflow.
+  # because the prerelease publish command runs here. Stable latest is
+  # publish.yml, started by release-stable.yml.
   publish-npm:
     needs: [bump-version, create-prerelease]
     runs-on: ubuntu-24.04
@@ -808,6 +781,8 @@ jobs:
 
       - name: Publish to npm
         shell: bash
+        env:
+          NPM_DIST_TAG_POLICY: prerelease
         run: |
           shopt -s nullglob
           files=(npx-package/hyper-vibekanban-*.tgz)
@@ -815,7 +790,16 @@ jobs:
             echo "Expected one npm tarball, found ${#files[@]}"
             exit 1
           fi
-          node npx-cli/scripts/publish-npm.js "${files[0]}"
+          abs="$(node -e 'const path=require("path"); process.stdout.write(path.resolve(process.argv[1]))' "${files[0]}")"
+          case "$abs" in
+            /*) ;;
+            *)
+              echo "Refusing relative tarball path." >&2
+              exit 1
+              ;;
+          esac
+          node npx-cli/scripts/stable-release.js assert-prerelease "$abs"
+          node npx-cli/scripts/publish-npm.js "$abs"
 
       - name: Update release description
         uses: actions/github-script@v8
