@@ -8,6 +8,7 @@ const path = require('path');
 const {
   npmSupportsOidc,
   planPublish,
+  assertPrereleaseDistTag,
   npmViewIsMissing,
   stripEmptyNpmAuth,
   buildPublishArgs,
@@ -114,6 +115,9 @@ function main() {
     private: manifest.private,
     cliSource,
   });
+  if (process.env.NPM_DIST_TAG_POLICY === 'prerelease') {
+    assertPrereleaseDistTag(plan.version);
+  }
 
   const view = runNpm(
     ['view', `${plan.name}@${plan.version}`, 'version'],
@@ -135,8 +139,10 @@ function main() {
     process.exit(view.status || 1);
   }
 
+  const publishPath = path.resolve(tgzPath);
   console.log(
-    `Publishing ${plan.name}@${plan.version} with dist-tag ${plan.tag} via OIDC.`
+    `Publishing ${plan.name}@${plan.version} with dist-tag ${plan.tag} ` +
+      `via OIDC from ${publishPath}.`
   );
   const published = runNpm(buildPublishArgs(tgzPath, plan.tag), true);
   if (published.status !== 0) {
