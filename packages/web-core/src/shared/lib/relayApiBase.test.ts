@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolveRelayApiBaseForPage } from './relayApiBase.ts';
 
-const TS_HOST = 'shinemo.taile7bb25.ts.net';
+const TS_HOST = 'example-host.example.ts.net';
 const RELAY_PORT = '18082';
 const DOOR_PORT = '18443';
 

@@ -167,7 +167,7 @@ mod tests {
         RemoteInfo, derive_relay_api_base, normalize_relay_api_base, resolve_relay_api_base,
     };
 
-    const TS_HOST: &str = "shinemo.taile7bb25.ts.net";
+    const TS_HOST: &str = "example-host.example.ts.net";
 
     #[test]
     fn stores_remote_endpoints() {

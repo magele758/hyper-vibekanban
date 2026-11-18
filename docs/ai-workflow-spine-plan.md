@@ -521,7 +521,7 @@ Copilot/Research Agent
 4. `wait_approval` 卡住；Inbox / Issue 可 Approve；通过后从下一节点继续。
 5. Issue 上可见 run 进度（有 run 才显示）。
 
-### Batch 2 — Closeout 可演示 — **代码已落地（待 ubuntu1 验证）**
+### Batch 2 — Closeout 可演示 — **代码已落地（待 my-server 验证）**
 
 **已实现：**
 
@@ -529,7 +529,7 @@ Copilot/Research Agent
 2. `POST /v1/projects/{id}/workflow-templates/feature-closeout` + UI「安装 Closeout 模板」。
 3. Closeout pipeline：Review → 完成度 if → Fixer 环 → Tester → script check → rebase → Ask Merge。
 
-**验收（在 ubuntu1，勿碰本机 vk-stop/start）：**
+**验收（在 my-server，勿碰本机 vk-stop/start）：**
 
 1. 安装模板后，对有 Workspace 的 Feature 指派 Closeout 或从「代码审查」切入。
 2. Review while / if 环至少能追问/回修 1 轮。

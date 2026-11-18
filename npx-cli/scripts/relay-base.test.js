@@ -8,7 +8,7 @@ const {
   resolveJoinRelayBase,
 } = require('./relay-base');
 
-const TS_HOST = 'shinemo.taile7bb25.ts.net';
+const TS_HOST = 'example-host.example.ts.net';
 
 describe('normalizeRelayApiBase', () => {
   it('moves https tailscale relay off plaintext 18082', () => {
