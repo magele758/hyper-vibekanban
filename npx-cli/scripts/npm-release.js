@@ -61,6 +61,93 @@ function distTagForVersion(version) {
   return tag;
 }
 
+function stableVersionFromPrerelease(version) {
+  if (distTagForVersion(version) === 'latest') {
+    throw new Error(
+      `Refusing to cut a stable release from stable version ${version}.`
+    );
+  }
+  const stable = version.slice(0, version.indexOf('-'));
+  if (!/^\d+\.\d+\.\d+$/.test(stable)) {
+    throw new Error(`Refusing stable version ${stable} from ${version}.`);
+  }
+  return stable;
+}
+
+function stableReleaseTag(stableVersion) {
+  if (!/^\d+\.\d+\.\d+$/.test(stableVersion)) {
+    throw new Error(`Refusing tag for version ${stableVersion}.`);
+  }
+  const tag = `v${stableVersion}`;
+  if (!isBinaryTag(tag)) {
+    throw new Error(`Refusing release tag ${tag}.`);
+  }
+  return tag;
+}
+
+function assertReleaseTag(tag) {
+  if (
+    typeof tag !== 'string' ||
+    !/^v\d+\.\d+\.\d+[0-9A-Za-z.+-]*$/.test(tag) ||
+    tag.includes('remote-') ||
+    tag.includes('relay-')
+  ) {
+    throw new Error(`Refusing release tag ${tag}.`);
+  }
+  return tag;
+}
+
+function npmVersionFromReleaseTag(tagName) {
+  if (typeof tagName !== 'string' || !tagName.startsWith('v')) return null;
+  if (tagName.includes('remote-') || tagName.includes('relay-')) return null;
+  const match = tagName.slice(1).match(/^(.*)[.-](\d{14})$/);
+  if (!match || !VERSION_RE.test(match[1])) return null;
+  return match[1];
+}
+
+function selectPrereleaseTag(releases) {
+  if (!Array.isArray(releases)) {
+    throw new Error('Expected a list of GitHub releases.');
+  }
+  const ranked = releases.slice().sort((left, right) => {
+    return String((right && right.publishedAt) || '').localeCompare(
+      String((left && left.publishedAt) || '')
+    );
+  });
+  for (const release of ranked) {
+    if (!release || release.isPrerelease !== true) continue;
+    const version = npmVersionFromReleaseTag(release.tagName);
+    if (!version) continue;
+    let channel;
+    try {
+      channel = distTagForVersion(version);
+      assertReleaseTag(release.tagName);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      if (/^Refusing /.test(message)) continue;
+      throw err;
+    }
+    if (channel === 'latest') continue;
+    return {
+      tagName: release.tagName,
+      version,
+      stableVersion: stableVersionFromPrerelease(version),
+    };
+  }
+  throw new Error('No npm prerelease found to promote.');
+}
+
+function assertPrereleaseDistTag(version) {
+  const tag = distTagForVersion(version);
+  if (tag === 'latest') {
+    throw new Error(
+      `Refusing to move the latest dist-tag for ${version}. Cut a stable ` +
+        'release with release-stable.yml so publish.yml can publish it.'
+    );
+  }
+  return tag;
+}
+
 function planPublish({ name, version, private: isPrivate, cliSource }) {
   if (name !== NPM_PACKAGE_NAME) {
     throw new Error(
@@ -134,6 +221,12 @@ module.exports = {
   injectReleaseConfig,
   npmSupportsOidc,
   distTagForVersion,
+  stableVersionFromPrerelease,
+  stableReleaseTag,
+  assertReleaseTag,
+  npmVersionFromReleaseTag,
+  selectPrereleaseTag,
+  assertPrereleaseDistTag,
   planPublish,
   npmViewIsMissing,
   stripEmptyNpmAuth,

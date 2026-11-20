@@ -1,0 +1,188 @@
+name: Cut stable npm release
+
+# Turns the newest npm prerelease (or the tag you pass) into a stable
+# GitHub release, then starts publish.yml. This file does not run npm publish.
+# A release created with GITHUB_TOKEN does not trigger publish.yml's
+# `release` event, so the dispatch below is the path that actually publishes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: "预发布 tag。留空则选最新的 npm 预发布"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: release-stable
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cut:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Require the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "Run this workflow from ${DEFAULT_BRANCH}." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Pack the stable tarball
+        id: cut
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${SOURCE_TAG}" ]; then
+            tag="$(node npx-cli/scripts/stable-release.js check-tag "${SOURCE_TAG}")"
+          else
+            gh release list --limit 50 --json tagName,isPrerelease,publishedAt > "${RUNNER_TEMP}/releases.json"
+            tag="$(node npx-cli/scripts/stable-release.js select "${RUNNER_TEMP}/releases.json")"
+          fi
+          mkdir -p "${RUNNER_TEMP}/src-release" "${RUNNER_TEMP}/stable"
+          gh release download "${tag}" --pattern '*.tgz' --dir "${RUNNER_TEMP}/src-release" --clobber
+          count=0
+          src=""
+          for file in "${RUNNER_TEMP}/src-release"/*.tgz; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+            count=$((count + 1))
+            src="$file"
+          done
+          if [ "$count" -ne 1 ]; then
+            echo "Expected one prerelease tarball, found ${count}." >&2
+            exit 1
+          fi
+          node npx-cli/scripts/stable-release.js cut "$src" "${RUNNER_TEMP}/stable" > "${RUNNER_TEMP}/cut.env"
+          stable_version="$(sed -n 's/^stable_version=//p' "${RUNNER_TEMP}/cut.env")"
+          stable_tag="$(sed -n 's/^stable_tag=//p' "${RUNNER_TEMP}/cut.env")"
+          tarball="$(sed -n 's/^tarball=//p' "${RUNNER_TEMP}/cut.env")"
+          if ! printf '%s' "${stable_version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Refusing stable version ${stable_version}." >&2
+            exit 1
+          fi
+          expected="${RUNNER_TEMP}/stable/hyper-vibekanban-${stable_version}.tgz"
+          if [ "${tarball}" != "${expected}" ] || [ "${stable_tag}" != "v${stable_version}" ]; then
+            echo "Refusing cut plan ${stable_tag} ${tarball}." >&2
+            exit 1
+          fi
+          {
+            echo "source_tag=${tag}"
+            echo "stable_version=${stable_version}"
+            echo "stable_tag=${stable_tag}"
+            echo "tarball=${tarball}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the prerelease commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ steps.cut.outputs.source_tag }}
+          STABLE_TAG: ${{ steps.cut.outputs.stable_tag }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${STABLE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${STABLE_TAG} already exists. Do not re-run this workflow." >&2
+            if release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${STABLE_TAG}" --jq .id 2>/dev/null)"; then
+              echo "Retry publish.yml with tag_name=${STABLE_TAG} and release_id=${release_id}." >&2
+            fi
+            exit 1
+          fi
+          git fetch --depth=1 origin "refs/tags/${SOURCE_TAG}:refs/tags/${SOURCE_TAG}"
+          sha="$(git rev-parse "refs/tags/${SOURCE_TAG}^{}")"
+          if ! printf '%s' "${sha}" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "Could not resolve ${SOURCE_TAG} to a commit." >&2
+            exit 1
+          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Record the stable version on the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          STABLE_VERSION: ${{ steps.cut.outputs.stable_version }}
+        run: |
+          set -euo pipefail
+          node npx-cli/scripts/stable-release.js write-versions "${STABLE_VERSION}" > "${RUNNER_TEMP}/version-files.txt"
+          if [ ! -s "${RUNNER_TEMP}/version-files.txt" ]; then
+            echo "Workspace version is already ${STABLE_VERSION}."
+            exit 0
+          fi
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          xargs -a "${RUNNER_TEMP}/version-files.txt" git add
+          git commit -m "chore: bump version to ${STABLE_VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+      - name: Create the stable GitHub release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TAG: ${{ steps.cut.outputs.source_tag }}
+          STABLE_TAG: ${{ steps.cut.outputs.stable_tag }}
+          STABLE_VERSION: ${{ steps.cut.outputs.stable_version }}
+          TARBALL: ${{ steps.cut.outputs.tarball }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          notes="${RUNNER_TEMP}/stable-notes.md"
+          cat > "${notes}" <<EOF
+          Stable ${STABLE_VERSION}, cut from pre-release \`${SOURCE_TAG}\`.
+
+          publish.yml publishes this tarball to npm dist-tag \`latest\`.
+          Binaries stay on \`${SOURCE_TAG}\`. Do not delete that pre-release.
+          EOF
+          gh release create "${STABLE_TAG}" "${TARBALL}" \
+            --target "${SOURCE_SHA}" \
+            --title "${STABLE_TAG}" \
+            --notes-file "${notes}"
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${STABLE_TAG}" --jq .id)"
+          if ! printf '%s' "${release_id}" | grep -Eq '^[0-9]+$'; then
+            echo "GitHub did not return a numeric release id." >&2
+            exit 1
+          fi
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
+
+      - name: Start publish.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SOURCE_TAG: ${{ steps.cut.outputs.source_tag }}
+          STABLE_TAG: ${{ steps.cut.outputs.stable_tag }}
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          gh workflow run publish.yml \
+            --repo "${GITHUB_REPOSITORY}" \
+            --ref "${DEFAULT_BRANCH}" \
+            -f "tag_name=${STABLE_TAG}" \
+            -f "release_id=${RELEASE_ID}"
+          {
+            echo "### Stable npm release"
+            echo ""
+            echo "- Source: \`${SOURCE_TAG}\`"
+            echo "- Tag: \`${STABLE_TAG}\`"
+            echo "- publish.yml release id: \`${RELEASE_ID}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

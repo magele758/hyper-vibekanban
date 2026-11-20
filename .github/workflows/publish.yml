@@ -31,8 +31,10 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Automatic publishes run from pre-release.yml. This workflow publishes when
-    # a pre-release is promoted, or when dispatched to retry a release.
+    # release-stable.yml dispatches this workflow with a stable tarball.
+    # A prerelease version keeps its channel dist-tag. Only a version with no
+    # hyphen is published as latest. Retry a failed npm publish by dispatching
+    # this workflow again; do not re-run an old release job.
     # remote-* / relay-* tags are image releases, not the npm package.
     if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'release' && github.event.release.prerelease == false)) && !startsWith(github.event.release.tag_name || inputs.tag_name, 'remote-') && !startsWith(github.event.release.tag_name || inputs.tag_name, 'relay-') }}
     steps:
@@ -46,81 +48,53 @@ jobs:
       - name: Upgrade npm for OIDC support
         run: npm install -g npm@11.12.0
 
-      - name: Download release assets
-        uses: actions/github-script@v8
+      - name: Download npm package
+        id: package
         env:
-          RELEASE_ID: ${{ inputs.release_id }}
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const releaseId = context.payload.release?.id || process.env.RELEASE_ID;
-            console.log("releaseId:", releaseId);
-
-            if (!releaseId) {
-              core.setFailed('No release ID found.');
-              return;
-            }
-
-            const release = await github.rest.repos.getRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: releaseId
-            });
-            
-            // Find the .tgz file
-            const tgzAsset = release.data.assets.find(asset => asset.name.endsWith('.tgz'));
-            
-            if (!tgzAsset) {
-              core.setFailed('No .tgz file found in release assets');
-              return;
-            }
-            
-            // Download the asset
-            const response = await github.rest.repos.getReleaseAsset({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              asset_id: tgzAsset.id,
-              headers: {
-                Accept: 'application/octet-stream'
-              }
-            });
-            
-            // Save to npx-cli directory
-            const filePath = path.join('npx-cli', tgzAsset.name);
-            fs.writeFileSync(filePath, Buffer.from(response.data));
-            
-            console.log(`Downloaded ${tgzAsset.name} to ${filePath}`);
-            
-            // Set output for next step
-            core.setOutput('package-file', filePath);
-            core.setOutput('package-name', tgzAsset.name);
-
-      - name: Verify package integrity
-        id: verify
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name || inputs.tag_name }}
         run: |
-          cd npx-cli
-          
-          # List files to confirm download
-          ls -la *.tgz
-          
-          # Verify the package can be read
-          npm pack --dry-run || echo "Note: This is expected to show differences since we're using the pre-built package"
-          
-          # Extract package name from the downloaded file
-          PACKAGE_FILE=$(ls *.tgz | head -n1)
-          echo "package-file=$PACKAGE_FILE" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          if [ -z "${TAG_NAME}" ]; then
+            echo "No release tag." >&2
+            exit 1
+          fi
+          mkdir -p npx-cli
+          gh release download "${TAG_NAME}" --pattern '*.tgz' --dir npx-cli --clobber
+          count=0
+          pkg=""
+          for file in npx-cli/*.tgz; do
+            if [ ! -f "$file" ]; then
+              continue
+            fi
+            count=$((count + 1))
+            pkg="$(basename "$file")"
+          done
+          if [ "$count" -ne 1 ]; then
+            echo "Expected one .tgz asset, found ${count}." >&2
+            exit 1
+          fi
+          echo "package-file=${pkg}" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm
         run: |
+          set -euo pipefail
           SCRIPT="npx-cli/scripts/publish-npm.js"
           if [ ! -f "$SCRIPT" ]; then
             echo "This tag does not include the publish script; using the default branch copy."
             git fetch --depth=1 origin "${{ github.event.repository.default_branch }}"
             git checkout FETCH_HEAD -- "$SCRIPT" npx-cli/scripts/npm-release.js
           fi
-          node "$SCRIPT" "npx-cli/${{ steps.verify.outputs.package-file }}"
+          pkg="npx-cli/${{ steps.package.outputs.package-file }}"
+          abs="$(node -e 'const path=require("path"); process.stdout.write(path.resolve(process.argv[1]))' "$pkg")"
+          case "$abs" in
+            /*) ;;
+            *)
+              echo "Refusing relative tarball path: ${pkg}" >&2
+              exit 1
+              ;;
+          esac
+          node "$SCRIPT" "$abs"
 
       - name: Update release description
         uses: actions/github-script@v8
